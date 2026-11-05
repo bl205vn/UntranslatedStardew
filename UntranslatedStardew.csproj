@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableModDeploy>false</EnableModDeploy>
+    <EnableModZip Condition="'$(EnableModZip)' == ''">false</EnableModZip>
+    <EnableHarmony>true</EnableHarmony>
+    <EnableGameDebugging>false</EnableGameDebugging>
+    <!-- Exclude test directory from main project globbing -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
+    <!-- Allow environment variable override if GamePath is not explicitly passed -->
+    <GamePath Condition="'$(GamePath)' == '' AND '$(STARDEW_GAME_PATH)' != ''">$(STARDEW_GAME_PATH)</GamePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" PrivateAssets="all" />
+    <PackageReference Include="Pathoschild.Stardew.ModTranslationClassBuilder" Version="2.2.1" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="i18n\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

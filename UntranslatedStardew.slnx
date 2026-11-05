@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="UntranslatedStardew.csproj" />
+  <Project Path="tests/UntranslatedStardew.Tests/UntranslatedStardew.Tests.csproj" />
+</Solution>

@@ -1,0 +1,13 @@
+{
+  "config.secondary-language.name": "Ngôn ngữ phụ",
+  "config.secondary-language.description": "Mã ngôn ngữ phụ hiển thị trong bảng thông tin vật phẩm (ví dụ: en, vi, es, fr, ja, ko, zh). Mặc định là en.",
+  "config.show-secondary.name": "Hiện tên phụ",
+  "config.show-secondary.description": "Bật/tắt hiển thị tên ngôn ngữ phụ trong bảng thông tin vật phẩm.",
+  "config.secondary-first.name": "Tên phụ hiển thị trước",
+  "config.secondary-first.description": "Hiển thị tên ngôn ngữ phụ ở dòng trên dòng tên chính.",
+  "config.diacritic-insensitive.name": "Tìm kiếm không dấu",
+  "config.diacritic-insensitive.description": "Bỏ qua dấu thanh và chuẩn hóa các ký tự như đ/Đ khi tìm kiếm.",
+  "log.mod-loaded": "Untranslated Stardew đã tải thành công. Ngôn ngữ phụ: {{language}}.",
+  "log.patch-failed": "Không thể áp dụng bản vá tooltip: {{error}}.",
+  "log.secondary-fallback": "Ngôn ngữ '{{language}}' không phải ngôn ngữ có sẵn và không tìm thấy asset mod; chuyển về '{{fallback}}'."
+}
