@@ -10,6 +10,7 @@ public static class LanguageHelper
 {
     private static readonly Dictionary<string, (string CanonicalCode, string? Suffix)> SuffixMap = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["default"] = ("default", null),
         ["en"] = ("en", null),
         ["en-us"] = ("en", null),
         ["es"] = ("es", "es-ES"),
@@ -85,5 +86,18 @@ public static class LanguageHelper
         string trimmed = languageCode.Trim();
         return string.Equals(trimmed, "vi", StringComparison.OrdinalIgnoreCase)
             || string.Equals(trimmed, "vi-vn", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Checks whether the language code represents the base unlocalized content ("default") or English ("en").
+    /// </summary>
+    public static bool IsBaseOrEnglish(string? languageCode)
+    {
+        if (string.IsNullOrWhiteSpace(languageCode))
+            return true;
+        string code = languageCode.Trim();
+        return string.Equals(code, "default", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(code, "en", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(code, "en-us", StringComparison.OrdinalIgnoreCase);
     }
 }

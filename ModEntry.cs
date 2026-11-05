@@ -36,7 +36,7 @@ public sealed class ModEntry : Mod
         Config = helper.ReadConfig<ModConfig>();
         if (string.IsNullOrWhiteSpace(Config.SecondaryLanguage))
         {
-            Config.SecondaryLanguage = "en";
+            Config.SecondaryLanguage = "default";
         }
 
         // Initialize stable API referencing resolver dynamically
@@ -48,6 +48,7 @@ public sealed class ModEntry : Mod
         // Apply Harmony patches
         try
         {
+            ValidatePatchSignatures();
             _harmony = new Harmony(ModManifest.UniqueID);
             _harmony.PatchAll(typeof(ModEntry).Assembly);
         }
@@ -119,6 +120,11 @@ public sealed class ModEntry : Mod
             name.IsEquivalentTo("Strings/Tools") ||
             name.IsEquivalentTo("Strings/BigCraftables") ||
             name.IsEquivalentTo("Strings/1_6_Strings") ||
+            name.IsEquivalentTo("Strings/UI") ||
+            name.IsEquivalentTo("Strings/StringsFromCSFiles") ||
+            name.IsEquivalentTo("Strings/Furniture") ||
+            name.IsEquivalentTo("Strings/Pants") ||
+            name.IsEquivalentTo("Strings/Shirts") ||
             name.IsEquivalentTo("Data/Objects") ||
             name.IsEquivalentTo("Data/Weapons") ||
             name.IsEquivalentTo("Data/Tools") ||
@@ -127,6 +133,8 @@ public sealed class ModEntry : Mod
             name.IsEquivalentTo("Data/hats") ||
             name.IsEquivalentTo("Data/Furniture") ||
             name.IsEquivalentTo("Data/Trinkets") ||
+            name.IsEquivalentTo("Data/Powers") ||
+            name.IsEquivalentTo("Data/Achievements") ||
             name.IsEquivalentTo("Data/Pants") ||
             name.IsEquivalentTo("Data/Shirts") ||
             name.IsEquivalentTo("Data/Mannequins")))
@@ -235,7 +243,7 @@ public sealed class ModEntry : Mod
             {
                 if (string.IsNullOrWhiteSpace(Config.SecondaryLanguage))
                 {
-                    Config.SecondaryLanguage = "en";
+                    Config.SecondaryLanguage = "default";
                 }
                 Helper.WriteConfig(Config);
                 InitializeResolver();
@@ -314,6 +322,50 @@ public sealed class ModEntry : Mod
             return standardFolder;
 
         return null;
+    }
+
+    private void ValidatePatchSignatures()
+    {
+        var targets = new (Type Type, string Method, Type[]? ParamTypes)[]
+        {
+            (typeof(StardewValley.Menus.IClickableMenu), nameof(StardewValley.Menus.IClickableMenu.drawToolTip), null),
+            (typeof(StardewValley.Menus.SkillsPage), nameof(StardewValley.Menus.SkillsPage.performHoverAction), null),
+            (typeof(StardewValley.Menus.LevelUpMenu), nameof(StardewValley.Menus.LevelUpMenu.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) }),
+            (typeof(StardewValley.Menus.PowersTab), nameof(StardewValley.Menus.PowersTab.performHoverAction), null),
+            (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.createDescription), new[] { typeof(string) })
+        };
+
+        foreach (var (type, method, paramTypes) in targets)
+        {
+            var m = paramTypes != null ? type.GetMethod(method, paramTypes) : type.GetMethod(method);
+            if (m == null)
+            {
+                Monitor.Log($"Untranslated Stardew: Target method {type.Name}.{method} signature mismatch or not found.", LogLevel.Warn);
+            }
+        }
+
+        // Validate targeted private fields bound by Harmony patches
+        var fieldTargets = new (Type Type, string FieldName, Type ExpectedType)[]
+        {
+            (typeof(StardewValley.Menus.LevelUpMenu), "leftProfessionDescription", typeof(System.Collections.Generic.List<string>)),
+            (typeof(StardewValley.Menus.LevelUpMenu), "rightProfessionDescription", typeof(System.Collections.Generic.List<string>)),
+            (typeof(StardewValley.Menus.LevelUpMenu), "professionsToChoose", typeof(System.Collections.Generic.List<int>)),
+            (typeof(StardewValley.Menus.LevelUpMenu), "leftProfessionColor", typeof(Microsoft.Xna.Framework.Color)),
+            (typeof(StardewValley.Menus.LevelUpMenu), "rightProfessionColor", typeof(Microsoft.Xna.Framework.Color)),
+            (typeof(StardewValley.Menus.SkillsPage), "hoverTitle", typeof(string)),
+            (typeof(StardewValley.Menus.PowersTab), "hoverText", typeof(string)),
+            (typeof(StardewValley.Menus.PowersTab), "descriptionText", typeof(string)),
+            (typeof(StardewValley.Menus.PowersTab), "powers", typeof(System.Collections.Generic.List<System.Collections.Generic.List<StardewValley.Menus.ClickableTextureComponent>>))
+        };
+
+        foreach (var (type, fieldName, expectedType) in fieldTargets)
+        {
+            var f = type.GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+            if (f == null || !expectedType.IsAssignableFrom(f.FieldType))
+            {
+                Monitor.Log($"Untranslated Stardew: Target field {type.Name}.{fieldName} ({expectedType.Name}) mismatch or not found.", LogLevel.Warn);
+            }
+        }
     }
 
     protected override void Dispose(bool disposing)

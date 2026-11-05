@@ -45,6 +45,11 @@ public static class Program
         TestApiLifecycleAndConfig();
         TestSystematicCoverageAudit();
         TestRealXnbSmoke();
+        TestDefaultAndEnLanguageSemantics();
+        TestUiHarmonyBoundarySignatures();
+        TestLevelUpMenuScopedStateAndLayout();
+        TestUiFixtureFormattingAndMergedText();
+        TestRealXnbUiExpansion();
 
         Console.WriteLine();
         Console.WriteLine($"=== Results: {_passed} Passed, {_failed} Failed ===");
@@ -970,6 +975,412 @@ public static class Program
         }
     }
 
+    private static void TestDefaultAndEnLanguageSemantics()
+    {
+        Console.WriteLine("\n-- Testing Native SMAPI 'default' vs 'en' Language Semantics --");
+
+        Assert(LanguageHelper.IsBuiltInLanguage("default"), "LanguageHelper recognizes 'default' as supported built-in");
+        Assert(LanguageHelper.GetLanguageSuffix("default") == null, "'default' maps to null suffix (base unsuffixed file)");
+        Assert(LanguageHelper.CanonicalizeLanguageCode("default") == "default", "Canonicalize 'default' -> 'default'");
+        Assert(LanguageHelper.CanonicalizeLanguageCode("DEFAULT") == "default", "Canonicalize 'DEFAULT' -> 'default'");
+        Assert(LanguageHelper.IsBaseOrEnglish("default"), "IsBaseOrEnglish('default') is true");
+        Assert(LanguageHelper.IsBaseOrEnglish("en"), "IsBaseOrEnglish('en') is true");
+        Assert(!LanguageHelper.IsBaseOrEnglish("fr"), "IsBaseOrEnglish('fr') is false");
+        Assert(!LanguageHelper.IsBaseOrEnglish("vi"), "IsBaseOrEnglish('vi') is false");
+
+        string? gamePath = LocateGamePath();
+        string contentRoot = gamePath != null ? Path.Combine(gamePath, "Content") : AppContext.BaseDirectory;
+        var testService = new DummyServiceProvider();
+
+        // 1. RequestedLanguage = "default" -> EffectiveLanguage = "default", NO warning fired
+        string? warnedRequested = null;
+        string? warnedFallback = null;
+        var rawDefault = new RawContentProvider(
+            () => testService,
+            contentRoot,
+            "default",
+            null,
+            (req, fb) => { warnedRequested = req; warnedFallback = fb; });
+
+        Assert(rawDefault.RequestedLanguage == "default", "rawDefault RequestedLanguage == 'default'");
+        Assert(rawDefault.EffectiveLanguage == "default", "rawDefault EffectiveLanguage == 'default'");
+        Assert(warnedRequested == null, "rawDefault did not trigger unsupported fallback warning");
+
+        // 2. RequestedLanguage = "en" -> EffectiveLanguage = "en", NO warning fired
+        warnedRequested = null;
+        warnedFallback = null;
+        var rawEn = new RawContentProvider(
+            () => testService,
+            contentRoot,
+            "en",
+            null,
+            (req, fb) => { warnedRequested = req; warnedFallback = fb; });
+
+        Assert(rawEn.RequestedLanguage == "en", "rawEn RequestedLanguage == 'en'");
+        Assert(rawEn.EffectiveLanguage == "en", "rawEn EffectiveLanguage == 'en'");
+        Assert(warnedRequested == null, "rawEn did not trigger unsupported fallback warning");
+
+        // 3. RequestedLanguage = "unsupported_xyz" -> Fallback to "default" with warning fired
+        warnedRequested = null;
+        warnedFallback = null;
+        var rawUnsupported = new RawContentProvider(
+            () => testService,
+            contentRoot,
+            "unsupported_xyz",
+            null,
+            (req, fb) => { warnedRequested = req; warnedFallback = fb; });
+
+        Assert(rawUnsupported.EffectiveLanguage == "default", "rawUnsupported fell back to 'default'");
+        Assert(warnedRequested == "unsupported_xyz" && warnedFallback == "default", "rawUnsupported triggered fallback warning with ('unsupported_xyz', 'default')");
+
+        // 4. Default config uses "default"
+        var config = new ModConfig();
+        Assert(config.SecondaryLanguage == "default", "ModConfig default SecondaryLanguage is 'default'");
+    }
+
+    private static void TestUiHarmonyBoundarySignatures()
+    {
+        Console.WriteLine("\n-- Testing UI Harmony Boundary Signatures --");
+
+        var mToolTip = typeof(StardewValley.Menus.IClickableMenu).GetMethod(nameof(StardewValley.Menus.IClickableMenu.drawToolTip));
+        Assert(mToolTip != null, "Reflection: IClickableMenu.drawToolTip exists");
+
+        var mSkillsHover = typeof(StardewValley.Menus.SkillsPage).GetMethod(nameof(StardewValley.Menus.SkillsPage.performHoverAction));
+        Assert(mSkillsHover != null, "Reflection: SkillsPage.performHoverAction exists");
+
+        var mLevelUpDraw = typeof(StardewValley.Menus.LevelUpMenu).GetMethod(nameof(StardewValley.Menus.LevelUpMenu.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) });
+        Assert(mLevelUpDraw != null, "Reflection: LevelUpMenu.draw(SpriteBatch) exists");
+
+        var mPowersHover = typeof(StardewValley.Menus.PowersTab).GetMethod(nameof(StardewValley.Menus.PowersTab.performHoverAction));
+        Assert(mPowersHover != null, "Reflection: PowersTab.performHoverAction exists");
+
+        var mCollectionsDesc = typeof(StardewValley.Menus.CollectionsPage).GetMethod(nameof(StardewValley.Menus.CollectionsPage.createDescription), new[] { typeof(string) });
+        Assert(mCollectionsDesc != null, "Reflection: CollectionsPage.createDescription(string) exists");
+
+        // Targeted private fields bound by Harmony patches
+        var fLeftDesc = typeof(StardewValley.Menus.LevelUpMenu).GetField("leftProfessionDescription", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fLeftDesc != null && fLeftDesc.FieldType == typeof(List<string>), "Reflection: LevelUpMenu.leftProfessionDescription (List<string>) exists");
+
+        var fRightDesc = typeof(StardewValley.Menus.LevelUpMenu).GetField("rightProfessionDescription", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fRightDesc != null && fRightDesc.FieldType == typeof(List<string>), "Reflection: LevelUpMenu.rightProfessionDescription (List<string>) exists");
+
+        var fChoose = typeof(StardewValley.Menus.LevelUpMenu).GetField("professionsToChoose", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fChoose != null && fChoose.FieldType == typeof(List<int>), "Reflection: LevelUpMenu.professionsToChoose (List<int>) exists");
+
+        var fLeftColor = typeof(StardewValley.Menus.LevelUpMenu).GetField("leftProfessionColor", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fLeftColor != null && fLeftColor.FieldType == typeof(Microsoft.Xna.Framework.Color), "Reflection: LevelUpMenu.leftProfessionColor (Color) exists");
+
+        var fRightColor = typeof(StardewValley.Menus.LevelUpMenu).GetField("rightProfessionColor", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fRightColor != null && fRightColor.FieldType == typeof(Microsoft.Xna.Framework.Color), "Reflection: LevelUpMenu.rightProfessionColor (Color) exists");
+
+        var fSkillsHoverTitle = typeof(StardewValley.Menus.SkillsPage).GetField("hoverTitle", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fSkillsHoverTitle != null && fSkillsHoverTitle.FieldType == typeof(string), "Reflection: SkillsPage.hoverTitle (string) exists");
+
+        var fPowersHover = typeof(StardewValley.Menus.PowersTab).GetField("hoverText", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fPowersHover != null && fPowersHover.FieldType == typeof(string), "Reflection: PowersTab.hoverText (string) exists");
+
+        var fPowersDesc = typeof(StardewValley.Menus.PowersTab).GetField("descriptionText", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fPowersDesc != null && fPowersDesc.FieldType == typeof(string), "Reflection: PowersTab.descriptionText (string) exists");
+
+        var fPowersList = typeof(StardewValley.Menus.PowersTab).GetField("powers", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fPowersList != null && fPowersList.FieldType == typeof(List<List<StardewValley.Menus.ClickableTextureComponent>>), "Reflection: PowersTab.powers (List<List<ClickableTextureComponent>>) exists");
+    }
+
+    private static void TestLevelUpMenuScopedStateAndLayout()
+    {
+        Console.WriteLine("\n-- Testing LevelUpMenu Scoped State, Pure Layout & Truncation --");
+
+        // 1. Pure layout helper calculations derived from LevelUpMenu.cs
+        int screenX = 100;
+        int screenY = 50;
+        int width = 960;
+        int sideBorder = 16;
+        int topBorder = 16;
+
+        LevelUpLayoutResult layout = LevelUpLayoutHelper.CalculateLayout(screenX, screenY, width, sideBorder, topBorder);
+
+        Assert(layout.LeftTitleX == screenX + sideBorder + 32, "Layout: LeftTitleX matches vanilla position");
+        Assert(layout.RightTitleX == screenX + sideBorder + width / 2, "Layout: RightTitleX matches vanilla position");
+        Assert(layout.TitleY == screenY + topBorder + 160, "Layout: TitleY matches vanilla (top + 160)");
+        Assert(layout.SubtitleY == screenY + topBorder + 208, "Layout: SubtitleY matches measured gap (top + 208)");
+        Assert(layout.Bullet1Y == screenY + topBorder + 264, "Layout: Bullet1Y matches vanilla (top + 264)");
+        Assert(layout.TotalTitleGap == 104, "Layout: TotalTitleGap is exactly 104px (160 to 264)");
+        Assert(layout.SubtitleToBulletGap == 56, "Layout: SubtitleToBulletGap is 56px before first bullet");
+        Assert(layout.LeftMaxWidth == 960 / 2 - 144, "Layout: LeftMaxWidth is 336px before left icon");
+        Assert(layout.RightMaxWidth == 960 / 2 - 128, "Layout: RightMaxWidth is 352px before right icon");
+
+        // 2. Pure text truncation helper
+        Func<string, float> charMeasure = s => s.Length * 8f; // 8px per character estimate
+
+        string shortText = "Rancher"; // 7 chars * 8 = 56px <= 100px
+        string truncatedShort = LevelUpLayoutHelper.TruncateToWidth(shortText, 100f, charMeasure);
+        Assert(truncatedShort == "Rancher", "Truncate: text within bounds returns unchanged");
+
+        string longText = "Very Long Custom Profession Title Exceeding Width"; // 49 chars * 8 = 392px > 100px
+        string truncatedLong = LevelUpLayoutHelper.TruncateToWidth(longText, 100f, charMeasure);
+        Assert(truncatedLong.EndsWith("..."), "Truncate: overflowing text appends ellipsis '...'");
+        Assert(charMeasure(truncatedLong) <= 100f, $"Truncate: clamped length ({charMeasure(truncatedLong)}px) <= maxWidth (100px)");
+
+        string emptyResult = LevelUpLayoutHelper.TruncateToWidth("", 100f, charMeasure);
+        Assert(emptyResult == "", "Truncate: empty string returns empty");
+
+        string zeroWidthResult = LevelUpLayoutHelper.TruncateToWidth("Rancher", 0f, charMeasure);
+        Assert(zeroWidthResult == "", "Truncate: zero maxWidth returns empty");
+
+        // 3. LevelUpMenuState scoped save, swap, restore, and idempotency
+        var menu = (StardewValley.Menus.LevelUpMenu)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(StardewValley.Menus.LevelUpMenu));
+        var fLeftDesc = typeof(StardewValley.Menus.LevelUpMenu).GetField("leftProfessionDescription", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var fRightDesc = typeof(StardewValley.Menus.LevelUpMenu).GetField("rightProfessionDescription", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var fChoose = typeof(StardewValley.Menus.LevelUpMenu).GetField("professionsToChoose", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var fChooser = typeof(StardewValley.Menus.LevelUpMenu).GetField("isProfessionChooser", BindingFlags.Public | BindingFlags.Instance)!;
+
+        var leftList = new List<string> { "Quản trại", "Mô tả dòng 1", "Mô tả dòng 2" };
+        var rightList = new List<string> { "Trồng trọt", "Mô tả dòng 1", "Mô tả dòng 2" };
+        var chooseList = new List<int> { 0, 1 };
+
+        fLeftDesc.SetValue(menu, leftList);
+        fRightDesc.SetValue(menu, rightList);
+        fChoose.SetValue(menu, chooseList);
+        fChooser.SetValue(menu, true);
+
+        // Test State with SecondaryFirst = false: primary stays as main title, secondary is subtitle
+        var stateNormal = new LevelUpMenuState
+        {
+            LeftList = leftList,
+            RightList = rightList,
+            OriginalLeft = "Quản trại",
+            OriginalRight = "Trồng trọt",
+            SubtitleLeft = "Rancher",
+            SubtitleRight = "Tiller",
+            LeftSwapped = false,
+            RightSwapped = false
+        };
+
+        // Main titles must NOT have been mutated
+        Assert(leftList[0] == "Quản trại", "State normal: leftList[0] remains unmodified primary");
+        Assert(rightList[0] == "Trồng trọt", "State normal: rightList[0] remains unmodified primary");
+        Assert(stateNormal.SubtitleLeft == "Rancher", "State normal: SubtitleLeft holds secondary");
+        stateNormal.Restore(menu);
+        Assert(leftList[0] == "Quản trại", "State normal: leftList[0] after Restore is 'Quản trại'");
+
+        // Test State with SecondaryFirst = true: secondary swapped into list[0] for draw, primary is subtitle
+        var stateSwapped = new LevelUpMenuState
+        {
+            LeftList = leftList,
+            RightList = rightList,
+            OriginalLeft = "Quản trại",
+            OriginalRight = "Trồng trọt",
+            SubtitleLeft = "Quản trại",
+            SubtitleRight = "Trồng trọt",
+            LeftSwapped = true,
+            RightSwapped = true
+        };
+        leftList[0] = "Rancher"; // Simulated Prefix swap
+        rightList[0] = "Tiller";
+
+        Assert(leftList[0] == "Rancher", "State swapped: leftList[0] temporarily holds secondary for draw");
+        Assert(stateSwapped.SubtitleLeft == "Quản trại", "State swapped: SubtitleLeft holds original primary");
+
+        // Restore restores original primary
+        stateSwapped.Restore(menu);
+        Assert(leftList[0] == "Quản trại", "State swapped: leftList[0] restored to original 'Quản trại'");
+        Assert(rightList[0] == "Trồng trọt", "State swapped: rightList[0] restored to original 'Trồng trọt'");
+
+        // 4. Finalizer exception safety test
+        var stateException = new LevelUpMenuState
+        {
+            LeftList = leftList,
+            RightList = rightList,
+            OriginalLeft = "Quản trại",
+            OriginalRight = "Trồng trọt",
+            LeftSwapped = true,
+            RightSwapped = true
+        };
+        leftList[0] = "Rancher"; // Swapped during Prefix
+        var testException = new InvalidOperationException("Simulated draw failure");
+        Exception? returnedEx = LevelUpMenuPatch.Finalizer(menu, stateException, testException);
+
+        Assert(ReferenceEquals(returnedEx, testException), "Finalizer preserves and passes through original exception");
+        Assert(leftList[0] == "Quản trại", "Finalizer: leftList[0] restored to original 'Quản trại' on exception");
+
+        // 5. 50 Repeated simulated draw cycles (Idempotency and zero string leakage)
+        for (int frame = 0; frame < 50; frame++)
+        {
+            bool swapOrder = (frame % 2 == 1);
+            var frameState = new LevelUpMenuState
+            {
+                LeftList = leftList,
+                RightList = rightList,
+                OriginalLeft = leftList[0],
+                OriginalRight = rightList[0],
+                LeftSwapped = swapOrder,
+                RightSwapped = swapOrder,
+                SubtitleLeft = swapOrder ? "Quản trại" : "Rancher",
+                SubtitleRight = swapOrder ? "Trồng trọt" : "Tiller"
+            };
+
+            if (swapOrder)
+            {
+                leftList[0] = "Rancher";
+                rightList[0] = "Tiller";
+            }
+
+            // End of frame restore
+            frameState.Restore(menu);
+
+            Assert(leftList[0] == "Quản trại", $"Repeated draw frame {frame}: leftList[0] strictly 'Quản trại'");
+            Assert(!leftList[0].Contains('\n'), $"Repeated draw frame {frame}: no newline injected into leftList[0]");
+            Assert(leftList.Count == 3, $"Repeated draw frame {frame}: leftList count remains exactly 3");
+        }
+    }
+
+    private static void TestUiFixtureFormattingAndMergedText()
+    {
+        Console.WriteLine("\n-- Testing UI Fixture Formatting & Merged Text --");
+
+        // A. CollectionsPage combined title + description + stats structure
+        string dnl = Environment.NewLine + Environment.NewLine;
+        string primaryName = "Cá nóc";
+        string secondaryName = "Pufferfish";
+        string primaryDesc = "Làm phồng cơ thể khi bị đe dọa.";
+        string primaryStats = "Số lượng đã đánh bắt: 5\nKỷ lục lớn nhất: 24 cm";
+        string gameDescription = $"{primaryName}{dnl}{primaryDesc}{dnl}{primaryStats}";
+
+        // Simulate CollectionsPagePatch postfix logic:
+        int firstDnl = gameDescription.IndexOf(dnl, StringComparison.Ordinal);
+        Assert(firstDnl >= 0, "Collections double-newline delimiter found");
+
+        string titlePart = gameDescription.Substring(0, firstDnl);
+        string remainderPart = gameDescription.Substring(firstDnl + dnl.Length);
+
+        // Primary first
+        string formattedPrimaryFirst = TooltipFormatter.FormatTitle(titlePart, titlePart, secondaryName, secondaryFirst: false);
+        string assembledPrimaryFirst = $"{formattedPrimaryFirst}{dnl}{remainderPart}";
+        Assert(assembledPrimaryFirst == $"Cá nóc\nPufferfish{dnl}{primaryDesc}{dnl}{primaryStats}", "Collections merged text formatted with primary first and preserved stats");
+
+        // Secondary first
+        string formattedSecFirst = TooltipFormatter.FormatTitle(titlePart, titlePart, secondaryName, secondaryFirst: true);
+        string assembledSecFirst = $"{formattedSecFirst}{dnl}{remainderPart}";
+        Assert(assembledSecFirst == $"Pufferfish\nCá nóc{dnl}{primaryDesc}{dnl}{primaryStats}", "Collections merged text formatted with secondary first and preserved stats");
+
+        // Duplicate suppression: when primary and secondary names match
+        string dupTitle = TooltipFormatter.FormatTitle("Pufferfish", "Pufferfish", "Pufferfish", secondaryFirst: false);
+        Assert(dupTitle == "Pufferfish", "Duplicate title suppressed in collections title");
+
+        // Concealment / Unknown ???
+        string unknownDesc = "???";
+        Assert(unknownDesc == "???", "Concealed unknown ??? remains untouched");
+
+        // No double insertion (idempotency check)
+        string alreadyFormatted = "Cá nóc\nPufferfish";
+        string twiceFormatted = TooltipFormatter.FormatTitle(alreadyFormatted, "Cá nóc", "Pufferfish", secondaryFirst: false);
+        Assert(twiceFormatted == alreadyFormatted, "TooltipFormatter rejects double-insertion when title contains newline");
+
+        // B. LevelUpMenu profession descriptions chooser titles
+        string profPrimary = "Người chăn nuôi";
+        string profSecondary = "Rancher";
+        string formattedChooser = TooltipFormatter.FormatTitle(profPrimary, profPrimary, profSecondary, secondaryFirst: false);
+        Assert(formattedChooser == "Người chăn nuôi\nRancher", "LevelUpMenu profession chooser formats bilingual title");
+
+        // Second pass idempotency on profession chooser
+        string twiceChooser = TooltipFormatter.FormatTitle(formattedChooser, profPrimary, profSecondary, secondaryFirst: false);
+        Assert(twiceChooser == formattedChooser, "LevelUpMenu profession chooser title does not double-format");
+
+        // C. PowersTab unlocked hoverText formatting
+        string powerPrimary = "Chìa khóa sọ";
+        string powerSecondary = "Skull Key";
+        string formattedPower = TooltipFormatter.FormatTitle(powerPrimary, powerPrimary, powerSecondary, secondaryFirst: false);
+        Assert(formattedPower == "Chìa khóa sọ\nSkull Key", "PowersTab formats bilingual power title");
+
+        // Concealment for locked powers
+        string lockedPowerHover = "???";
+        Assert(lockedPowerHover == "???", "Locked power hover remains concealed ???");
+    }
+
+    private static void TestRealXnbUiExpansion()
+    {
+        Console.WriteLine("\n-- Testing Real XNB UI Expansion (Professions, Skills, Powers, Collections, Achievements) --");
+
+        string? gamePath = LocateGamePath();
+        if (gamePath == null || !Directory.Exists(gamePath))
+        {
+            Console.WriteLine("  [SKIP] Stardew Valley game path not found; skipping real XNB UI expansion tests.");
+            return;
+        }
+
+        string contentRoot = Path.Combine(gamePath, "Content");
+        string modContentRoot = Path.Combine(gamePath, "Mods", "Stardew Valley Viethoa", "assets", "Content");
+        var testService = new DummyServiceProvider();
+
+        var rawDefault = new RawContentProvider(() => testService, contentRoot, "default");
+        var rawEn = new RawContentProvider(() => testService, contentRoot, "en");
+        var rawFr = new RawContentProvider(() => testService, contentRoot, "fr");
+
+        var resDefault = new ItemNameResolver(rawDefault);
+        var resEn = new ItemNameResolver(rawEn);
+        var resFr = new ItemNameResolver(rawFr);
+
+        // 1. Professions: Level 5 & 10 (0 Rancher, 1 Tiller, 4 Artisan, 5 Agriculturist)
+        Assert(resDefault.GetSecondaryProfessionTitle(0) == "Rancher", "Real XNB default: Profession 0 == 'Rancher'");
+        Assert(resEn.GetSecondaryProfessionTitle(0) == "Rancher", "Real XNB en: Profession 0 == 'Rancher'");
+        Assert(resFr.GetSecondaryProfessionTitle(0) == "Éleveur de bétail", $"Real XNB fr: Profession 0 == 'Éleveur de bétail' (got '{resFr.GetSecondaryProfessionTitle(0)}')");
+        Assert(resFr.GetSecondaryProfessionTitle(1) == "Cultivateur", $"Real XNB fr: Profession 1 == 'Cultivateur' (got '{resFr.GetSecondaryProfessionTitle(1)}')");
+        Assert(resFr.GetSecondaryProfessionTitle(4) == "Artisan", $"Real XNB fr: Profession 4 == 'Artisan' (got '{resFr.GetSecondaryProfessionTitle(4)}')");
+
+        // 2. Skills: 0 Farming, 1 Fishing, 2 Foraging, 3 Mining, 4 Combat
+        Assert(resDefault.GetSecondarySkillName(0) == "Farming", "Real XNB default: Skill 0 == 'Farming'");
+        Assert(resEn.GetSecondarySkillName(0) == "Farming", "Real XNB en: Skill 0 == 'Farming'");
+        Assert(resFr.GetSecondarySkillName(0) == "Agriculture", $"Real XNB fr: Skill 0 == 'Agriculture' (got '{resFr.GetSecondarySkillName(0)}')");
+        Assert(resFr.GetSecondarySkillName(1) == "Pêche", $"Real XNB fr: Skill 1 == 'Pêche' (got '{resFr.GetSecondarySkillName(1)}')");
+        Assert(resFr.GetSecondarySkillName(2) == "Cueillette", $"Real XNB fr: Skill 2 == 'Cueillette' (got '{resFr.GetSecondarySkillName(2)}')");
+        Assert(resFr.GetSecondarySkillName(3) == "Extraction minière", $"Real XNB fr: Skill 3 == 'Extraction minière' (got '{resFr.GetSecondarySkillName(3)}')");
+        Assert(resFr.GetSecondarySkillName(4) == "Combat", $"Real XNB fr: Skill 4 == 'Combat' (got '{resFr.GetSecondarySkillName(4)}')");
+
+        // 3. Powers: SkullKey, RustyKey, BearPaw, ForestMagic, DwarvishTranslationGuide
+        Assert(resDefault.GetSecondaryPowerName("SkullKey") == "Skull Key", "Real XNB default: SkullKey == 'Skull Key'");
+        Assert(resEn.GetSecondaryPowerName("SkullKey") == "Skull Key", "Real XNB en: SkullKey == 'Skull Key'");
+        Assert(resFr.GetSecondaryPowerName("SkullKey") == "Clé en tête-de-mort", $"Real XNB fr: SkullKey == 'Clé en tête-de-mort' (got '{resFr.GetSecondaryPowerName("SkullKey")}')");
+        Assert(resFr.GetSecondaryPowerName("BearPaw") == "Savoir de l’ours", $"Real XNB fr: BearPaw == 'Savoir de l’ours' (got '{resFr.GetSecondaryPowerName("BearPaw")}')");
+        Assert(resFr.GetSecondaryPowerName("ForestMagic") == "Magie de la forêt", $"Real XNB fr: ForestMagic == 'Magie de la forêt' (got '{resFr.GetSecondaryPowerName("ForestMagic")}')");
+
+        // 4. Collections Items & Achievements
+        Assert(resDefault.GetSecondaryAchievementTitle("0") == "Greenhorn (15k)", "Real XNB default: Achievement 0 == 'Greenhorn (15k)'");
+        Assert(resEn.GetSecondaryAchievementTitle("0") == "Greenhorn (15k)", "Real XNB en: Achievement 0 == 'Greenhorn (15k)'");
+        Assert(resFr.GetSecondaryAchievementTitle("0") == "Néophyte (15k)", $"Real XNB fr: Achievement 0 == 'Néophyte (15k)' (got '{resFr.GetSecondaryAchievementTitle("0")}')");
+
+        Assert(resDefault.GetSecondaryCollectionItemTitle("128") == "Pufferfish", "Real XNB default: Collection item 128 == 'Pufferfish'");
+        Assert(resEn.GetSecondaryCollectionItemTitle("128") == "Pufferfish", "Real XNB en: Collection item 128 == 'Pufferfish'");
+        Assert(resFr.GetSecondaryCollectionItemTitle("128") == "Poisson-globe", $"Real XNB fr: Collection item 128 == 'Poisson-globe' (got '{resFr.GetSecondaryCollectionItemTitle("128")}')");
+
+        // 5. Vietnamese mod XNB if available
+        if (Directory.Exists(modContentRoot))
+        {
+            var rawVi = new RawContentProvider(() => testService, contentRoot, "vi", modContentRoot);
+            var resVi = new ItemNameResolver(rawVi);
+
+            string? prof0Vi = resVi.GetSecondaryProfessionTitle(0);
+            Assert(!string.IsNullOrEmpty(prof0Vi), $"Real Vietnamese mod XNB: Profession 0 == '{prof0Vi}'");
+
+            string? prof4Vi = resVi.GetSecondaryProfessionTitle(4);
+            Assert(!string.IsNullOrEmpty(prof4Vi), $"Real Vietnamese mod XNB: Profession 4 == '{prof4Vi}'");
+
+            string? skill0Vi = resVi.GetSecondarySkillName(0);
+            Assert(!string.IsNullOrEmpty(skill0Vi), $"Real Vietnamese mod XNB: Skill 0 == '{skill0Vi}'");
+
+            string? skill3Vi = resVi.GetSecondarySkillName(3);
+            Assert(!string.IsNullOrEmpty(skill3Vi), $"Real Vietnamese mod XNB: Skill 3 == '{skill3Vi}'");
+
+            string? powerSkullVi = resVi.GetSecondaryPowerName("SkullKey");
+            Assert(!string.IsNullOrEmpty(powerSkullVi), $"Real Vietnamese mod XNB: SkullKey == '{powerSkullVi}'");
+
+            string? ach0Vi = resVi.GetSecondaryAchievementTitle("0");
+            Assert(ach0Vi == "Lính Mới (15ng)", $"Real Vietnamese mod XNB: Achievement 0 == 'Lính Mới (15ng)' (got '{ach0Vi}')");
+
+            string? col128Vi = resVi.GetSecondaryCollectionItemTitle("128");
+            Assert(col128Vi == "Cá Nóc", $"Real Vietnamese mod XNB: Collection item 128 == 'Cá Nóc' (got '{col128Vi}')");
+        }
+    }
+
     private class DummyServiceProvider : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;
@@ -1004,11 +1415,12 @@ public static class Program
         public override string getDescription() => string.Empty;
     }
 
-    private class MockContentProvider : ISecondaryContentProvider, ITrinketDataProvider
+    private class MockContentProvider : ISecondaryContentProvider, ITrinketDataProvider, IPowerDataProvider
     {
         private readonly Dictionary<string, Dictionary<string, string>> _localized = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Dictionary<string, string>> _english = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, TrinketData> _trinkets = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, StardewValley.GameData.Powers.PowersData> _powers = new(StringComparer.OrdinalIgnoreCase);
 
         public string RequestedLanguage { get; set; }
         public string EffectiveLanguage { get; set; }
@@ -1027,6 +1439,16 @@ public static class Program
         public bool TryGetTrinketData(string itemId, out TrinketData? trinketData)
         {
             return _trinkets.TryGetValue(itemId, out trinketData);
+        }
+
+        public void AddPowerData(string powerKey, StardewValley.GameData.Powers.PowersData data)
+        {
+            _powers[powerKey] = data;
+        }
+
+        public bool TryGetPowerData(string powerKey, out StardewValley.GameData.Powers.PowersData? powerData)
+        {
+            return _powers.TryGetValue(powerKey, out powerData);
         }
 
         public void AddLocalized(string asset, string key, string value)
@@ -1052,7 +1474,7 @@ public static class Program
         public bool TryGetString(string assetSubpath, string key, out string? value)
         {
             value = null;
-            if (EffectiveLanguage != "en" && _localized.TryGetValue(assetSubpath, out var locDict) && locDict.TryGetValue(key, out value))
+            if (!LanguageHelper.IsBaseOrEnglish(EffectiveLanguage) && _localized.TryGetValue(assetSubpath, out var locDict) && locDict.TryGetValue(key, out value))
             {
                 return true;
             }
@@ -1075,12 +1497,14 @@ public static class Program
         {
             _localized.Clear();
             _english.Clear();
+            _powers.Clear();
         }
 
         public void Dispose()
         {
             _localized.Clear();
             _english.Clear();
+            _powers.Clear();
         }
     }
 

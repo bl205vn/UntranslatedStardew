@@ -6,10 +6,10 @@ namespace UntranslatedStardew;
 public class ModConfig
 {
     /// <summary>
-    /// The language code for secondary display names (e.g. "en", "vi", "es", "fr", "ja", "ko", "zh").
-    /// Default is "en" (English).
+    /// The language code for secondary display names (e.g. "default", "en", "vi", "es", "fr", "ja", "ko", "zh").
+    /// Default is "default" (base unlocalized game and mod content).
     /// </summary>
-    public string SecondaryLanguage { get; set; } = "en";
+    public string SecondaryLanguage { get; set; } = "default";
 
     /// <summary>
     /// Whether to display secondary language item names in tooltips.

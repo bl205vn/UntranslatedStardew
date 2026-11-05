@@ -14,7 +14,7 @@ namespace UntranslatedStardew.Core;
 /// Does not mutate game locale or pollute global vanilla asset caches.
 /// Supports per-key fallback to English and lazy service provider initialization.
 /// </summary>
-public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketDataProvider
+public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketDataProvider, IPowerDataProvider
 {
     private readonly Func<IServiceProvider?> _getServiceProvider;
     private readonly string _gameContentRoot;
@@ -26,6 +26,8 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
 
     private readonly ConcurrentDictionary<string, Dictionary<string, string>?> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Dictionary<string, TrinketData>?> _trinketDataCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Dictionary<string, StardewValley.GameData.Powers.PowersData>?> _powersDataCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Dictionary<string, StardewValley.GameData.Objects.ObjectData>?> _objectDataCache = new(StringComparer.OrdinalIgnoreCase);
     private bool _warned;
     private bool _disposed;
 
@@ -45,13 +47,17 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         _onFallbackWarning = onFallbackWarning;
 
         RequestedLanguage = string.IsNullOrWhiteSpace(requestedLanguage)
-            ? "en"
+            ? "default"
             : requestedLanguage.Trim();
 
         string canonical = LanguageHelper.CanonicalizeLanguageCode(RequestedLanguage);
 
         // Determine effective language and check availability
-        if (canonical == "en")
+        if (canonical == "default")
+        {
+            EffectiveLanguage = "default";
+        }
+        else if (canonical == "en")
         {
             EffectiveLanguage = "en";
         }
@@ -63,8 +69,8 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             }
             else
             {
-                EffectiveLanguage = "en";
-                TriggerWarningOnce(RequestedLanguage, "en");
+                EffectiveLanguage = "default";
+                TriggerWarningOnce(RequestedLanguage, "default");
             }
         }
         else if (LanguageHelper.IsBuiltInLanguage(canonical))
@@ -73,8 +79,8 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         }
         else
         {
-            EffectiveLanguage = "en";
-            TriggerWarningOnce(RequestedLanguage, "en");
+            EffectiveLanguage = "default";
+            TriggerWarningOnce(RequestedLanguage, "default");
         }
     }
 
@@ -96,8 +102,8 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
 
         string normalizedPath = NormalizeAssetPath(assetSubpath);
 
-        // 1. Try localized dictionary if not English
-        if (EffectiveLanguage != "en")
+        // 1. Try localized dictionary if not base / English
+        if (!LanguageHelper.IsBaseOrEnglish(EffectiveLanguage))
         {
             Dictionary<string, string>? localizedDict = GetOrLoadDictionary(normalizedPath, EffectiveLanguage);
             if (localizedDict != null && localizedDict.TryGetValue(key, out string? locVal) && !string.IsNullOrWhiteSpace(locVal))
@@ -107,9 +113,9 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             }
         }
 
-        // 2. Per-key fallback: Check base English dictionary
-        Dictionary<string, string>? englishDict = GetOrLoadDictionary(normalizedPath, "en");
-        if (englishDict != null && englishDict.TryGetValue(key, out string? engVal) && !string.IsNullOrWhiteSpace(engVal))
+        // 2. Per-key fallback: Check base default/English dictionary
+        Dictionary<string, string>? baseDict = GetOrLoadDictionary(normalizedPath, LanguageHelper.IsBaseOrEnglish(EffectiveLanguage) ? EffectiveLanguage : "default");
+        if (baseDict != null && baseDict.TryGetValue(key, out string? engVal) && !string.IsNullOrWhiteSpace(engVal))
         {
             value = engVal;
             return true;
@@ -173,10 +179,110 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         return false;
     }
 
+    /// <summary>
+    /// Attempts to retrieve PowersData for a given power key.
+    /// Checks live DataLoader first if game content is active, then falls back to vanilla ContentManager.
+    /// </summary>
+    public bool TryGetPowerData(string powerKey, out StardewValley.GameData.Powers.PowersData? powerData)
+    {
+        powerData = null;
+        if (_disposed || string.IsNullOrEmpty(powerKey))
+            return false;
+
+        // 1. Live game DataLoader if Game1.content is active
+        if (Game1.content != null)
+        {
+            try
+            {
+                Dictionary<string, StardewValley.GameData.Powers.PowersData>? sheet = DataLoader.Powers(Game1.content);
+                if (sheet != null && sheet.TryGetValue(powerKey, out powerData))
+                    return true;
+            }
+            catch
+            {
+                // Ignore and fall back
+            }
+        }
+
+        // 2. Isolated vanilla ContentManager from disk
+        ContentManager? vanillaManager = GetVanillaContentManager();
+        if (vanillaManager != null)
+        {
+            try
+            {
+                if (!_powersDataCache.TryGetValue("Data/Powers", out Dictionary<string, StardewValley.GameData.Powers.PowersData>? dict))
+                {
+                    dict = vanillaManager.Load<Dictionary<string, StardewValley.GameData.Powers.PowersData>>("Data/Powers");
+                    _powersDataCache["Data/Powers"] = dict;
+                }
+
+                if (dict != null && dict.TryGetValue(powerKey, out powerData))
+                    return true;
+            }
+            catch (ContentLoadException)
+            {
+                // Ignore and return false
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Attempts to retrieve ObjectData for a given item ID.
+    /// Checks live DataLoader first if game content is active, then falls back to vanilla ContentManager.
+    /// </summary>
+    public bool TryGetObjectData(string itemId, out StardewValley.GameData.Objects.ObjectData? objectData)
+    {
+        objectData = null;
+        if (_disposed || string.IsNullOrEmpty(itemId))
+            return false;
+
+        string unqualified = itemId.StartsWith("(O)", StringComparison.OrdinalIgnoreCase) ? itemId.Substring(3) : itemId;
+
+        if (Game1.content != null)
+        {
+            try
+            {
+                Dictionary<string, StardewValley.GameData.Objects.ObjectData>? sheet = DataLoader.Objects(Game1.content);
+                if (sheet != null && sheet.TryGetValue(unqualified, out objectData))
+                    return true;
+            }
+            catch
+            {
+                // Ignore and fall back
+            }
+        }
+
+        ContentManager? vanillaManager = GetVanillaContentManager();
+        if (vanillaManager != null)
+        {
+            try
+            {
+                if (!_objectDataCache.TryGetValue("Data/Objects", out Dictionary<string, StardewValley.GameData.Objects.ObjectData>? dict))
+                {
+                    dict = vanillaManager.Load<Dictionary<string, StardewValley.GameData.Objects.ObjectData>>("Data/Objects");
+                    _objectDataCache["Data/Objects"] = dict;
+                }
+
+                if (dict != null && dict.TryGetValue(unqualified, out objectData))
+                    return true;
+            }
+            catch (ContentLoadException)
+            {
+                // Ignore and return false
+            }
+        }
+
+        return false;
+    }
+
     public void Invalidate()
     {
         _cache.Clear();
         _trinketDataCache.Clear();
+        _powersDataCache.Clear();
+        _objectDataCache.Clear();
         _vanillaContentManager?.Unload();
         _modContentManager?.Unload();
     }
@@ -189,6 +295,8 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         _disposed = true;
         _cache.Clear();
         _trinketDataCache.Clear();
+        _powersDataCache.Clear();
+        _objectDataCache.Clear();
         _vanillaContentManager?.Dispose();
         _modContentManager?.Dispose();
         _vanillaContentManager = null;
@@ -218,6 +326,11 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
 
     private Dictionary<string, string>? LoadDictionaryFromDisk(string assetSubpath, string langCode)
     {
+        if (assetSubpath.Equals("Data/Achievements", StringComparison.OrdinalIgnoreCase))
+        {
+            return LoadIntStringDictionaryAsStrings(assetSubpath, langCode);
+        }
+
         if (langCode == "vi")
         {
             ContentManager? modManager = GetModContentManager();
@@ -244,7 +357,7 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         if (vanillaManager == null)
             return null;
 
-        if (langCode != "en")
+        if (!LanguageHelper.IsBaseOrEnglish(langCode))
         {
             string? suffix = LanguageHelper.GetLanguageSuffix(langCode);
             if (!string.IsNullOrEmpty(suffix))
@@ -266,7 +379,7 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             return null;
         }
 
-        // Vanilla English
+        // Vanilla base / default / English (unsuffixed file)
         string engFilePath = Path.Combine(_gameContentRoot, $"{assetSubpath}.xnb");
         if (File.Exists(engFilePath))
         {
@@ -277,6 +390,60 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             catch (ContentLoadException)
             {
                 // Ignore and return null
+            }
+        }
+
+        return null;
+    }
+
+    private Dictionary<string, string>? LoadIntStringDictionaryAsStrings(string assetSubpath, string langCode)
+    {
+        ContentManager? manager = langCode == "vi" ? GetModContentManager() : GetVanillaContentManager();
+        if (manager == null)
+            return null;
+
+        string relPath = assetSubpath;
+        if (langCode == "vi")
+        {
+            relPath = $"{assetSubpath}_vi";
+            if (string.IsNullOrEmpty(_modContentRoot) || !File.Exists(Path.Combine(_modContentRoot, $"{relPath}.xnb")))
+                return null;
+        }
+        else if (!LanguageHelper.IsBaseOrEnglish(langCode))
+        {
+            string? suffix = LanguageHelper.GetLanguageSuffix(langCode);
+            if (string.IsNullOrEmpty(suffix))
+                return null;
+            relPath = $"{assetSubpath}.{suffix}";
+            if (!File.Exists(Path.Combine(_gameContentRoot, $"{relPath}.xnb")))
+                return null;
+        }
+        else
+        {
+            if (!File.Exists(Path.Combine(_gameContentRoot, $"{relPath}.xnb")))
+                return null;
+        }
+
+        try
+        {
+            Dictionary<int, string>? intDict = manager.Load<Dictionary<int, string>>(relPath);
+            if (intDict != null)
+            {
+                var res = new Dictionary<string, string>(intDict.Count, StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in intDict)
+                    res[kvp.Key.ToString()] = kvp.Value;
+                return res;
+            }
+        }
+        catch (Exception)
+        {
+            try
+            {
+                return manager.Load<Dictionary<string, string>>(relPath);
+            }
+            catch (Exception)
+            {
+                // Ignore
             }
         }
 

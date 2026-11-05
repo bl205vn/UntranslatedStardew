@@ -22,6 +22,7 @@ public sealed class ItemNameResolver
 {
     private readonly ISecondaryContentProvider _contentProvider;
     private readonly Func<string, TrinketData?>? _trinketDataResolver;
+    private readonly Func<string, StardewValley.GameData.Powers.PowersData?>? _powerDataResolver;
     private readonly ConcurrentDictionary<ItemCacheKey, string?> _cache = new();
 
     private static readonly Regex LocalizedTokenRegex = new(
@@ -31,10 +32,14 @@ public sealed class ItemNameResolver
     public ISecondaryContentProvider ContentProvider => _contentProvider;
     public string EffectiveLanguage => _contentProvider.EffectiveLanguage;
 
-    public ItemNameResolver(ISecondaryContentProvider contentProvider, Func<string, TrinketData?>? trinketDataResolver = null)
+    public ItemNameResolver(
+        ISecondaryContentProvider contentProvider,
+        Func<string, TrinketData?>? trinketDataResolver = null,
+        Func<string, StardewValley.GameData.Powers.PowersData?>? powerDataResolver = null)
     {
         _contentProvider = contentProvider ?? throw new ArgumentNullException(nameof(contentProvider));
         _trinketDataResolver = trinketDataResolver;
+        _powerDataResolver = powerDataResolver;
     }
 
     /// <summary>
@@ -115,7 +120,7 @@ public sealed class ItemNameResolver
             if (_contentProvider.TryGetString("Data/Boots", bId, out string? bootsEntry) && !string.IsNullOrEmpty(bootsEntry))
             {
                 string[] fields = bootsEntry.Split('/');
-                string? name = _contentProvider.EffectiveLanguage == "en" ? ArgUtility.Get(fields, 0) : ArgUtility.Get(fields, 6);
+                string? name = LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) ? ArgUtility.Get(fields, 0) : ArgUtility.Get(fields, 6);
                 if (!string.IsNullOrWhiteSpace(name))
                 {
                     _cache[key] = name;
@@ -130,13 +135,133 @@ public sealed class ItemNameResolver
             if (_contentProvider.TryGetString("Data/hats", hId, out string? hatsEntry) && !string.IsNullOrEmpty(hatsEntry))
             {
                 string[] fields = hatsEntry.Split('/');
-                string? name = _contentProvider.EffectiveLanguage == "en" ? ArgUtility.Get(fields, 0) : ArgUtility.Get(fields, 5);
+                string? name = LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) ? ArgUtility.Get(fields, 0) : ArgUtility.Get(fields, 5);
                 if (!string.IsNullOrWhiteSpace(name))
                 {
                     _cache[key] = name;
                     return name;
                 }
             }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the secondary display name for a special power from Data/Powers or known sources.
+    /// </summary>
+    public string? GetSecondaryPowerName(string? powerKey)
+    {
+        if (string.IsNullOrWhiteSpace(powerKey) || powerKey == "???")
+            return null;
+
+        string trimmed = powerKey.Trim();
+
+        // 1. Check data resolver or IPowerDataProvider
+        StardewValley.GameData.Powers.PowersData? powerData = _powerDataResolver != null
+            ? _powerDataResolver(trimmed)
+            : (_contentProvider is IPowerDataProvider powerProvider && powerProvider.TryGetPowerData(trimmed, out var data) ? data : null);
+
+        if (powerData != null && !string.IsNullOrWhiteSpace(powerData.DisplayName))
+        {
+            string? fromToken = ResolveLocalizedTokens(powerData.DisplayName);
+            if (!string.IsNullOrWhiteSpace(fromToken) && fromToken != powerData.DisplayName)
+                return fromToken;
+
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(powerData.DisplayName))
+                return powerData.DisplayName;
+        }
+
+        // 2. Known vanilla power sources fallback
+        if (SkillProfessionData.TryGetVanillaPowerSource(trimmed, out var sourceInfo))
+        {
+            if (_contentProvider.TryGetString(sourceInfo.Asset, sourceInfo.Key, out string? val) && !string.IsNullOrWhiteSpace(val))
+                return val;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the secondary profession title by its integer number (0..29).
+    /// </summary>
+    public string? GetSecondaryProfessionTitle(int whichProfession)
+    {
+        string? profName = SkillProfessionData.GetProfessionInternalName(whichProfession);
+        if (profName == null)
+            return null;
+
+        if (_contentProvider.TryGetString("Strings/UI", $"LevelUp_ProfessionName_{profName}", out string? localizedTitle) && !string.IsNullOrWhiteSpace(localizedTitle))
+            return localizedTitle;
+
+        if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
+            return profName;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the secondary skill name by skill index (0..5).
+    /// </summary>
+    public string? GetSecondarySkillName(int skillIndex)
+    {
+        string? key = SkillProfessionData.GetSkillStringKey(skillIndex);
+        if (key != null && _contentProvider.TryGetString("Strings/StringsFromCSFiles", key, out string? localizedSkill) && !string.IsNullOrWhiteSpace(localizedSkill))
+            return localizedSkill;
+
+        if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
+            return SkillProfessionData.GetSkillDefaultName(skillIndex);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the secondary achievement title by achievement ID.
+    /// </summary>
+    public string? GetSecondaryAchievementTitle(string? achievementId)
+    {
+        if (string.IsNullOrWhiteSpace(achievementId) || achievementId == "???")
+            return null;
+
+        if (_contentProvider.TryGetString("Data/Achievements", achievementId.Trim(), out string? raw) && !string.IsNullOrWhiteSpace(raw))
+        {
+            string[] parts = raw.Split('^');
+            if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]))
+                return parts[0].Trim();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the secondary title for a collections tab item.
+    /// </summary>
+    public string? GetSecondaryCollectionItemTitle(string? itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) || itemId == "???")
+            return null;
+
+        string trimmed = itemId.Trim();
+        string unqualified = trimmed.StartsWith("(O)", StringComparison.OrdinalIgnoreCase) ? trimmed.Substring(3) : trimmed;
+
+        if (_contentProvider.TryGetString("Strings/Objects", $"{unqualified}_CollectionsTabName", out string? colName) && !string.IsNullOrWhiteSpace(colName))
+            return colName.Trim();
+
+        string? fromRegistry = GetSecondaryNameById(trimmed);
+        if (!string.IsNullOrWhiteSpace(fromRegistry))
+            return fromRegistry;
+
+        // Fallback using Data/Objects directly when ItemRegistry is not initialized (e.g. offline tests or raw data)
+        if (_contentProvider is RawContentProvider rawProvider && rawProvider.TryGetObjectData(unqualified, out StardewValley.GameData.Objects.ObjectData? objData) && objData != null)
+        {
+            if (TryParseLocalizedToken(objData.DisplayName, out string asset, out string key))
+            {
+                if (_contentProvider.TryGetString(asset, key, out string? val) && !string.IsNullOrWhiteSpace(val))
+                    return val;
+            }
+
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(objData.DisplayName))
+                return objData.DisplayName;
         }
 
         return null;
@@ -158,7 +283,7 @@ public sealed class ItemNameResolver
             if (!string.IsNullOrEmpty(resolvedTokens) && resolvedTokens != template)
                 return resolvedTokens;
 
-            if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(template))
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(template))
                 return template;
         }
 
@@ -212,7 +337,7 @@ public sealed class ItemNameResolver
             if (_contentProvider.TryGetString("Strings/Objects", $"{data.ItemId}_Name", out string? byId))
                 return byId;
 
-            if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(objData.DisplayName))
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(objData.DisplayName))
                 return objData.DisplayName;
         }
 
@@ -228,7 +353,7 @@ public sealed class ItemNameResolver
             if (_contentProvider.TryGetString("Strings/BigCraftables", $"{data.ItemId}_Name", out string? byId))
                 return byId;
 
-            if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(bcData.DisplayName))
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(bcData.DisplayName))
                 return bcData.DisplayName;
         }
 
@@ -244,7 +369,7 @@ public sealed class ItemNameResolver
             if (_contentProvider.TryGetString("Strings/Weapons", $"{data.ItemId}_Name", out string? byId))
                 return byId;
 
-            if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(weaponData.DisplayName))
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(weaponData.DisplayName))
                 return weaponData.DisplayName;
         }
 
@@ -280,7 +405,7 @@ public sealed class ItemNameResolver
             if (!string.IsNullOrEmpty(toolData.Name) && _contentProvider.TryGetString("Strings/Tools", $"{toolData.Name}_Name", out string? byName))
                 return byName;
 
-            if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(toolData.DisplayName))
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(toolData.DisplayName))
                 return toolData.DisplayName;
         }
 
@@ -290,7 +415,7 @@ public sealed class ItemNameResolver
             // Boots: Field 0 is English, Field 6 is localized name in Data/Boots
             if (data.ItemType.Identifier == ItemRegistry.type_boots)
             {
-                if (_contentProvider.EffectiveLanguage == "en")
+                if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
                 {
                     return ArgUtility.Get(fields, 0);
                 }
@@ -311,7 +436,7 @@ public sealed class ItemNameResolver
             // Hats: Field 0 is English, Field 5 is localized name in Data/hats
             if (data.ItemType.Identifier == ItemRegistry.type_hat)
             {
-                if (_contentProvider.EffectiveLanguage == "en")
+                if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
                 {
                     return ArgUtility.Get(fields, 0);
                 }
@@ -338,7 +463,7 @@ public sealed class ItemNameResolver
                         return fVal;
                 }
 
-                if (_contentProvider.EffectiveLanguage == "en")
+                if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
                 {
                     return ArgUtility.Get(fields, 0);
                 }
@@ -347,7 +472,7 @@ public sealed class ItemNameResolver
             }
 
             // General string[] fallback
-            if (_contentProvider.EffectiveLanguage == "en")
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
             {
                 return ArgUtility.Get(fields, 0);
             }
@@ -385,7 +510,7 @@ public sealed class ItemNameResolver
                         return val;
                 }
 
-                if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(trinketData.DisplayName))
+                if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(trinketData.DisplayName))
                     return trinketData.DisplayName;
             }
 
@@ -402,7 +527,7 @@ public sealed class ItemNameResolver
                 if (_contentProvider.TryGetString(asset, key, out string? val))
                     return val;
             }
-            if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(pantsData.DisplayName))
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(pantsData.DisplayName))
                 return pantsData.DisplayName;
         }
 
@@ -413,7 +538,7 @@ public sealed class ItemNameResolver
                 if (_contentProvider.TryGetString(asset, key, out string? val))
                     return val;
             }
-            if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(shirtData.DisplayName))
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(shirtData.DisplayName))
                 return shirtData.DisplayName;
         }
 
@@ -425,7 +550,7 @@ public sealed class ItemNameResolver
         }
 
         // I. Fallback: InternalName if secondary is English and InternalName is human-readable
-        if (_contentProvider.EffectiveLanguage == "en" && IsHumanReadableName(data.InternalName, data.ItemId))
+        if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsHumanReadableName(data.InternalName, data.ItemId))
         {
             return data.InternalName;
         }
@@ -523,7 +648,7 @@ public sealed class ItemNameResolver
 
         // Generic template pluralization
         if (preserveType is StardewValley.Object.PreserveType.DriedFruit or StardewValley.Object.PreserveType.DriedMushroom
-            && _contentProvider.EffectiveLanguage == "en")
+            && LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
         {
             formatted = LexiconPluralize(formatted);
         }

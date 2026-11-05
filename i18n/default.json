@@ -1,13 +1,13 @@
 {
   "config.secondary-language.name": "Secondary Language",
-  "config.secondary-language.description": "Language code for the secondary tooltip name (e.g. en, vi, es, fr, ja, ko, zh). Default is en.",
+  "config.secondary-language.description": "Language code for secondary display names (e.g. default, en, vi, es, fr, ja, ko, zh). 'default' uses base unlocalized content, 'en' explicitly uses English.",
   "config.show-secondary.name": "Show Secondary Name",
-  "config.show-secondary.description": "Whether to display the secondary language name in item tooltips.",
+  "config.show-secondary.description": "Whether to display the secondary language name in item tooltips and expanded UI.",
   "config.secondary-first.name": "Secondary Name First",
   "config.secondary-first.description": "Display the secondary name above the primary name.",
   "config.diacritic-insensitive.name": "Diacritic-Insensitive Search",
   "config.diacritic-insensitive.description": "Ignore diacritics and normalize characters like đ/Đ during search matching.",
   "log.mod-loaded": "Untranslated Stardew loaded successfully. Secondary language: {{language}}.",
-  "log.patch-failed": "Failed to apply tooltip patch: {{error}}.",
+  "log.patch-failed": "Failed to apply UI patch: {{error}}.",
   "log.secondary-fallback": "Language '{{language}}' is not supported as a built-in secondary language and custom assets were not found. Falling back to '{{fallback}}'."
 }
