@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using Microsoft.Xna.Framework.Content;
+using StardewValley;
+using StardewValley.GameData;
 
 namespace UntranslatedStardew.Core;
 
@@ -12,7 +14,7 @@ namespace UntranslatedStardew.Core;
 /// Does not mutate game locale or pollute global vanilla asset caches.
 /// Supports per-key fallback to English and lazy service provider initialization.
 /// </summary>
-public sealed class RawContentProvider : ISecondaryContentProvider
+public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketDataProvider
 {
     private readonly Func<IServiceProvider?> _getServiceProvider;
     private readonly string _gameContentRoot;
@@ -23,6 +25,7 @@ public sealed class RawContentProvider : ISecondaryContentProvider
     private ContentManager? _modContentManager;
 
     private readonly ConcurrentDictionary<string, Dictionary<string, string>?> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Dictionary<string, TrinketData>?> _trinketDataCache = new(StringComparer.OrdinalIgnoreCase);
     private bool _warned;
     private bool _disposed;
 
@@ -121,9 +124,61 @@ public sealed class RawContentProvider : ISecondaryContentProvider
         return value;
     }
 
+    /// <summary>
+    /// Attempts to retrieve TrinketData for a given trinket ID.
+    /// Checks live DataLoader first if game content is active, then falls back to vanilla ContentManager.
+    /// </summary>
+    public bool TryGetTrinketData(string itemId, out TrinketData? trinketData)
+    {
+        trinketData = null;
+        if (_disposed || string.IsNullOrEmpty(itemId))
+            return false;
+
+        // 1. Live game DataLoader if Game1.content is active
+        if (Game1.content != null)
+        {
+            try
+            {
+                Dictionary<string, TrinketData>? sheet = DataLoader.Trinkets(Game1.content);
+                if (sheet != null && sheet.TryGetValue(itemId, out trinketData))
+                    return true;
+            }
+            catch
+            {
+                // Ignore and fall back
+            }
+        }
+
+        // 2. Isolated vanilla ContentManager from disk
+        ContentManager? vanillaManager = GetVanillaContentManager();
+        if (vanillaManager != null)
+        {
+            try
+            {
+                if (!_trinketDataCache.TryGetValue("Data/Trinkets", out Dictionary<string, TrinketData>? dict))
+                {
+                    dict = vanillaManager.Load<Dictionary<string, TrinketData>>("Data/Trinkets");
+                    _trinketDataCache["Data/Trinkets"] = dict;
+                }
+
+                if (dict != null && dict.TryGetValue(itemId, out trinketData))
+                    return true;
+            }
+            catch (ContentLoadException)
+            {
+                // Ignore and return false
+            }
+        }
+
+        return false;
+    }
+
     public void Invalidate()
     {
         _cache.Clear();
+        _trinketDataCache.Clear();
+        _vanillaContentManager?.Unload();
+        _modContentManager?.Unload();
     }
 
     public void Dispose()
@@ -133,6 +188,7 @@ public sealed class RawContentProvider : ISecondaryContentProvider
 
         _disposed = true;
         _cache.Clear();
+        _trinketDataCache.Clear();
         _vanillaContentManager?.Dispose();
         _modContentManager?.Dispose();
         _vanillaContentManager = null;

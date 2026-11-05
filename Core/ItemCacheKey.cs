@@ -16,6 +16,17 @@ public readonly record struct ItemCacheKey(
 {
     public static ItemCacheKey FromItem(Item item)
     {
+        if (item is StardewValley.Objects.Trinkets.Trinket trinket)
+        {
+            return new ItemCacheKey(
+                item.QualifiedItemId,
+                null,
+                null,
+                trinket.displayNameOverrideTemplate.Value,
+                null
+            );
+        }
+
         if (item is StardewValley.Object obj)
         {
             return new ItemCacheKey(

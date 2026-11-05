@@ -21,6 +21,7 @@ namespace UntranslatedStardew.Core;
 public sealed class ItemNameResolver
 {
     private readonly ISecondaryContentProvider _contentProvider;
+    private readonly Func<string, TrinketData?>? _trinketDataResolver;
     private readonly ConcurrentDictionary<ItemCacheKey, string?> _cache = new();
 
     private static readonly Regex LocalizedTokenRegex = new(
@@ -30,9 +31,10 @@ public sealed class ItemNameResolver
     public ISecondaryContentProvider ContentProvider => _contentProvider;
     public string EffectiveLanguage => _contentProvider.EffectiveLanguage;
 
-    public ItemNameResolver(ISecondaryContentProvider contentProvider)
+    public ItemNameResolver(ISecondaryContentProvider contentProvider, Func<string, TrinketData?>? trinketDataResolver = null)
     {
         _contentProvider = contentProvider ?? throw new ArgumentNullException(nameof(contentProvider));
+        _trinketDataResolver = trinketDataResolver;
     }
 
     /// <summary>
@@ -88,7 +90,7 @@ public sealed class ItemNameResolver
             }
         }
 
-        // Direct lookup from secondary content provider (Strings/Objects or Data/Objects)
+        // Direct lookup from secondary content provider (Strings/Objects, Strings/1_6_Strings, etc.)
         // This handles standalone / mock provider testing and unparsed/custom items
         string unqualifiedId = itemId.StartsWith("(O)", StringComparison.OrdinalIgnoreCase) ? itemId.Substring(3) : itemId;
         if (_contentProvider.TryGetString("Strings/Objects", $"{unqualifiedId}_Name", out string? directString) && !string.IsNullOrEmpty(directString))
@@ -97,11 +99,69 @@ public sealed class ItemNameResolver
             return directString;
         }
 
+        if (itemId.StartsWith("(TR)", StringComparison.OrdinalIgnoreCase) || itemId.StartsWith("TR", StringComparison.OrdinalIgnoreCase))
+        {
+            string trId = itemId.StartsWith("(TR)", StringComparison.OrdinalIgnoreCase) ? itemId.Substring(4) : itemId.Substring(2);
+            if (_contentProvider.TryGetString("Strings/1_6_Strings", $"{trId}_Name", out string? directTrinket) && !string.IsNullOrEmpty(directTrinket))
+            {
+                _cache[key] = directTrinket;
+                return directTrinket;
+            }
+        }
+
+        if (itemId.StartsWith("(B)", StringComparison.OrdinalIgnoreCase))
+        {
+            string bId = itemId.Substring(3);
+            if (_contentProvider.TryGetString("Data/Boots", bId, out string? bootsEntry) && !string.IsNullOrEmpty(bootsEntry))
+            {
+                string[] fields = bootsEntry.Split('/');
+                string? name = _contentProvider.EffectiveLanguage == "en" ? ArgUtility.Get(fields, 0) : ArgUtility.Get(fields, 6);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    _cache[key] = name;
+                    return name;
+                }
+            }
+        }
+
+        if (itemId.StartsWith("(H)", StringComparison.OrdinalIgnoreCase))
+        {
+            string hId = itemId.Substring(3);
+            if (_contentProvider.TryGetString("Data/hats", hId, out string? hatsEntry) && !string.IsNullOrEmpty(hatsEntry))
+            {
+                string[] fields = hatsEntry.Split('/');
+                string? name = _contentProvider.EffectiveLanguage == "en" ? ArgUtility.Get(fields, 0) : ArgUtility.Get(fields, 5);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    _cache[key] = name;
+                    return name;
+                }
+            }
+        }
+
         return null;
     }
 
     private string? ResolveItem(Item item)
     {
+        // 0. Trinket with dynamic variant override (e.g. frog egg colors, perfect ice rod, rapid/heavy quiver)
+        if (item is StardewValley.Objects.Trinkets.Trinket trinket && !string.IsNullOrWhiteSpace(trinket.displayNameOverrideTemplate.Value))
+        {
+            string template = trinket.displayNameOverrideTemplate.Value;
+            if (TryParseLocalizedToken(template, out string asset, out string key))
+            {
+                if (_contentProvider.TryGetString(asset, key, out string? val) && !string.IsNullOrEmpty(val))
+                    return val;
+            }
+
+            string resolvedTokens = ResolveLocalizedTokens(template);
+            if (!string.IsNullOrEmpty(resolvedTokens) && resolvedTokens != template)
+                return resolvedTokens;
+
+            if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(template))
+                return template;
+        }
+
         // 1. In vanilla GetObjectDisplayName, displayNameFormat is prioritized over preserveType
         if (item is StardewValley.Object objWithFormat && !string.IsNullOrEmpty(objWithFormat.displayNameFormat))
         {
@@ -293,17 +353,45 @@ public sealed class ItemNameResolver
             }
         }
 
-        // F. TrinketData
-        if (raw is TrinketData trinketData)
+        // F. TrinketData & Vanilla Trinkets (where RawData is null by game design)
+        if (data.ItemType.Identifier == ItemRegistry.type_trinket || data.QualifiedItemId.StartsWith("(TR)") || raw is TrinketData)
         {
-            if (TryParseLocalizedToken(trinketData.DisplayName, out string asset, out string key))
+            TrinketData? trinketData = raw as TrinketData;
+            if (trinketData == null && _trinketDataResolver != null)
             {
-                if (_contentProvider.TryGetString(asset, key, out string? val))
-                    return val;
+                trinketData = _trinketDataResolver(data.ItemId);
+            }
+            if (trinketData == null && _contentProvider is ITrinketDataProvider trinketProvider)
+            {
+                trinketProvider.TryGetTrinketData(data.ItemId, out trinketData);
+            }
+            if (trinketData == null && Game1.content != null)
+            {
+                try
+                {
+                    DataLoader.Trinkets(Game1.content).TryGetValue(data.ItemId, out trinketData);
+                }
+                catch
+                {
+                    // Ignore content exceptions
+                }
             }
 
-            if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(trinketData.DisplayName))
-                return trinketData.DisplayName;
+            if (trinketData != null)
+            {
+                if (TryParseLocalizedToken(trinketData.DisplayName, out string asset, out string key))
+                {
+                    if (_contentProvider.TryGetString(asset, key, out string? val) && !string.IsNullOrEmpty(val))
+                        return val;
+                }
+
+                if (_contentProvider.EffectiveLanguage == "en" && IsUsableLiteralName(trinketData.DisplayName))
+                    return trinketData.DisplayName;
+            }
+
+            // Direct fallback for vanilla and standard trinket keys: Strings/1_6_Strings:<ItemId>_Name
+            if (_contentProvider.TryGetString("Strings/1_6_Strings", $"{data.ItemId}_Name", out string? byId) && !string.IsNullOrEmpty(byId))
+                return byId;
         }
 
         // G. PantsData & ShirtData
@@ -329,7 +417,14 @@ public sealed class ItemNameResolver
                 return shirtData.DisplayName;
         }
 
-        // H. Fallback: InternalName if secondary is English and InternalName is human-readable
+        // H. Mannequins (where RawData is null by game design)
+        if (data.ItemType.Identifier == "(M)" || data.QualifiedItemId.StartsWith("(M)"))
+        {
+            if (_contentProvider.TryGetString("Strings/1_6_Strings", $"{data.ItemId}_Name", out string? byId) && !string.IsNullOrEmpty(byId))
+                return byId;
+        }
+
+        // I. Fallback: InternalName if secondary is English and InternalName is human-readable
         if (_contentProvider.EffectiveLanguage == "en" && IsHumanReadableName(data.InternalName, data.ItemId))
         {
             return data.InternalName;

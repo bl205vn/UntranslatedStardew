@@ -3,9 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using HarmonyLib;
 using Microsoft.Win32;
+using Netcode;
+using StardewValley.GameData;
 using StardewValley.ItemTypeDefinitions;
+using StardewValley.Objects.Trinkets;
 using UntranslatedStardew.Core;
+using UntranslatedStardew.Patches;
 
 namespace UntranslatedStardew.Tests;
 
@@ -33,8 +38,12 @@ public static class Program
         TestTooltipFormatting();
         TestLexiconPluralization();
         TestItemCacheKey();
+        TestTrinketResolution();
+        TestCjbSearchFilter();
+        TestCjbHarmonyBoundary();
         TestMockContentProviderAndResolver();
         TestApiLifecycleAndConfig();
+        TestSystematicCoverageAudit();
         TestRealXnbSmoke();
 
         Console.WriteLine();
@@ -260,6 +269,19 @@ public static class Program
         Assert(ItemNameResolver.LexiconPluralize("Dried Cactus Fruit") == "Dried Cactus Fruits", "Dried Cactus Fruit -> Dried Cactus Fruits");
     }
 
+    private static void SetTrinketTemplate(Trinket trinket, string template)
+    {
+        FieldInfo? valField = typeof(NetFieldBase<string, NetString>).GetField("value", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (valField != null)
+        {
+            valField.SetValue(trinket.displayNameOverrideTemplate, template);
+        }
+        else
+        {
+            trinket.displayNameOverrideTemplate.Value = template;
+        }
+    }
+
     private static void TestItemCacheKey()
     {
         Console.WriteLine("\n-- Testing ItemCacheKey --");
@@ -275,6 +297,387 @@ public static class Program
         Assert(key1 != key3, "Blueberry Wine and Starfruit Wine produce distinct cache keys");
         Assert(key1 != key4, "Flavored Wine and base unflavored Wine produce distinct cache keys");
         Assert(keyTool0 != keyTool4, "Base Axe and Iridium Axe produce distinct cache keys");
+
+        // Trinket dynamic variant cache keys
+        var trinketBase = new ItemCacheKey("(TR)FrogEgg", null, null, null, null);
+        var trinketVariant0 = new ItemCacheKey("(TR)FrogEgg", null, null, "[LocalizedText Strings\\1_6_Strings:frog_variant_0]", null);
+        var trinketVariant4 = new ItemCacheKey("(TR)FrogEgg", null, null, "[LocalizedText Strings\\1_6_Strings:frog_variant_4]", null);
+
+        Assert(trinketBase != trinketVariant0, "Base Trinket and Variant Trinket produce distinct cache keys");
+        Assert(trinketVariant0 != trinketVariant4, "Different Trinket variants (e.g. green vs red frog egg) produce distinct cache keys");
+
+        var t0 = new Trinket();
+        t0.ItemId = "FrogEgg";
+        SetTrinketTemplate(t0, "[LocalizedText Strings\\1_6_Strings:frog_variant_0]");
+        var keyFromT0 = ItemCacheKey.FromItem(t0);
+        Assert(keyFromT0 == trinketVariant0, "ItemCacheKey.FromItem extracts dynamic variant override");
+    }
+
+    private static void TestTrinketResolution()
+    {
+        Console.WriteLine("\n-- Testing Trinket Resolution (RawData=null Bug Reproduction & Dynamic Variants) --");
+
+        string[] vanillaTrinketIds = new[]
+        {
+            "BasiliskPaw",
+            "FairyBox",
+            "IceRod",
+            "IridiumSpur",
+            "FrogEgg",
+            "MagicQuiver",
+            "MagicHairDye",
+            "ParrotEgg"
+        };
+
+        var expectedEn = new Dictionary<string, string>
+        {
+            ["BasiliskPaw"] = "Basilisk Paw",
+            ["FairyBox"] = "Fairy Box",
+            ["IceRod"] = "Ice Rod",
+            ["IridiumSpur"] = "Golden Spur",
+            ["FrogEgg"] = "Frog Egg",
+            ["MagicQuiver"] = "Magic Quiver",
+            ["MagicHairDye"] = "Magic Hair Gel",
+            ["ParrotEgg"] = "Parrot Egg"
+        };
+
+        var expectedFr = new Dictionary<string, string>
+        {
+            ["BasiliskPaw"] = "Patte de basilic",
+            ["FairyBox"] = "Boîte de fées",
+            ["IceRod"] = "Baguette magique de glace",
+            ["IridiumSpur"] = "Éperon doré",
+            ["FrogEgg"] = "Œuf de grenouille",
+            ["MagicQuiver"] = "Carquois magique",
+            ["MagicHairDye"] = "Gel magique pour les cheveux",
+            ["ParrotEgg"] = "Œuf de perroquet"
+        };
+
+        var expectedVi = new Dictionary<string, string>
+        {
+            ["BasiliskPaw"] = "Móng vuốt Tử xà",
+            ["FairyBox"] = "Rương Thần",
+            ["IceRod"] = "Pháp trượng Băng",
+            ["IridiumSpur"] = "Đinh gót Vàng",
+            ["FrogEgg"] = "Trứng Ếch",
+            ["MagicQuiver"] = "Pháp Tiễn",
+            ["MagicHairDye"] = "Keo vuốt tóc Thần kỳ",
+            ["ParrotEgg"] = "Trứng Vẹt"
+        };
+
+        var mock = new MockContentProvider("fr", "fr");
+        foreach (var (k, v) in expectedEn)
+            mock.AddEnglish("Strings/1_6_Strings", $"{k}_Name", v);
+        foreach (var (k, v) in expectedFr)
+            mock.AddLocalized("Strings/1_6_Strings", $"{k}_Name", v);
+
+        // Variant strings
+        mock.AddEnglish("Strings/1_6_Strings", "frog_variant_0", "Green Frog Egg");
+        mock.AddLocalized("Strings/1_6_Strings", "frog_variant_0", "Œuf de grenouille verte");
+        mock.AddEnglish("Strings/1_6_Strings", "frog_variant_4", "Red Frog Egg");
+        mock.AddLocalized("Strings/1_6_Strings", "frog_variant_4", "Œuf de grenouille rouge");
+        mock.AddEnglish("Strings/1_6_Strings", "PerfectIceRod", "Perfect Ice Rod");
+        mock.AddLocalized("Strings/1_6_Strings", "PerfectIceRod", "Baguette magique de glace parfaite");
+        mock.AddEnglish("Strings/1_6_Strings", "RapidMagicQuiver", "Rapid Magic Quiver");
+        mock.AddLocalized("Strings/1_6_Strings", "RapidMagicQuiver", "Carquois de magie rapide");
+
+        // TrinketData provider simulation (matching actual Game1.content / DataLoader.Trinkets data)
+        foreach (var id in vanillaTrinketIds)
+        {
+            mock.AddTrinketData(id, new TrinketData
+            {
+                DisplayName = $"[LocalizedText Strings\\1_6_Strings:{id}_Name]"
+            });
+        }
+
+        var trinketDef = new TrinketDataDefinition();
+        var resolverFr = new ItemNameResolver(mock);
+
+        // 1. Test all 8 vanilla trinkets with ParsedItemData where RawData is NULL (exact game bug shape)
+        foreach (string id in vanillaTrinketIds)
+        {
+            var parsed = new ParsedItemData(
+                trinketDef,
+                id,
+                0,
+                "LooseSprites/specialItems",
+                id, // In game, internalName == itemId
+                expectedEn[id],
+                "Description",
+                -101,
+                null,
+                null // RawData is null!
+            );
+
+            string? resolved = resolverFr.ResolveFromParsedData(parsed);
+            Assert(resolved == expectedFr[id], $"Trinket '{id}' with RawData=null resolves French secondary (expected '{expectedFr[id]}', got '{resolved}')");
+        }
+
+        // 2. Test all 8 vanilla trinkets with English secondary provider
+        var mockEn = new MockContentProvider("en", "en");
+        foreach (var (k, v) in expectedEn)
+            mockEn.AddEnglish("Strings/1_6_Strings", $"{k}_Name", v);
+        mockEn.AddEnglish("Strings/1_6_Strings", "frog_variant_0", "Green Frog Egg");
+        mockEn.AddEnglish("Strings/1_6_Strings", "frog_variant_4", "Red Frog Egg");
+        mockEn.AddEnglish("Strings/1_6_Strings", "PerfectIceRod", "Perfect Ice Rod");
+        mockEn.AddEnglish("Strings/1_6_Strings", "RapidMagicQuiver", "Rapid Magic Quiver");
+        foreach (var id in vanillaTrinketIds)
+        {
+            mockEn.AddTrinketData(id, new TrinketData
+            {
+                DisplayName = $"[LocalizedText Strings\\1_6_Strings:{id}_Name]"
+            });
+        }
+        var resolverEn = new ItemNameResolver(mockEn);
+        foreach (string id in vanillaTrinketIds)
+        {
+            var parsed = new ParsedItemData(
+                trinketDef,
+                id,
+                0,
+                "LooseSprites/specialItems",
+                id,
+                id,
+                "Description",
+                -101,
+                null,
+                null
+            );
+            string? resolved = resolverEn.ResolveFromParsedData(parsed);
+            Assert(resolved == expectedEn[id], $"Trinket '{id}' with RawData=null resolves English secondary (expected '{expectedEn[id]}', got '{resolved}')");
+        }
+
+        // 3. Test Vietnamese secondary provider
+        var mockVi = new MockContentProvider("vi", "vi");
+        foreach (var (k, v) in expectedEn)
+            mockVi.AddEnglish("Strings/1_6_Strings", $"{k}_Name", v);
+        foreach (var (k, v) in expectedVi)
+            mockVi.AddLocalized("Strings/1_6_Strings", $"{k}_Name", v);
+        foreach (var id in vanillaTrinketIds)
+        {
+            mockVi.AddTrinketData(id, new TrinketData
+            {
+                DisplayName = $"[LocalizedText Strings\\1_6_Strings:{id}_Name]"
+            });
+        }
+        var resolverVi = new ItemNameResolver(mockVi);
+        foreach (string id in vanillaTrinketIds)
+        {
+            var parsed = new ParsedItemData(
+                trinketDef,
+                id,
+                0,
+                "LooseSprites/specialItems",
+                id,
+                expectedEn[id],
+                "Description",
+                -101,
+                null,
+                null
+            );
+            string? resolved = resolverVi.ResolveFromParsedData(parsed);
+            Assert(resolved == expectedVi[id], $"Trinket '{id}' with RawData=null resolves Vietnamese secondary (expected '{expectedVi[id]}', got '{resolved}')");
+        }
+
+        // 4. Test dynamic variants on instantiated Trinket objects
+        var frog0 = new Trinket();
+        frog0.ItemId = "FrogEgg";
+        SetTrinketTemplate(frog0, "[LocalizedText Strings\\1_6_Strings:frog_variant_0]");
+
+        var frog4 = new Trinket();
+        frog4.ItemId = "FrogEgg";
+        SetTrinketTemplate(frog4, "[LocalizedText Strings\\1_6_Strings:frog_variant_4]");
+
+        var iceRodPerfect = new Trinket();
+        iceRodPerfect.ItemId = "IceRod";
+        SetTrinketTemplate(iceRodPerfect, "[LocalizedText Strings\\1_6_Strings:PerfectIceRod]");
+
+        var quiverRapid = new Trinket();
+        quiverRapid.ItemId = "MagicQuiver";
+        SetTrinketTemplate(quiverRapid, "[LocalizedText Strings\\1_6_Strings:RapidMagicQuiver]");
+
+        Assert(resolverFr.GetSecondaryName(frog0) == "Œuf de grenouille verte", "Dynamic variant: Green Frog Egg resolves French");
+        Assert(resolverFr.GetSecondaryName(frog4) == "Œuf de grenouille rouge", "Dynamic variant: Red Frog Egg resolves French");
+        Assert(resolverFr.GetSecondaryName(iceRodPerfect) == "Baguette magique de glace parfaite", "Dynamic variant: Perfect Ice Rod resolves French");
+        Assert(resolverFr.GetSecondaryName(quiverRapid) == "Carquois de magie rapide", "Dynamic variant: Rapid Magic Quiver resolves French");
+
+        Assert(resolverEn.GetSecondaryName(frog0) == "Green Frog Egg", "Dynamic variant: Green Frog Egg resolves English");
+        Assert(resolverEn.GetSecondaryName(iceRodPerfect) == "Perfect Ice Rod", "Dynamic variant: Perfect Ice Rod resolves English");
+    }
+
+    private static void TestCjbSearchFilter()
+    {
+        Console.WriteLine("\n-- Testing CJB Search Filter Integration --");
+
+        var mock = new MockContentProvider("en", "en");
+        mock.AddEnglish("Strings/Objects", "128_Name", "Pufferfish");
+        var resolver = new ItemNameResolver(mock);
+
+        var item = new FakeItem("128", "Cá nóc"); // Vietnamese display name, English secondary is Pufferfish
+
+        // 1. Accentless Vietnamese query: "ca noc" matches "Cá nóc" when ignoreDiacritics is true
+        bool m1 = CjbSearchFilter.Matches(item, "Pufferfish", "Cá nóc", "128", "(O)128", "ca noc", resolver, ignoreDiacritics: true);
+        Assert(m1, "CJB search: accentless 'ca noc' matches 'Cá nóc'");
+
+        // 2. Exact Vietnamese query: "Cá nóc"
+        bool m2 = CjbSearchFilter.Matches(item, "Pufferfish", "Cá nóc", "128", "(O)128", "Cá nóc", resolver, ignoreDiacritics: true);
+        Assert(m2, "CJB search: exact 'Cá nóc' matches 'Cá nóc'");
+
+        // 3. English secondary matching: query "pufferfish"
+        bool m3 = CjbSearchFilter.Matches(item, "Pufferfish", "Cá nóc", "128", "(O)128", "pufferfish", resolver, ignoreDiacritics: true);
+        Assert(m3, "CJB search: secondary name 'pufferfish' matches");
+
+        // 4. Config toggle: when ignoreDiacritics is false, unaccented query "ca noc" fails against "Cá nóc"
+        bool m4 = CjbSearchFilter.Matches(item, "Pufferfish", "Cá nóc", "128", "(O)128", "ca noc", resolver, ignoreDiacritics: false);
+        Assert(!m4, "CJB search: accentless 'ca noc' rejected when ignoreDiacritics=false");
+
+        // 5. Item ID matching
+        bool m5 = CjbSearchFilter.Matches(item, "Pufferfish", "Cá nóc", "128", "(O)128", "128", resolver, ignoreDiacritics: true);
+        bool m6 = CjbSearchFilter.Matches(item, "Pufferfish", "Cá nóc", "128", "(O)128", "(O)128", resolver, ignoreDiacritics: true);
+        Assert(m5, "CJB search: matches unqualified ID '128'");
+        Assert(m6, "CJB search: matches qualified ID '(O)128'");
+
+        // 6. Non-matching query returns false
+        bool m7 = CjbSearchFilter.Matches(item, "Pufferfish", "Cá nóc", "128", "(O)128", "Kim cương", resolver, ignoreDiacritics: true);
+        Assert(!m7, "CJB search: non-matching query returns false");
+
+        // 7. Null item / no CJB installed path sanity
+        bool m8 = CjbSearchFilter.Matches(null, "Pufferfish", "Cá nóc", "128", "(O)128", "ca noc", resolver, ignoreDiacritics: true);
+        Assert(m8, "CJB search: null item falls back to name/id fields safely");
+
+        // 8. Null resolver path sanity
+        bool m9 = CjbSearchFilter.Matches(item, "Pufferfish", "Cá nóc", "128", "(O)128", "ca noc", null, ignoreDiacritics: true);
+        Assert(m9, "CJB search: null resolver falls back to primary display name safely");
+
+        // 9. Empty query matches everything
+        bool m10 = CjbSearchFilter.Matches(item, "Pufferfish", "Cá nóc", "128", "(O)128", "", resolver, ignoreDiacritics: true);
+        Assert(m10, "CJB search: empty query returns true");
+    }
+
+    private static void TestCjbHarmonyBoundary()
+    {
+        Console.WriteLine("\n-- Testing CJB Item Spawner Harmony Adapter Boundary --");
+
+        CjbItemSpawnerIntegration.ResetStateForTests();
+
+        // 1. Unsupported shape safe skip: missing SearchBox field
+        var harmonySkip = new Harmony("test.cjb.unsupported");
+        bool appliedInvalid = CjbItemSpawnerIntegration.TryApplyInternal(harmonySkip, typeof(FakeUnsupportedItemMenu), typeof(FakeCjbSpawnableItem));
+        Assert(!appliedInvalid, "Harmony adapter skips unsupported menu shape safely");
+        Assert(CjbItemSpawnerIntegration.WarnedUnsupportedShape, "Warned once on unsupported shape");
+
+        // 2. Supported shape patch binding
+        CjbItemSpawnerIntegration.ResetStateForTests();
+        var harmony = new Harmony("test.cjb.supported");
+        bool appliedValid = CjbItemSpawnerIntegration.TryApplyInternal(harmony, typeof(FakeSupportedItemMenu), typeof(FakeCjbSpawnableItem));
+        Assert(appliedValid, "Harmony adapter successfully patches supported menu shape");
+
+        // Prepare test data with deferred native category sort orders
+        var mock = new MockContentProvider("en", "en");
+        mock.AddEnglish("Strings/Objects", "128_Name", "Pufferfish");
+        var resolver = new ItemNameResolver(mock);
+        CjbItemSpawnerIntegration.TestResolverOverride = resolver;
+
+        var menu = new FakeSupportedItemMenu();
+        // Item 0: Pufferfish (display "Cá nóc", id "128", category sort order 2)
+        var itemPuffer = new FakeItem("128", "Cá nóc");
+        var cjbPuffer = new FakeCjbSpawnableItem("128", "Pufferfish", "Cá nóc", sortOrder: 2, item: itemPuffer);
+
+        // Item 1: Diamond (display "Kim cương", id "72", category sort order 1)
+        var itemDiamond = new FakeItem("72", "Kim cương");
+        var cjbDiamond = new FakeCjbSpawnableItem("72", "Diamond", "Kim cương", sortOrder: 1, item: itemDiamond);
+
+        // Item 2: Carp (display "Cá chép", id "142", category sort order 3)
+        var itemCarp = new FakeItem("142", "Cá chép");
+        var cjbCarp = new FakeCjbSpawnableItem("142", "Carp", "Cá chép", sortOrder: 3, item: itemCarp);
+
+        menu.AllItems.AddRange(new[] { cjbPuffer, cjbDiamond, cjbCarp });
+
+        // 3. Exact query preservation (untrimmed) & restoration
+        menu.SearchBox.Text = "  ca noc  ";
+        var resultsPuffer = menu.SearchItems().ToList();
+        Assert(resultsPuffer.Count == 1 && resultsPuffer[0].Name == "Pufferfish", "Harmony Postfix filtered to matching item 'Pufferfish'");
+        Assert(menu.SearchBox.Text == "  ca noc  ", $"SearchBox.Text restored to exact untrimmed query '{menu.SearchBox.Text}'");
+
+        // 4. Return type cast preservation: result is IEnumerable<FakeCjbSpawnableItem>
+        IEnumerable<FakeCjbSpawnableItem> typedResult = menu.SearchItems();
+        Assert(typedResult != null, "SearchItems return is strongly typed IEnumerable<FakeCjbSpawnableItem>");
+
+        // 5. Preservation of deferred native category sort order
+        // Query "ca" matches both "Cá nóc" (sortOrder 2) and "Cá chép" (sortOrder 3)
+        menu.SearchBox.Text = "ca";
+        var resultsMulti = menu.SearchItems().ToList();
+        Assert(resultsMulti.Count == 2, $"Query 'ca' matched 2 items (got {resultsMulti.Count})");
+        Assert(resultsMulti[0].CategorySortOrder == 2 && resultsMulti[1].CategorySortOrder == 3,
+            "Deferred native sort order preserved: sortOrder 2 precedes sortOrder 3");
+
+        // 6. Secondary name matching through Harmony adapter
+        menu.SearchBox.Text = "pufferfish";
+        var resultsSecondary = menu.SearchItems().ToList();
+        Assert(resultsSecondary.Count == 1 && resultsSecondary[0].Id == "128", "Bilingual secondary query 'pufferfish' matched via Harmony adapter");
+        Assert(menu.SearchBox.Text == "pufferfish", "SearchBox.Text restored after secondary query");
+
+        // 7. Guaranteed query restore on throwing method (Harmony Finalizer)
+        CjbItemSpawnerIntegration.ResetStateForTests();
+        var harmonyThrow = new Harmony("test.cjb.throwing");
+        CjbItemSpawnerIntegration.TryApplyInternal(harmonyThrow, typeof(FakeThrowingItemMenu), typeof(FakeCjbSpawnableItem));
+        var throwingMenu = new FakeThrowingItemMenu();
+        throwingMenu.SearchBox.Text = "queryBeforeThrow";
+        bool caughtExpected = false;
+        try
+        {
+            throwingMenu.SearchItems();
+        }
+        catch (InvalidOperationException)
+        {
+            caughtExpected = true;
+        }
+        Assert(caughtExpected, "SearchItems threw expected exception through Harmony boundary");
+        Assert(throwingMenu.SearchBox.Text == "queryBeforeThrow", "Harmony Finalizer restored SearchBox.Text on throwing method");
+
+        // 8. Guaranteed query restore on null-returning method
+        CjbItemSpawnerIntegration.ResetStateForTests();
+        var harmonyNull = new Harmony("test.cjb.nullret");
+        CjbItemSpawnerIntegration.TryApplyInternal(harmonyNull, typeof(FakeNullReturningItemMenu), typeof(FakeCjbSpawnableItem));
+        var nullMenu = new FakeNullReturningItemMenu();
+        nullMenu.SearchBox.Text = "queryBeforeNull";
+        var nullResult = nullMenu.SearchItems();
+        Assert(nullResult == null, "SearchItems returned null");
+        Assert(nullMenu.SearchBox.Text == "queryBeforeNull", "Harmony Postfix finally restored SearchBox.Text on null return");
+
+        // 9. Per-item error fallback and logging once
+        CjbItemSpawnerIntegration.ResetStateForTests();
+        var harmonyFallback = new Harmony("test.cjb.fallback");
+        CjbItemSpawnerIntegration.TryApplyInternal(harmonyFallback, typeof(FakeFallbackItemMenu), typeof(FakeCjbSpawnableItem));
+        var fallbackMenu = new FakeFallbackItemMenu();
+        var throwingItem = new FakeThrowingSpawnableItem("500", "Exploding Fruit", "Trái Nổ");
+        fallbackMenu.AllItems.Add(throwingItem);
+        fallbackMenu.AllItems.Add(cjbDiamond);
+
+        fallbackMenu.SearchBox.Text = "Exploding";
+        var fallbackResults = fallbackMenu.SearchItems().ToList();
+        Assert(fallbackResults.Count == 1 && fallbackResults[0].Name == "Exploding Fruit",
+            "Per-item error gracefully fell back to native name query filter");
+        Assert(CjbItemSpawnerIntegration.LoggedFilterError, "Error logged once during per-item failure");
+
+        // 10. Outer error handling: SearchBox.Text restoration when enumeration fails catastrophically
+        CjbItemSpawnerIntegration.ResetStateForTests();
+        var harmonyOuter = new Harmony("test.cjb.outerthrow");
+        CjbItemSpawnerIntegration.TryApplyInternal(harmonyOuter, typeof(FakeOuterThrowItemMenu), typeof(FakeCjbSpawnableItem));
+        var outerMenu = new FakeOuterThrowItemMenu();
+        outerMenu.SearchBox.Text = "OuterQuery";
+        try
+        {
+            outerMenu.SearchItems()?.ToList();
+        }
+        catch
+        {
+            // Expected throw when consuming throwing enumerable
+        }
+        Assert(outerMenu.SearchBox.Text == "OuterQuery", "Harmony Postfix finally restored SearchBox.Text on outer enumeration failure");
+
+        // Cleanup test state
+        CjbItemSpawnerIntegration.ResetStateForTests();
     }
 
     private static void TestMockContentProviderAndResolver()
@@ -356,6 +759,45 @@ public static class Program
         Assert(pSafe == "Cá nóc" && sSafe == null, "Safe return (no crash) when resolver is null");
     }
 
+    private static void TestSystematicCoverageAudit()
+    {
+        Console.WriteLine("\n-- Testing Systematic Item Name Coverage Audit (Offline Real XNB) --");
+
+        string? gamePath = LocateGamePath();
+        if (gamePath == null || !Directory.Exists(gamePath))
+        {
+            Console.WriteLine("  [SKIP] Stardew Valley game path not found; skipping offline coverage audit.");
+            return;
+        }
+
+        string contentRoot = Path.Combine(gamePath, "Content");
+        var testService = new DummyServiceProvider();
+        var rawFr = new RawContentProvider(() => testService, contentRoot, "fr");
+        var resolverFr = new ItemNameResolver(rawFr);
+
+        string[] vanillaTrinketIds = new[]
+        {
+            "BasiliskPaw", "FairyBox", "IceRod", "IridiumSpur",
+            "FrogEgg", "MagicQuiver", "MagicHairDye", "ParrotEgg"
+        };
+
+        int trinketCount = 0;
+        foreach (string id in vanillaTrinketIds)
+        {
+            string? name = resolverFr.GetSecondaryNameById($"(TR){id}");
+            if (!string.IsNullOrEmpty(name))
+                trinketCount++;
+        }
+        Assert(trinketCount == 8, $"Audit: all 8/8 vanilla trinkets resolve via GetSecondaryNameById in French (got {trinketCount}/8)");
+
+        // Boots & Hats audit
+        string? bootsFr = resolverFr.GetSecondaryNameById("(B)504");
+        Assert(bootsFr == "Baskets", $"Audit: boots (B)504 resolves via GetSecondaryNameById in French ('{bootsFr}')");
+
+        string? hatFr = resolverFr.GetSecondaryNameById("(H)0");
+        Assert(hatFr == "Chapeau de cowboy", $"Audit: hat (H)0 resolves via GetSecondaryNameById in French ('{hatFr}')");
+    }
+
     private static void TestRealXnbSmoke()
     {
         Console.WriteLine("\n-- Testing Real XNB Offline Smoke Check (No Game Launch) --");
@@ -392,7 +834,13 @@ public static class Program
         string? hatsFrName = hatsEntryFr != null && hatsEntryFr.Split('/').Length > 5 ? hatsEntryFr.Split('/')[5] : null;
         Assert(gotHatsFr && !string.IsNullOrEmpty(hatsFrName), $"Real French XNB Data/hats.fr-FR:0 name == '{hatsFrName}'");
 
-        // 5. Real Vietnamese mod ContentManager (if Kou.ViethoaSV installed)
+        // 5. Real Trinkets dictionary & 1_6_Strings in French (Data/Trinkets & Strings/1_6_Strings.fr-FR)
+        bool gotTrinketData = rawFr.TryGetTrinketData("FrogEgg", out TrinketData? frogData);
+        Assert(gotTrinketData && frogData != null, "Real XNB: loaded Data/Trinkets for FrogEgg");
+        bool gotFrogFr = rawFr.TryGetString("Strings/1_6_Strings", "FrogEgg_Name", out string? frogFrName);
+        Assert(gotFrogFr && frogFrName == "Œuf de grenouille", $"Real French XNB Strings/1_6_Strings.fr-FR:FrogEgg_Name == 'Œuf de grenouille' (got '{frogFrName}')");
+
+        // 6. Real Vietnamese mod ContentManager (if Kou.ViethoaSV installed)
         if (Directory.Exists(modContentRoot))
         {
             var rawVi = new RawContentProvider(() => testService, contentRoot, "vi", modContentRoot);
@@ -402,10 +850,123 @@ public static class Program
             bool gotBootsVi = rawVi.TryGetString("Data/Boots", "504", out string? bootsEntryVi);
             string? bootsViName = bootsEntryVi != null && bootsEntryVi.Split('/').Length > 6 ? bootsEntryVi.Split('/')[6] : null;
             Assert(gotBootsVi && !string.IsNullOrEmpty(bootsViName), $"Real Vietnamese mod XNB Data/Boots_vi:504 name == '{bootsViName}'");
+
+            bool gotFrogVi = rawVi.TryGetString("Strings/1_6_Strings", "FrogEgg_Name", out string? frogViName);
+            Assert(gotFrogVi && frogViName == "Trứng Ếch", $"Real Vietnamese mod XNB Strings/1_6_Strings_vi:FrogEgg_Name == 'Trứng Ếch' (got '{frogViName}')");
         }
         else
         {
             Console.WriteLine("  [INFO] Kou.ViethoaSV mod directory not present; skipped Vietnamese mod XNB check.");
+        }
+
+        // 7. Supplement real XNB audit with all 8 vanilla trinkets through ResolveFromParsedData with RawData=null
+        Console.WriteLine("\n-- Supplement: Real XNB Trinket Resolution (RawData=null) for en, fr, and vi --");
+        string[] vanillaTrinketIds = new[]
+        {
+            "BasiliskPaw", "FairyBox", "IceRod", "IridiumSpur",
+            "FrogEgg", "MagicQuiver", "MagicHairDye", "ParrotEgg"
+        };
+
+        var expectedEn = new Dictionary<string, string>
+        {
+            ["BasiliskPaw"] = "Basilisk Paw",
+            ["FairyBox"] = "Fairy Box",
+            ["IceRod"] = "Ice Rod",
+            ["IridiumSpur"] = "Golden Spur",
+            ["FrogEgg"] = "Frog Egg",
+            ["MagicQuiver"] = "Magic Quiver",
+            ["MagicHairDye"] = "Magic Hair Gel",
+            ["ParrotEgg"] = "Parrot Egg"
+        };
+
+        var expectedFr = new Dictionary<string, string>
+        {
+            ["BasiliskPaw"] = "Patte de basilic",
+            ["FairyBox"] = "Boîte de fées",
+            ["IceRod"] = "Baguette magique de glace",
+            ["IridiumSpur"] = "Éperon doré",
+            ["FrogEgg"] = "Œuf de grenouille",
+            ["MagicQuiver"] = "Carquois magique",
+            ["MagicHairDye"] = "Gel magique pour les cheveux",
+            ["ParrotEgg"] = "Œuf de perroquet"
+        };
+
+        var expectedVi = new Dictionary<string, string>
+        {
+            ["BasiliskPaw"] = "Móng vuốt Tử xà",
+            ["FairyBox"] = "Rương Thần",
+            ["IceRod"] = "Pháp trượng Băng",
+            ["IridiumSpur"] = "Đinh gót Vàng",
+            ["FrogEgg"] = "Trứng Ếch",
+            ["MagicQuiver"] = "Pháp Tiễn",
+            ["MagicHairDye"] = "Keo vuốt tóc Thần kỳ",
+            ["ParrotEgg"] = "Trứng Vẹt"
+        };
+
+        var trinketDef = new TrinketDataDefinition();
+
+        // A. Resolve all 8 vanilla trinkets from real English XNB ContentManager
+        var resolverRealEn = new ItemNameResolver(rawEn);
+        foreach (string id in vanillaTrinketIds)
+        {
+            var parsed = new ParsedItemData(
+                trinketDef,
+                id,
+                0,
+                "LooseSprites/specialItems",
+                id,
+                expectedEn[id],
+                "Description",
+                -101,
+                null,
+                null // RawData is null!
+            );
+            string? resolved = resolverRealEn.ResolveFromParsedData(parsed);
+            Assert(resolved == expectedEn[id], $"Real XNB en: Trinket '{id}' (RawData=null) resolves '{expectedEn[id]}' (got '{resolved}')");
+        }
+
+        // B. Resolve all 8 vanilla trinkets from real French XNB ContentManager
+        var resolverRealFr = new ItemNameResolver(rawFr);
+        foreach (string id in vanillaTrinketIds)
+        {
+            var parsed = new ParsedItemData(
+                trinketDef,
+                id,
+                0,
+                "LooseSprites/specialItems",
+                id,
+                expectedEn[id],
+                "Description",
+                -101,
+                null,
+                null // RawData is null!
+            );
+            string? resolved = resolverRealFr.ResolveFromParsedData(parsed);
+            Assert(resolved == expectedFr[id], $"Real XNB fr: Trinket '{id}' (RawData=null) resolves '{expectedFr[id]}' (got '{resolved}')");
+        }
+
+        // C. Resolve all 8 vanilla trinkets from real Vietnamese mod ContentManager (if available)
+        if (Directory.Exists(modContentRoot))
+        {
+            var rawVi = new RawContentProvider(() => testService, contentRoot, "vi", modContentRoot);
+            var resolverRealVi = new ItemNameResolver(rawVi);
+            foreach (string id in vanillaTrinketIds)
+            {
+                var parsed = new ParsedItemData(
+                    trinketDef,
+                    id,
+                    0,
+                    "LooseSprites/specialItems",
+                    id,
+                    expectedEn[id],
+                    "Description",
+                    -101,
+                    null,
+                    null // RawData is null!
+                );
+                string? resolved = resolverRealVi.ResolveFromParsedData(parsed);
+                Assert(resolved == expectedVi[id], $"Real XNB vi: Trinket '{id}' (RawData=null) resolves '{expectedVi[id]}' (got '{resolved}')");
+            }
         }
     }
 
@@ -443,10 +1004,11 @@ public static class Program
         public override string getDescription() => string.Empty;
     }
 
-    private class MockContentProvider : ISecondaryContentProvider
+    private class MockContentProvider : ISecondaryContentProvider, ITrinketDataProvider
     {
         private readonly Dictionary<string, Dictionary<string, string>> _localized = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Dictionary<string, string>> _english = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, TrinketData> _trinkets = new(StringComparer.OrdinalIgnoreCase);
 
         public string RequestedLanguage { get; set; }
         public string EffectiveLanguage { get; set; }
@@ -455,6 +1017,16 @@ public static class Program
         {
             RequestedLanguage = requested;
             EffectiveLanguage = effective;
+        }
+
+        public void AddTrinketData(string itemId, TrinketData data)
+        {
+            _trinkets[itemId] = data;
+        }
+
+        public bool TryGetTrinketData(string itemId, out TrinketData? trinketData)
+        {
+            return _trinkets.TryGetValue(itemId, out trinketData);
         }
 
         public void AddLocalized(string asset, string key, string value)
@@ -509,6 +1081,116 @@ public static class Program
         {
             _localized.Clear();
             _english.Clear();
+        }
+    }
+
+    public class FakeCjbTextBox
+    {
+        public string Text { get; set; } = string.Empty;
+    }
+
+    public class FakeCjbSpawnableItem
+    {
+        public StardewValley.Item? Item { get; set; }
+        public string Name { get; set; }
+        public string DisplayName { get; set; }
+        public string Id { get; set; }
+        public virtual string QualifiedItemId { get; set; }
+        public int CategorySortOrder { get; set; }
+
+        public FakeCjbSpawnableItem(string id, string name, string displayName, int sortOrder = 0, StardewValley.Item? item = null)
+        {
+            Id = id;
+            QualifiedItemId = $"(O){id}";
+            Name = name;
+            DisplayName = displayName;
+            CategorySortOrder = sortOrder;
+            Item = item;
+        }
+    }
+
+    public class FakeThrowingSpawnableItem : FakeCjbSpawnableItem
+    {
+        public FakeThrowingSpawnableItem(string id, string name, string displayName) : base(id, name, displayName) { }
+
+        public override string QualifiedItemId => throw new InvalidOperationException("Simulated property error on item");
+    }
+
+    public class FakeSupportedItemMenu
+    {
+        public FakeCjbTextBox SearchBox = new();
+        public List<FakeCjbSpawnableItem> AllItems = new();
+
+        public virtual IEnumerable<FakeCjbSpawnableItem> SearchItems()
+        {
+            string query = SearchBox.Text.Trim();
+            var items = AllItems.OrderBy(i => i.CategorySortOrder);
+            if (!string.IsNullOrEmpty(query))
+            {
+                return items.Where(i => i.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                                     || i.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
+            }
+            return items;
+        }
+    }
+
+    public class FakeFallbackItemMenu
+    {
+        public FakeCjbTextBox SearchBox = new();
+        public List<FakeCjbSpawnableItem> AllItems = new();
+
+        public virtual IEnumerable<FakeCjbSpawnableItem> SearchItems()
+        {
+            string query = SearchBox.Text.Trim();
+            var items = AllItems.OrderBy(i => i.CategorySortOrder);
+            if (!string.IsNullOrEmpty(query))
+            {
+                return items.Where(i => i.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                                     || i.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
+            }
+            return items;
+        }
+    }
+
+    public class FakeThrowingItemMenu
+    {
+        public FakeCjbTextBox SearchBox = new();
+        public virtual IEnumerable<FakeCjbSpawnableItem> SearchItems()
+        {
+            throw new InvalidOperationException("Simulated error inside SearchItems");
+        }
+    }
+
+    public class FakeNullReturningItemMenu
+    {
+        public FakeCjbTextBox SearchBox = new();
+        public virtual IEnumerable<FakeCjbSpawnableItem>? SearchItems()
+        {
+            return null;
+        }
+    }
+
+    public class FakeOuterThrowItemMenu
+    {
+        public FakeCjbTextBox SearchBox = new();
+        public virtual IEnumerable<FakeCjbSpawnableItem> SearchItems()
+        {
+            return GetThrowingEnumerable();
+        }
+
+        private static IEnumerable<FakeCjbSpawnableItem> GetThrowingEnumerable()
+        {
+            throw new InvalidOperationException("Outer enumeration error");
+#pragma warning disable CS0162 // Unreachable code detected
+            yield break;
+#pragma warning restore CS0162
+        }
+    }
+
+    public class FakeUnsupportedItemMenu
+    {
+        public virtual void SearchItems()
+        {
         }
     }
 }

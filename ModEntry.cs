@@ -18,6 +18,7 @@ public sealed class ModEntry : Mod
     internal static ModEntry? Instance { get; private set; }
 
     public ModConfig Config { get; private set; } = null!;
+    public ItemNameResolver? Resolver => _nameResolver;
 
     private Harmony? _harmony;
     private RawContentProvider? _contentProvider;
@@ -60,6 +61,13 @@ public sealed class ModEntry : Mod
         helper.Events.Content.LocaleChanged += OnLocaleChanged;
         helper.Events.Content.AssetsInvalidated += OnAssetsInvalidated;
 
+        // Register diagnostic console command
+        helper.ConsoleCommands.Add(
+            "untranslated_audit",
+            "Audits active item registry coverage for bilingual names.\nUsage: untranslated_audit [summary|details]",
+            OnAuditCommand
+        );
+
         string effectiveLang = _contentProvider?.EffectiveLanguage ?? Config.SecondaryLanguage;
         Monitor.Log(I18n.Log_ModLoaded(effectiveLang), LogLevel.Info);
     }
@@ -90,6 +98,12 @@ public sealed class ModEntry : Mod
         InitializeResolver();
 
         RegisterGenericModConfigMenu();
+
+        // Dynamically integrate with CJB Item Spawner if present
+        if (_harmony != null)
+        {
+            Patches.CjbItemSpawnerIntegration.TryApply(_harmony, Helper.ModRegistry, Monitor);
+        }
     }
 
     private void OnLocaleChanged(object? sender, LocaleChangedEventArgs e)
@@ -104,15 +118,103 @@ public sealed class ModEntry : Mod
             name.IsEquivalentTo("Strings/Weapons") ||
             name.IsEquivalentTo("Strings/Tools") ||
             name.IsEquivalentTo("Strings/BigCraftables") ||
+            name.IsEquivalentTo("Strings/1_6_Strings") ||
             name.IsEquivalentTo("Data/Objects") ||
             name.IsEquivalentTo("Data/Weapons") ||
             name.IsEquivalentTo("Data/Tools") ||
             name.IsEquivalentTo("Data/BigCraftables") ||
             name.IsEquivalentTo("Data/Boots") ||
             name.IsEquivalentTo("Data/hats") ||
-            name.IsEquivalentTo("Data/Furniture")))
+            name.IsEquivalentTo("Data/Furniture") ||
+            name.IsEquivalentTo("Data/Trinkets") ||
+            name.IsEquivalentTo("Data/Pants") ||
+            name.IsEquivalentTo("Data/Shirts") ||
+            name.IsEquivalentTo("Data/Mannequins")))
         {
             _nameResolver?.Invalidate();
+        }
+    }
+
+    private void OnAuditCommand(string command, string[] args)
+    {
+        if (_nameResolver == null)
+        {
+            Monitor.Log("Untranslated Stardew: Resolver is not initialized.", LogLevel.Warn);
+            return;
+        }
+
+        bool showDetails = args.Length > 0 && args[0].Equals("details", StringComparison.OrdinalIgnoreCase);
+        string secondaryLang = _nameResolver.EffectiveLanguage;
+
+        Monitor.Log($"=== Untranslated Stardew Coverage Audit (Secondary: {secondaryLang}) ===", LogLevel.Info);
+
+        int totalItems = 0;
+        int totalResolved = 0;
+        int totalSameName = 0;
+        int totalMissing = 0;
+
+        var categoryStats = new System.Collections.Generic.List<(string TypeId, int Total, int Resolved, int SameName, int Missing)>();
+        var missingDetails = new System.Collections.Generic.List<(string QualifiedId, string PrimaryName)>();
+
+        foreach (StardewValley.ItemTypeDefinitions.IItemDataDefinition itemType in ItemRegistry.ItemTypes)
+        {
+            int typeTotal = 0;
+            int typeResolved = 0;
+            int typeSameName = 0;
+            int typeMissing = 0;
+
+            foreach (string itemId in itemType.GetAllIds())
+            {
+                typeTotal++;
+                totalItems++;
+
+                string qualifiedId = itemType.Identifier + itemId;
+                StardewValley.ItemTypeDefinitions.ParsedItemData? data = itemType.GetData(itemId);
+                string primaryName = data?.DisplayName ?? itemId;
+                string? secondaryName = _nameResolver.GetSecondaryNameById(qualifiedId);
+
+                if (string.IsNullOrEmpty(secondaryName))
+                {
+                    typeMissing++;
+                    totalMissing++;
+                    if (showDetails && missingDetails.Count < 50)
+                    {
+                        missingDetails.Add((qualifiedId, primaryName));
+                    }
+                }
+                else if (string.Equals(primaryName, secondaryName, StringComparison.OrdinalIgnoreCase))
+                {
+                    typeSameName++;
+                    totalSameName++;
+                }
+                else
+                {
+                    typeResolved++;
+                    totalResolved++;
+                }
+            }
+
+            categoryStats.Add((itemType.Identifier, typeTotal, typeResolved, typeSameName, typeMissing));
+        }
+
+        Monitor.Log(string.Format("{0,-8} | {1,7} | {2,9} | {3,9} | {4,7}", "Type", "Total", "Bilingual", "Same-Name", "Missing"), LogLevel.Info);
+        Monitor.Log(new string('-', 52), LogLevel.Info);
+
+        foreach (var stat in categoryStats)
+        {
+            Monitor.Log(string.Format("{0,-8} | {1,7} | {2,9} | {3,9} | {4,7}", stat.TypeId, stat.Total, stat.Resolved, stat.SameName, stat.Missing), LogLevel.Info);
+        }
+
+        Monitor.Log(new string('-', 52), LogLevel.Info);
+        Monitor.Log($"Summary: {totalItems} total items | {totalResolved} distinct bilingual | {totalSameName} same-name suppressed | {totalMissing} missing data.", LogLevel.Info);
+
+        if (missingDetails.Count > 0)
+        {
+            Monitor.Log($"First {missingDetails.Count} missing items:", LogLevel.Info);
+            foreach (var (qId, pName) in missingDetails)
+            {
+                Monitor.Log($"  - {qId}: {pName}", LogLevel.Info);
+            }
         }
     }
 

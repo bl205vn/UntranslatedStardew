@@ -24,6 +24,21 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
   - Phụ kiện (`Trinkets`) & Quần áo (`Clothing` - Áo, Quần).
   - Nội thất (`Furniture` - phân giải trường token 7).
 
+- **Phụ kiện & Biến thể Động (Trinkets & Dynamic Variants):**
+  - Hỗ trợ toàn bộ 8 phụ kiện chuẩn của game 1.6 (`BasiliskPaw`, `FairyBox`, `IceRod`, `IridiumSpur`, `FrogEgg`, `MagicQuiver`, `MagicHairDye`, `ParrotEgg`).
+  - Khắc phục triệt để lỗi thiết kế của game khi `TrinketDataDefinition.GetData` trả về `RawData = null`, phân giải chính xác qua nguồn dữ liệu `Data/Trinkets` và chuỗi dịch `Strings/1_6_Strings`.
+  - Hỗ trợ các biến thể động nâng cao qua mẫu token `displayNameOverrideTemplate`:
+    - Đổi màu Trứng Ếch (`frog_variant_0` -> `frog_variant_7`: Green, Brown, Blue-Green, Blue, Red, Yellow, Void, Prismatic Frog Egg).
+    - Cấp bậc gậy băng toàn năng (`PerfectIceRod`).
+    - Các biến thể ống tên ma pháp (`PerfectMagicQuiver`, `RapidMagicQuiver`, `HeavyMagicQuiver`).
+  - Cache thông minh theo từng biến thể màu sắc và cấp độ, không bị hiển thị nhầm lẫn giữa các biến thể của cùng một loại phụ kiện.
+
+- **Tích Hợp Tìm Kiếm Song Ngữ CJB Item Spawner (CJB Integration):**
+  - Tự động phát hiện và tích hợp nếu mod `CJBok.ItemSpawner` được cài đặt; không phụ thuộc cứng mã nguồn/assembly lúc biên dịch.
+  - Cho phép gõ tìm kiếm tiếng Việt không dấu (ví dụ: gõ "ca noc" ra "Cá nóc", "trung ech" ra "Trứng Ếch").
+  - Cho phép gõ tên tiếng Anh phụ (ví dụ: gõ "pufferfish" tìm thấy "Cá nóc", gõ "frog egg" tìm thấy "Trứng Ếch").
+  - Bảo toàn 100% logic lọc danh mục tab (`All`, `Weapons`, `Fish`, v.v.), các bộ lọc quy tắc tùy biến, và thứ tự sắp xếp của CJB (`By Name`, `By Price`, `By Type`, `By ID`).
+
 - **Nạp Asset Độc Lập An Toàn (Isolated Content Loading):**
   - Sử dụng instance `Microsoft.Xna.Framework.Content.ContentManager` riêng biệt để đọc trực tiếp file `.xnb` từ đĩa.
   - Không bao giờ thay đổi `CurrentLanguageCode` toàn cục của game.
@@ -52,7 +67,7 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
 
 ### Cài đặt:
 1. Tải bản build đóng gói tại:  
-   `bin/Release/net6.0/UntranslatedStardew 1.0.0.zip`
+   `bin/Release/net6.0/UntranslatedStardew 1.0.1.zip`
 2. Giải nén thư mục `UntranslatedStardew` vào thư mục `Mods/` của game:  
    `Stardew Valley/Mods/UntranslatedStardew/`
 3. Cấu trúc thư mục mod:
@@ -67,7 +82,35 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
 
 ---
 
-## 3. Cấu hình (Configuration)
+## 3. Quy trình Kiểm thử với CJB Item Spawner & Lệnh Console (Testing & Validation Workflow)
+
+### A. Kiểm tra nhanh với CJB Item Spawner:
+1. **Chuẩn bị:** Mở game và vào một file lưu tạm thời (test save).
+2. **Mở menu Spawn:** Bấm phím mở CJB Item Spawner (mặc định phím `i`).
+3. **Kiểm tra Tooltip Trực tiếp:**
+   - Rà chuột (hover) trực tiếp lên các ô vật phẩm trong bảng Spawner: tooltip hiển thị tên chính và tên phụ (ví dụ: `Trứng Ếch` / `Frog Egg`, `Mật ong rừng` / `Wild Honey`).
+   - Spawn thử một vài món vào túi đồ (inventory) và rà chuột trong túi đồ để xác nhận tính đồng nhất.
+4. **Kiểm tra Phụ kiện (Trinkets) & Biến thể Động:**
+   - Chọn tab Phụ kiện / gõ tìm kiếm phụ kiện.
+   - Thử các loại phụ kiện: `Basilisk Paw`, `Fairy Box`, `Ice Rod`, `Golden Spur`, `Frog Egg`, `Magic Quiver`, `Magic Hair Gel`, `Parrot Egg`.
+   - Với các biến thể có màu sắc hoặc cấp độ:
+     - `Trứng Ếch Xanh lục` (`Green Frog Egg`), `Trứng Ếch Đỏ` (`Red Frog Egg`), `Trứng Ếch Ngũ Sắc` (`Prismatic Frog Egg`).
+     - `Pháp trượng Băng Toàn năng` (`Perfect Ice Rod`).
+     - `Pháp tiễn Siêu thanh` (`Rapid Magic Quiver`), `Pháp tiễn Hạng nặng` (`Heavy Magic Quiver`).
+   - Xác nhận tên phụ hiển thị đúng từng biến thể, không bị đè nhầm tên mặc định.
+5. **Kiểm tra Tìm kiếm Không Dấu & Song Ngữ trong Spawner:**
+   - Gõ tìm kiếm tiếng Việt không dấu: ví dụ gõ `ca noc` -> xuất hiện `Cá nóc`; gõ `trung ech` -> xuất hiện `Trứng Ếch`; gõ `phap truong` -> xuất hiện các loại `Pháp trượng Băng`.
+   - Gõ tìm kiếm bằng tên tiếng Anh: ví dụ gõ `pufferfish` -> xuất hiện `Cá nóc`; gõ `frog egg` -> xuất hiện `Trứng Ếch`; gõ `ice rod` -> xuất hiện `Pháp trượng Băng`.
+   - Đổi các tab danh mục (`All`, `Tools`, `Weapons`, v.v.) và thứ tự sắp xếp (`Name`, `Price`, `Type`, `ID`): xác nhận các bộ lọc danh mục và sắp xếp của CJB hoạt động chính xác 100%.
+
+### B. Lệnh Console Chẩn đoán Độ Phủ Danh Mục (`untranslated_audit`):
+Trong cửa sổ SMAPI console khi đang trong game, người dùng có thể gõ:
+- `untranslated_audit`: Hiển thị bảng tổng hợp thống kê số lượng vật phẩm song ngữ, trùng tên, và thiếu dữ liệu theo từng danh mục registry (`(O)`, `(BC)`, `(B)`, `(H)`, `(T)`, `(W)`, `(TR)`, `(P)`, `(S)`, `(F)`, `(M)`).
+- `untranslated_audit details`: Liệt kê chi tiết ID và tên của các vật phẩm khuyết bản dịch phụ để tiện kiểm tra gói ngôn ngữ.
+
+---
+
+## 4. Cấu hình (Configuration)
 
 File cấu hình `config.json` sẽ được tự động tạo khi chạy mod lần đầu, hoặc chỉnh sửa trực tiếp qua menu **Generic Mod Config Menu (GMCM)**:
 
@@ -108,26 +151,40 @@ Các ngôn ngữ sau có sẵn tệp XNB trong thư mục `Content/` của game:
 
 ---
 
-## 5. Hướng dẫn Lệnh Build & Kiểm thử (Build & Verification)
+## 6. Hướng dẫn Lệnh Build & Kiểm thử (Build & Verification)
 
 ### Build mod (Offline Release, tạo gói Zip):
 ```pwsh
 dotnet build -c Release /p:EnableModDeploy=false /p:EnableModZip=true
 ```
 - Kết quả thư mục mod: `bin/Release/net6.0/`
-- Tệp nén Release zip: `bin/Release/net6.0/UntranslatedStardew 1.0.0.zip`
+- Tệp nén Release zip: `bin/Release/net6.0/UntranslatedStardew 1.0.1.zip`
 
 ### Chạy bộ kiểm thử hồi quy (Regression Test Suite & Real XNB Smoke Check):
 ```pwsh
-dotnet exec "tests/UntranslatedStardew.Tests/bin/Release/net6.0/UntranslatedStardew.Tests.dll"
+dotnet run --project tests/UntranslatedStardew.Tests/UntranslatedStardew.Tests.csproj
 ```
-Bộ kiểm thử gồm 78 ca kiểm tra độc lập trên 9 chuyên đề:
+Bộ kiểm thử gồm **168 ca kiểm tra** đã qua, gồm kiểm tra biên Harmony CJB và dữ liệu XNB thật:
 1. `LanguageHelper`: Phân giải mã chuẩn ISO, phát hiện ngôn ngữ Vanilla vs Tiếng Việt, ánh xạ hậu tố tệp XNB.
 2. `SearchMatcher Accent & 'đ'`: Chuẩn hóa Unicode FormD, loại bỏ dấu thanh, ánh xạ `đ`/`Đ` -> `d`/`D`.
 3. `SearchMatcher Query Matching`: Khớp chuỗi không phân biệt hoa thường, chuỗi con, cờ phân biệt dấu, phát sinh từ khóa tìm kiếm.
 4. `TooltipFormatter`: Định dạng tiêu đề song ngữ, đảo vị trí theo cấu hình, loại bỏ tiêu đề trùng lặp, bảo toàn số lượng ` x5` và nhãn `(Công thức)`.
 5. `LexiconPluralize`: Kiểm tra quy tắc số nhiều chuẩn vanilla cho trái cây sấy và các ngoại lệ không biến đổi (`Hops`, `Pickles`, `Dried Cranberries`).
-6. `ItemCacheKey`: Khả năng phân biệt khóa cache giữa các loại ngâm ủ, nguyên liệu, và cấp độ nâng cấp dụng cụ.
-7. `MockContentProvider & Fallback`: Kiểm tra nạp từ điển, cơ chế per-key fallback về tiếng Anh khi từ điển ngôn ngữ phụ khuyết khóa, thứ tự ưu tiên `displayNameFormat` và bảo toàn mẫu sấy đặc thù.
-8. `Stable API Lifecycle`: Kiểm tra API đối tượng ổn định duy trì tham chiếu đến resolver và cấu hình động sau các lần cập nhật mà không bị mất đồng bộ.
-9. `Real XNB Offline Smoke Check`: Nạp thực tế trực tiếp các tệp XNB từ đĩa (Strings/Objects English, French, Vietnamese; Data/Boots; Data/hats) qua ContentManager độc lập mà không cần khởi chạy game hay SMAPI.
+6. `ItemCacheKey`: Khả năng phân biệt khóa cache giữa các loại ngâm ủ, nguyên liệu, cấp độ dụng cụ và các biến thể động của phụ kiện.
+7. `Trinket Resolution (Bug Reproduction)`: Khắc phục triệt để lỗi `RawData = null`, phân giải toàn bộ 8 phụ kiện vanilla trong tiếng Anh, Pháp và tiếng Việt, cùng các biến thể động (`frog_variant_0..7`, `PerfectIceRod`, `RapidMagicQuiver`, `HeavyMagicQuiver`).
+8. `CJB Search Filter Integration`: Kiểm thử bộ lọc CJB với truy vấn tiếng Việt không dấu, tên phụ tiếng Anh, chuyển đổi cấu hình `ignoreDiacritics`, khớp ID và bảo toàn danh mục.
+9. `MockContentProvider & Fallback`: Kiểm tra nạp từ điển, cơ chế per-key fallback về tiếng Anh khi từ điển ngôn ngữ phụ khuyết khóa, thứ tự ưu tiên `displayNameFormat` và bảo toàn mẫu sấy đặc thù.
+10. `Stable API Lifecycle`: Kiểm tra API đối tượng ổn định duy trì tham chiếu đến resolver và cấu hình động sau các lần cập nhật mà không bị mất đồng bộ.
+11. `Systematic Item Name Coverage Audit`: Kiểm tra tự động độ phủ phân giải trên các danh mục phụ kiện, giày, mũ.
+12. `Real XNB Offline Smoke Check`: Nạp thực tế trực tiếp các tệp XNB từ đĩa (Strings/Objects English, French, Vietnamese; Data/Boots; Data/hats; Data/Trinkets; Strings/1_6_Strings) qua ContentManager độc lập mà không cần khởi chạy game hay SMAPI.
+
+---
+
+## 7. Nhật ký thay đổi (Changelog)
+
+### v1.0.1
+- **Phụ kiện (Trinkets):** Khắc phục lỗi thiếu tên song ngữ cho toàn bộ 8 phụ kiện vanilla do `TrinketDataDefinition.GetData` trả về `RawData = null`.
+- **Biến thể động phụ kiện:** Hỗ trợ tên song ngữ cho các biến thể đổi màu Trứng Ếch (8 màu), gậy băng Perfect Ice Rod, và ống tên Rapid/Heavy Magic Quiver qua `displayNameOverrideTemplate`.
+- **Tích hợp CJB Item Spawner:** Tự động hỗ trợ tìm kiếm song ngữ và tìm kiếm không dấu trong CJB Item Spawner khi mod có mặt, bảo toàn các tab danh mục và sắp xếp của CJB.
+- **Lệnh Console SMAPI:** Bổ sung lệnh `untranslated_audit` cho phép người dùng kiểm tra nhanh độ phủ tên song ngữ trên toàn bộ vật phẩm đang tải trong game.
+- **Làm mới Cache:** Bổ sung vô hiệu hóa cache cho `Data/Trinkets`, `Strings/1_6_Strings`, `Data/Pants`, `Data/Shirts`, `Data/Mannequins` và giải phóng asset trong ContentManager độc lập.
