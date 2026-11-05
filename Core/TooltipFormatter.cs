@@ -4,7 +4,8 @@ using System.Text.RegularExpressions;
 namespace UntranslatedStardew.Core;
 
 /// <summary>
-/// Handles formatting and duplicate suppression for tooltip titles.
+/// Handles formatting and duplicate suppression for tooltip titles,
+/// automatically registering explicit role composition metadata.
 /// </summary>
 public static class TooltipFormatter
 {
@@ -13,6 +14,7 @@ public static class TooltipFormatter
     /// <summary>
     /// Formats the hover title to include the secondary item name if appropriate.
     /// Preserves existing suffixes (e.g., " x5" or recipe labels) and suppresses duplicate titles.
+    /// Binds structured role composition metadata so secondary and primary fonts are explicitly honored.
     /// </summary>
     /// <param name="hoverTitle">The current hoverTitle passed into drawToolTip.</param>
     /// <param name="primaryName">The item's primary display name.</param>
@@ -56,8 +58,15 @@ public static class TooltipFormatter
         if (string.Equals(hoverTitle.Trim(), secondaryWithSuffix.Trim(), StringComparison.OrdinalIgnoreCase))
             return hoverTitle;
 
-        return secondaryFirst
-            ? $"{secondaryWithSuffix}\n{hoverTitle}"
-            : $"{hoverTitle}\n{secondaryWithSuffix}";
+        StructuredTextComposition composition = StructuredTextComposition.CreateBilingual(
+            primaryChunk: hoverTitle,
+            secondaryChunk: secondaryWithSuffix,
+            secondaryFirst: secondaryFirst,
+            delimiter: "\n"
+        );
+
+        BilingualStringTracker.RegisterComposition(composition);
+
+        return composition.FullText;
     }
 }

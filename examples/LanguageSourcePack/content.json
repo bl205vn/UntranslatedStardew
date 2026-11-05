@@ -1,0 +1,23 @@
+{
+  "Format": "2.0.0",
+  "Changes": [
+    {
+      "Action": "EditData",
+      "Target": "Mods/GiaHung.UntranslatedStardew/LanguageSources",
+      "Entries": {
+        "xx-example": {
+          "LanguageCode": "xx-example",
+          "SourceModId": "Example.LanguageSource",
+          "ContentRoot": "assets/Content",
+          "AssetPattern": "{asset}_xx",
+          "SmallFont": "Fonts/SmallFont_xx",
+          "DialogueFont": "Fonts/SpriteFont1_xx",
+          "Strings": {
+            "Strings/StringsFromCSFiles:Wallpaper.cs.13204": "Example Wallpaper",
+            "Strings/StringsFromCSFiles:Wallpaper.cs.13203": "Example Floor"
+          }
+        }
+      }
+    }
+  ]
+}

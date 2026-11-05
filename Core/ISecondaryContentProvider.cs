@@ -20,6 +20,12 @@ public interface ISecondaryContentProvider : IDisposable
     string EffectiveLanguage { get; }
 
     /// <summary>
+    /// Indicates whether secondary language assets are genuinely available.
+    /// False when an unsupported/unregistered custom language is requested.
+    /// </summary>
+    bool IsSecondaryAvailable => true;
+
+    /// <summary>
     /// Attempts to retrieve a translated string from a given asset dictionary and key.
     /// Implements per-key fallback: if the key is missing in the localized dictionary,
     /// it falls back to the English base dictionary.

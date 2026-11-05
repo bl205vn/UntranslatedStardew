@@ -12,17 +12,21 @@ namespace UntranslatedStardew.Core;
 /// Loads and caches string dictionaries directly from game or mod XNB files
 /// using isolated MonoGame ContentManager instances.
 /// Does not mutate game locale or pollute global vanilla asset caches.
-/// Supports per-key fallback to English and lazy service provider initialization.
+/// Supports generic custom language sources via LanguageSourceRegistry,
+/// per-key fallback to English, and lazy service provider initialization.
 /// </summary>
 public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketDataProvider, IPowerDataProvider
 {
     private readonly Func<IServiceProvider?> _getServiceProvider;
     private readonly string _gameContentRoot;
     private readonly string? _modContentRoot;
+    private readonly LanguageSourceRegistry? _sourceRegistry;
+    private LanguageSourceDescriptor? _activeSource;
     private readonly Action<string, string>? _onFallbackWarning;
 
     private ContentManager? _vanillaContentManager;
     private ContentManager? _modContentManager;
+    private readonly Dictionary<string, ContentManager> _customModContentManagers = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly ConcurrentDictionary<string, Dictionary<string, string>?> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Dictionary<string, TrinketData>?> _trinketDataCache = new(StringComparer.OrdinalIgnoreCase);
@@ -31,57 +35,127 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
     private bool _warned;
     private bool _disposed;
 
-    public string RequestedLanguage { get; }
-    public string EffectiveLanguage { get; }
+    public string RequestedLanguage { get; private set; }
+    public string EffectiveLanguage { get; private set; }
+    public bool IsSecondaryAvailable { get; private set; }
+    public LanguageSourceRegistry? SourceRegistry => _sourceRegistry;
+    private int _isRebinding;
 
     public RawContentProvider(
         Func<IServiceProvider?> getServiceProvider,
         string gameContentRoot,
         string? requestedLanguage,
         string? modContentRoot = null,
-        Action<string, string>? onFallbackWarning = null)
+        Action<string, string>? onFallbackWarning = null,
+        LanguageSourceRegistry? sourceRegistry = null)
     {
         _getServiceProvider = getServiceProvider ?? (() => null);
         _gameContentRoot = gameContentRoot;
         _modContentRoot = modContentRoot;
         _onFallbackWarning = onFallbackWarning;
+        _sourceRegistry = sourceRegistry;
 
         RequestedLanguage = string.IsNullOrWhiteSpace(requestedLanguage)
             ? "default"
             : requestedLanguage.Trim();
+        EffectiveLanguage = "default";
 
-        string canonical = LanguageHelper.CanonicalizeLanguageCode(RequestedLanguage);
+        Rebind();
 
-        // Determine effective language and check availability
-        if (canonical == "default")
+        if (_sourceRegistry != null)
         {
-            EffectiveLanguage = "default";
+            _sourceRegistry.OnChanged += OnSourceRegistryChanged;
         }
-        else if (canonical == "en")
+    }
+
+    /// <summary>
+    /// Rebinds requested and effective language state against the current source registry and disk assets.
+    /// Safely supports late source registrations and removals without recreating or disposing the provider.
+    /// </summary>
+    public void Rebind(string? requestedLanguage = null)
+    {
+        if (_disposed || System.Threading.Interlocked.CompareExchange(ref _isRebinding, 1, 0) != 0)
+            return;
+
+        try
         {
-            EffectiveLanguage = "en";
-        }
-        else if (LanguageHelper.IsVietnamese(canonical))
-        {
-            if (!string.IsNullOrEmpty(_modContentRoot) && Directory.Exists(_modContentRoot))
+            if (requestedLanguage != null)
             {
-                EffectiveLanguage = "vi";
+                RequestedLanguage = string.IsNullOrWhiteSpace(requestedLanguage)
+                    ? "default"
+                    : requestedLanguage.Trim();
+            }
+
+            string canonical = LanguageHelper.CanonicalizeLanguageCode(RequestedLanguage);
+            _warned = false;
+            _activeSource = _sourceRegistry != null && _sourceRegistry.TryGetSource(canonical, out var descriptor) ? descriptor : null;
+
+            if (canonical == "default" || canonical == "en")
+            {
+                EffectiveLanguage = canonical;
+                IsSecondaryAvailable = true;
+            }
+            else if (_sourceRegistry != null && _activeSource is { } source)
+            {
+                bool hasContent = false;
+                if (!string.IsNullOrEmpty(source.ContentRoot) && _sourceRegistry.TryResolveSourceContentRoot(source, out string resolvedRoot) && Directory.Exists(resolvedRoot))
+                {
+                    hasContent = true;
+                }
+                if (source.Strings != null && source.Strings.Count > 0)
+                {
+                    hasContent = true;
+                }
+
+                if (hasContent)
+                {
+                    EffectiveLanguage = canonical;
+                    IsSecondaryAvailable = true;
+                }
+                else
+                {
+                    EffectiveLanguage = canonical;
+                    IsSecondaryAvailable = false;
+                    TriggerWarningOnce(RequestedLanguage, "primary-only (missing content)");
+                }
+            }
+            else if (!LanguageHelper.IsBuiltInLanguage(canonical) && !string.IsNullOrEmpty(_modContentRoot))
+            {
+                if (!string.IsNullOrEmpty(_modContentRoot) && Directory.Exists(_modContentRoot))
+                {
+                    EffectiveLanguage = canonical;
+                    IsSecondaryAvailable = true;
+                }
+                else
+                {
+                    EffectiveLanguage = canonical;
+                    IsSecondaryAvailable = false;
+                    TriggerWarningOnce(RequestedLanguage, "primary-only (missing pack)");
+                }
+            }
+            else if (LanguageHelper.IsBuiltInLanguage(canonical))
+            {
+                EffectiveLanguage = canonical;
+                IsSecondaryAvailable = true;
             }
             else
             {
-                EffectiveLanguage = "default";
-                TriggerWarningOnce(RequestedLanguage, "default");
+                EffectiveLanguage = canonical;
+                IsSecondaryAvailable = false;
+                TriggerWarningOnce(RequestedLanguage, "primary-only (unregistered source)");
             }
+
+            Invalidate();
         }
-        else if (LanguageHelper.IsBuiltInLanguage(canonical))
+        finally
         {
-            EffectiveLanguage = canonical;
+            _isRebinding = 0;
         }
-        else
-        {
-            EffectiveLanguage = "default";
-            TriggerWarningOnce(RequestedLanguage, "default");
-        }
+    }
+
+    private void OnSourceRegistryChanged()
+    {
+        Rebind();
     }
 
     public RawContentProvider(
@@ -89,20 +163,37 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         string gameContentRoot,
         string? requestedLanguage,
         string? modContentRoot = null,
-        Action<string, string>? onFallbackWarning = null)
-        : this(() => serviceProvider, gameContentRoot, requestedLanguage, modContentRoot, onFallbackWarning)
+        Action<string, string>? onFallbackWarning = null,
+        LanguageSourceRegistry? sourceRegistry = null)
+        : this(() => serviceProvider, gameContentRoot, requestedLanguage, modContentRoot, onFallbackWarning, sourceRegistry)
     {
     }
 
     public bool TryGetString(string assetSubpath, string key, out string? value)
     {
         value = null;
-        if (_disposed || string.IsNullOrEmpty(assetSubpath) || string.IsNullOrEmpty(key))
+        if (_disposed || string.IsNullOrEmpty(assetSubpath) || string.IsNullOrEmpty(key) || !IsSecondaryAvailable)
             return false;
 
         string normalizedPath = NormalizeAssetPath(assetSubpath);
 
-        // 1. Try localized dictionary if not base / English
+        // 1. Check in-memory descriptor string overrides if available
+        if (_activeSource?.Strings is { } strings)
+        {
+            string dictKey = $"{normalizedPath}:{key}";
+            if (strings.TryGetValue(dictKey, out string? overrideVal) && !string.IsNullOrWhiteSpace(overrideVal))
+            {
+                value = overrideVal;
+                return true;
+            }
+            if (strings.TryGetValue(key, out overrideVal) && !string.IsNullOrWhiteSpace(overrideVal))
+            {
+                value = overrideVal;
+                return true;
+            }
+        }
+
+        // 2. Try localized dictionary if not base / English
         if (!LanguageHelper.IsBaseOrEnglish(EffectiveLanguage))
         {
             Dictionary<string, string>? localizedDict = GetOrLoadDictionary(normalizedPath, EffectiveLanguage);
@@ -113,7 +204,7 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             }
         }
 
-        // 2. Per-key fallback: Check base default/English dictionary
+        // 3. Per-key fallback: Check base default/English dictionary
         Dictionary<string, string>? baseDict = GetOrLoadDictionary(normalizedPath, LanguageHelper.IsBaseOrEnglish(EffectiveLanguage) ? EffectiveLanguage : "default");
         if (baseDict != null && baseDict.TryGetValue(key, out string? engVal) && !string.IsNullOrWhiteSpace(engVal))
         {
@@ -123,6 +214,10 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
 
         return false;
     }
+
+    internal string? GetPatchedDisplayName(string asset, string id)
+        => IsSecondaryAvailable && _activeSource?.Strings is { } strings
+            && strings.TryGetValue($"{asset}/DisplayName:{id}", out var title) ? title : null;
 
     public string? GetString(string assetSubpath, string key)
     {
@@ -285,6 +380,11 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         _objectDataCache.Clear();
         _vanillaContentManager?.Unload();
         _modContentManager?.Unload();
+        foreach (var cm in _customModContentManagers.Values)
+        {
+            cm.Unload();
+        }
+        _customModContentManagers.Clear();
     }
 
     public void Dispose()
@@ -293,6 +393,10 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             return;
 
         _disposed = true;
+        if (_sourceRegistry != null)
+        {
+            _sourceRegistry.OnChanged -= OnSourceRegistryChanged;
+        }
         _cache.Clear();
         _trinketDataCache.Clear();
         _powersDataCache.Clear();
@@ -301,6 +405,11 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         _modContentManager?.Dispose();
         _vanillaContentManager = null;
         _modContentManager = null;
+        foreach (var cm in _customModContentManagers.Values)
+        {
+            cm.Dispose();
+        }
+        _customModContentManagers.Clear();
     }
 
     private static string NormalizeAssetPath(string path)
@@ -324,6 +433,13 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         return loaded;
     }
 
+    private LanguageSourceDescriptor? GetSourceForAsset(string langCode)
+    {
+        if (string.Equals(langCode, EffectiveLanguage, StringComparison.OrdinalIgnoreCase))
+            return _activeSource;
+        return _sourceRegistry != null && _sourceRegistry.TryGetSource(langCode, out var source) ? source : null;
+    }
+
     private Dictionary<string, string>? LoadDictionaryFromDisk(string assetSubpath, string langCode)
     {
         if (assetSubpath.Equals("Data/Achievements", StringComparison.OrdinalIgnoreCase) ||
@@ -332,12 +448,35 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             return LoadIntStringDictionaryAsStrings(assetSubpath, langCode);
         }
 
-        if (langCode == "vi")
+        // 1. Check custom language source registry
+        if (_sourceRegistry != null && GetSourceForAsset(langCode) is { } source)
+        {
+            if (_sourceRegistry.TryResolveSourceContentRoot(source, out string resolvedRoot) && Directory.Exists(resolvedRoot))
+            {
+                string localizedRelativePath = source.FormatAssetPath(assetSubpath);
+                if (!LanguageSourceRegistry.TryResolveSafePath(resolvedRoot, $"{localizedRelativePath}.xnb", out string localizedFilePath)) return null;
+                if (File.Exists(localizedFilePath))
+                {
+                    try
+                    {
+                        ContentManager cm = GetCustomModContentManager(resolvedRoot);
+                        return cm.Load<Dictionary<string, string>>(localizedRelativePath);
+                    }
+                    catch (ContentLoadException)
+                    {
+                        // Ignore and fall through
+                    }
+                }
+            }
+        }
+
+        // 2. Explicit locale content root
+        if (!LanguageHelper.IsBuiltInLanguage(langCode))
         {
             ContentManager? modManager = GetModContentManager();
             if (modManager != null && !string.IsNullOrEmpty(_modContentRoot))
             {
-                string viRelativePath = $"{assetSubpath}_vi";
+                string viRelativePath = $"{assetSubpath}_{langCode}";
                 string viFilePath = Path.Combine(_modContentRoot, $"{viRelativePath}.xnb");
                 if (File.Exists(viFilePath))
                 {
@@ -354,6 +493,7 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             return null;
         }
 
+        // 3. Built-in languages
         ContentManager? vanillaManager = GetVanillaContentManager();
         if (vanillaManager == null)
             return null;
@@ -380,17 +520,16 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             return null;
         }
 
-        // Vanilla base / default / English (unsuffixed file)
-        string engFilePath = Path.Combine(_gameContentRoot, $"{assetSubpath}.xnb");
-        if (File.Exists(engFilePath))
+        // 4. Default / English
+        string basePath = Path.Combine(_gameContentRoot, $"{assetSubpath}.xnb");
+        if (File.Exists(basePath))
         {
             try
             {
                 return vanillaManager.Load<Dictionary<string, string>>(assetSubpath);
             }
-            catch (Exception ex)
+            catch (ContentLoadException)
             {
-                Console.WriteLine($"[LOAD ERROR] {assetSubpath}: {ex}");
                 // Ignore and return null
             }
         }
@@ -400,52 +539,125 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
 
     private Dictionary<string, string>? LoadIntStringDictionaryAsStrings(string assetSubpath, string langCode)
     {
-        ContentManager? manager = langCode == "vi" ? GetModContentManager() : GetVanillaContentManager();
-        if (manager == null)
-            return null;
-
-        string relPath = assetSubpath;
-        if (langCode == "vi")
+        // 1. Check custom language source registry
+        if (_sourceRegistry != null && GetSourceForAsset(langCode) is { } source)
         {
-            relPath = $"{assetSubpath}_vi";
-            if (string.IsNullOrEmpty(_modContentRoot) || !File.Exists(Path.Combine(_modContentRoot, $"{relPath}.xnb")))
-                return null;
-        }
-        else if (!LanguageHelper.IsBaseOrEnglish(langCode))
-        {
-            string? suffix = LanguageHelper.GetLanguageSuffix(langCode);
-            if (string.IsNullOrEmpty(suffix))
-                return null;
-            relPath = $"{assetSubpath}.{suffix}";
-            if (!File.Exists(Path.Combine(_gameContentRoot, $"{relPath}.xnb")))
-                return null;
-        }
-        else
-        {
-            if (!File.Exists(Path.Combine(_gameContentRoot, $"{relPath}.xnb")))
-                return null;
-        }
-
-        try
-        {
-            Dictionary<int, string>? intDict = manager.Load<Dictionary<int, string>>(relPath);
-            if (intDict != null)
+            if (_sourceRegistry.TryResolveSourceContentRoot(source, out string resolvedRoot) && Directory.Exists(resolvedRoot))
             {
-                var res = new Dictionary<string, string>(intDict.Count, StringComparer.OrdinalIgnoreCase);
-                foreach (var kvp in intDict)
-                    res[kvp.Key.ToString()] = kvp.Value;
-                return res;
+                string localizedRelativePath = source.FormatAssetPath(assetSubpath);
+                if (!LanguageSourceRegistry.TryResolveSafePath(resolvedRoot, $"{localizedRelativePath}.xnb", out string localizedFilePath)) return null;
+                if (File.Exists(localizedFilePath))
+                {
+                    try
+                    {
+                        ContentManager cm = GetCustomModContentManager(resolvedRoot);
+                        var intDict = cm.Load<Dictionary<int, string>>(localizedRelativePath);
+                        if (intDict != null)
+                        {
+                            var stringDict = new Dictionary<string, string>(intDict.Count, StringComparer.OrdinalIgnoreCase);
+                            foreach (var kvp in intDict)
+                            {
+                                stringDict[kvp.Key.ToString()] = kvp.Value;
+                            }
+                            return stringDict;
+                        }
+                    }
+                    catch (ContentLoadException)
+                    {
+                        // Ignore and fall through
+                    }
+                }
             }
         }
-        catch (Exception)
+
+        // 2. Explicit locale content root
+        if (!LanguageHelper.IsBuiltInLanguage(langCode))
+        {
+            ContentManager? modManager = GetModContentManager();
+            if (modManager != null && !string.IsNullOrEmpty(_modContentRoot))
+            {
+                string viRelativePath = $"{assetSubpath}_{langCode}";
+                string viFilePath = Path.Combine(_modContentRoot, $"{viRelativePath}.xnb");
+                if (File.Exists(viFilePath))
+                {
+                    try
+                    {
+                        var intDict = modManager.Load<Dictionary<int, string>>(viRelativePath);
+                        if (intDict != null)
+                        {
+                            var stringDict = new Dictionary<string, string>(intDict.Count, StringComparer.OrdinalIgnoreCase);
+                            foreach (var kvp in intDict)
+                            {
+                                stringDict[kvp.Key.ToString()] = kvp.Value;
+                            }
+                            return stringDict;
+                        }
+                    }
+                    catch (ContentLoadException)
+                    {
+                        // Ignore and return null
+                    }
+                }
+            }
+            return null;
+        }
+
+        // 3. Built-in languages
+        ContentManager? vanillaManager = GetVanillaContentManager();
+        if (vanillaManager == null)
+            return null;
+
+        if (!LanguageHelper.IsBaseOrEnglish(langCode))
+        {
+            string? suffix = LanguageHelper.GetLanguageSuffix(langCode);
+            if (!string.IsNullOrEmpty(suffix))
+            {
+                string localizedRelativePath = $"{assetSubpath}.{suffix}";
+                string localizedFilePath = Path.Combine(_gameContentRoot, $"{localizedRelativePath}.xnb");
+                if (File.Exists(localizedFilePath))
+                {
+                    try
+                    {
+                        var intDict = vanillaManager.Load<Dictionary<int, string>>(localizedRelativePath);
+                        if (intDict != null)
+                        {
+                            var stringDict = new Dictionary<string, string>(intDict.Count, StringComparer.OrdinalIgnoreCase);
+                            foreach (var kvp in intDict)
+                            {
+                                stringDict[kvp.Key.ToString()] = kvp.Value;
+                            }
+                            return stringDict;
+                        }
+                    }
+                    catch (ContentLoadException)
+                    {
+                        // Ignore and return null
+                    }
+                }
+            }
+            return null;
+        }
+
+        // 4. Default / English
+        string basePath = Path.Combine(_gameContentRoot, $"{assetSubpath}.xnb");
+        if (File.Exists(basePath))
         {
             try
             {
-                return manager.Load<Dictionary<string, string>>(relPath);
+                var intDict = vanillaManager.Load<Dictionary<int, string>>(assetSubpath);
+                if (intDict != null)
+                {
+                    var stringDict = new Dictionary<string, string>(intDict.Count, StringComparer.OrdinalIgnoreCase);
+                    foreach (var kvp in intDict)
+                    {
+                        stringDict[kvp.Key.ToString()] = kvp.Value;
+                    }
+                    return stringDict;
+                }
             }
-            catch (Exception)
+            catch (ContentLoadException)
             {
-                // Ignore
+                // Ignore and return null
             }
         }
 
@@ -458,11 +670,10 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             return _vanillaContentManager;
 
         IServiceProvider? sp = _getServiceProvider();
-        if (sp != null && Directory.Exists(_gameContentRoot))
-        {
-            _vanillaContentManager = new ContentManager(sp, _gameContentRoot);
-        }
+        if (sp == null)
+            return null;
 
+        _vanillaContentManager = new ContentManager(sp, _gameContentRoot);
         return _vanillaContentManager;
     }
 
@@ -471,21 +682,34 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         if (_modContentManager != null)
             return _modContentManager;
 
-        IServiceProvider? sp = _getServiceProvider();
-        if (sp != null && !string.IsNullOrEmpty(_modContentRoot) && Directory.Exists(_modContentRoot))
-        {
-            _modContentManager = new ContentManager(sp, _modContentRoot);
-        }
+        if (string.IsNullOrEmpty(_modContentRoot))
+            return null;
 
+        IServiceProvider? sp = _getServiceProvider();
+        if (sp == null)
+            return null;
+
+        _modContentManager = new ContentManager(sp, _modContentRoot);
         return _modContentManager;
+    }
+
+    private ContentManager GetCustomModContentManager(string contentRoot)
+    {
+        if (_customModContentManagers.TryGetValue(contentRoot, out ContentManager? cm))
+            return cm;
+
+        IServiceProvider sp = _getServiceProvider() ?? throw new InvalidOperationException("Service provider unavailable for content manager.");
+        cm = new ContentManager(sp, contentRoot);
+        _customModContentManagers[contentRoot] = cm;
+        return cm;
     }
 
     private void TriggerWarningOnce(string requested, string fallback)
     {
-        if (!_warned)
-        {
-            _warned = true;
-            _onFallbackWarning?.Invoke(requested, fallback);
-        }
+        if (_warned)
+            return;
+
+        _warned = true;
+        _onFallbackWarning?.Invoke(requested, fallback);
     }
 }

@@ -1,0 +1,16 @@
+{
+  "Name": "Custom Language Source Example",
+  "Author": "Example",
+  "Version": "1.0.0",
+  "Description": "Template for registering bilingual language assets. Supply your own translated XNBs and SpriteFonts.",
+  "UniqueID": "Example.LanguageSource",
+  "ContentPackFor": {
+    "UniqueID": "Pathoschild.ContentPatcher"
+  },
+  "Dependencies": [
+    {
+      "UniqueID": "GiaHung.UntranslatedStardew",
+      "IsRequired": true
+    }
+  ]
+}

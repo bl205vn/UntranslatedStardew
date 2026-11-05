@@ -62,13 +62,17 @@ public sealed class LevelUpMenuState
         if (instance == null || b == null)
             return;
 
-        using (BilingualRenderScope.Begin())
+        bool secondaryFirst = ModEntry.Instance?.Config.SecondaryFirst == true;
+        FontRole subRole = secondaryFirst ? FontRole.Primary : FontRole.Secondary;
+
+        using (BilingualRenderScope.Begin(subRole))
         {
             float leftTitleH = 48f;
             float rightTitleH = 48f;
             float leftSubH = 24f;
             float rightSubH = 24f;
 
+        using (BilingualRenderScope.Begin(secondaryFirst ? FontRole.Secondary : FontRole.Primary))
         if (Game1.dialogueFont != null)
         {
             if (LeftList != null && LeftList.Count > 0 && !string.IsNullOrEmpty(LeftList[0]))
@@ -238,14 +242,24 @@ public static class LevelUpMenuPatch
                 }
             }
 
-            if (!string.IsNullOrEmpty(state.SubtitleLeft)) BilingualStringTracker.Register(state.SubtitleLeft);
-            if (!string.IsNullOrEmpty(state.SubtitleRight)) BilingualStringTracker.Register(state.SubtitleRight);
-            if (state.LeftSwapped && ___leftProfessionDescription?.Count > 0) BilingualStringTracker.Register(___leftProfessionDescription[0]);
-            if (state.RightSwapped && ___rightProfessionDescription?.Count > 0) BilingualStringTracker.Register(___rightProfessionDescription[0]);
-
             if (state.SubtitleLeft != null || state.SubtitleRight != null || state.LeftSwapped || state.RightSwapped)
             {
                 state.ScopeCookie = BilingualRenderScope.Begin();
+
+                // If profession main titles were swapped to secondary language under SecondaryFirst,
+                // register scoped secondary roles for the main titles strictly during this draw invocation.
+                // Restored automatically when state.ScopeCookie is disposed in Postfix/Finalizer.
+                if (secondaryFirst)
+                {
+                    if (state.LeftSwapped && ___leftProfessionDescription?.Count > 0)
+                    {
+                        BilingualRenderScope.RegisterScopedRole(___leftProfessionDescription[0], FontRole.Secondary);
+                    }
+                    if (state.RightSwapped && ___rightProfessionDescription?.Count > 0)
+                    {
+                        BilingualRenderScope.RegisterScopedRole(___rightProfessionDescription[0], FontRole.Secondary);
+                    }
+                }
             }
         }
         catch (Exception ex)

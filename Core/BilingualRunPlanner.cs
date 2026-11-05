@@ -9,8 +9,10 @@ namespace UntranslatedStardew.Core;
 
 /// <summary>
 /// Plans font run segmentation and exact geometric metrics for bilingual text blocks.
-/// Prefers whole text segments or lines from the same font to ensure consistent baselines,
-/// normalizes text to Unicode Form C, and tracks line-aware maximum heights.
+/// Enforces fixed font roles: primary chunks always target the live Game1 font (honoring FontSettings);
+/// secondary chunks always target the secondary locale font, even for ASCII-only words.
+/// Normalizes text to Unicode Form C, supports explicit role composition metadata,
+/// and retains glyph fallback only when the selected role font itself lacks a glyph.
 /// </summary>
 public static class BilingualRunPlanner
 {
@@ -27,7 +29,7 @@ public static class BilingualRunPlanner
 
     /// <summary>
     /// Plans runs for the given text. Returns null if all characters exist in the primary font
-    /// or if no fallback font is available.
+    /// without role specialization, or if no fallback/secondary font is needed.
     /// </summary>
     public static TextRunPlan? Plan(
         string? text,
@@ -44,39 +46,70 @@ public static class BilingualRunPlanner
         string normalized = text.Normalize(NormalizationForm.FormC);
         bool isDecomposed = !string.Equals(text, normalized, StringComparison.Ordinal);
 
-        // 2. Check if primary font covers all non-control characters (fast path)
-        bool needsFallback = false;
+        // 2. Retrieve explicit role composition if available
+        bool hasComposition = BilingualStringTracker.TryGetComposition(text, out StructuredTextComposition? composition);
+        if (!hasComposition)
+        {
+            hasComposition = BilingualStringTracker.TryGetComposition(normalized, out composition);
+        }
+
+        // 3. Resolve active or scoped role if composition is not already explicit
+        FontRole? activeRole = BilingualRenderScope.ResolveActiveRole(text);
+        if (!activeRole.HasValue && isDecomposed)
+        {
+            activeRole = BilingualRenderScope.ResolveActiveRole(normalized);
+        }
+
+        if (activeRole.HasValue)
+        {
+            composition = StructuredTextComposition.CreateSingle(normalized, activeRole.Value);
+            hasComposition = true;
+        }
+
+        // 4. Inspect character roles and coverage
+        bool hasSecondaryRole = false;
+        bool needsGlyphFallback = false;
+
         for (int i = 0; i < normalized.Length; i++)
         {
             char c = normalized[i];
             if (c == '\r' || c == '\n' || c == '\t' || c == ' ')
                 continue;
 
-            if (fontManager != null)
+            FontRole role = composition?.GetRoleAt(i) ?? FontRole.Primary;
+
+            if (role == FontRole.Secondary)
             {
-                if (!fontManager.ContainsCharacter(primaryFont, c))
+                if (secondaryFont != null && !ReferenceEquals(secondaryFont, primaryFont))
                 {
-                    needsFallback = true;
-                    break;
+                    hasSecondaryRole = true;
+                }
+                else if (secondaryFont == null)
+                {
+                    bool inPrimary = fontManager?.ContainsCharacter(primaryFont, c) ?? primaryFont.Characters.Contains(c);
+                    if (!inPrimary)
+                    {
+                        needsGlyphFallback = true;
+                    }
                 }
             }
-            else
+            else // FontRole.Primary
             {
-                if (!primaryFont.Characters.Contains(c))
+                bool inPrimary = fontManager?.ContainsCharacter(primaryFont, c) ?? primaryFont.Characters.Contains(c);
+                if (!inPrimary)
                 {
-                    needsFallback = true;
-                    break;
+                    needsGlyphFallback = true;
                 }
             }
         }
 
-        if (!needsFallback)
+        // Fast path: pure primary role, all glyphs covered, and not decomposed
+        if (!hasSecondaryRole && !needsGlyphFallback)
         {
             if (!isDecomposed)
                 return null;
 
-            // Input was decomposed (NFD) but precomposed (NFC) characters are all supported by primary font.
-            // We must return a normalized plan using primaryFont so renderer draws the precomposed glyphs.
+            // Input was decomposed (NFD) but precomposed characters exist in primary font
             string nfcKey = $"{normalized}_{primaryFont.GetHashCode()}_nfc";
             if (Cache.TryGetValue(nfcKey, out TextRunPlan? cachedNfcPlan))
                 return cachedNfcPlan;
@@ -90,28 +123,12 @@ public static class BilingualRunPlanner
             return nfcPlan;
         }
 
-        if (secondaryFont == null)
-        {
-            // Report missing glyphs if no secondary font is available
-            if (fontManager != null)
-            {
-                for (int i = 0; i < normalized.Length; i++)
-                {
-                    char c = normalized[i];
-                    if (c != '\r' && c != '\n' && c != '\t' && c != ' ' && !fontManager.ContainsCharacter(primaryFont, c))
-                    {
-                        fontManager.ReportMissingGlyphOnce(c, normalized);
-                    }
-                }
-            }
-            return null;
-        }
-
-        string cacheKey = $"{normalized}_{primaryFont.GetHashCode()}_{secondaryFont.GetHashCode()}";
+        string roleFingerprint = GetRoleFingerprint(composition, normalized.Length, activeRole);
+        string cacheKey = $"{normalized}_{primaryFont.GetHashCode()}_{secondaryFont?.GetHashCode() ?? 0}_{roleFingerprint}";
         if (Cache.TryGetValue(cacheKey, out TextRunPlan? cachedPlan))
             return cachedPlan;
 
-        TextRunPlan plan = BuildPlan(normalized, primaryFont, secondaryFont, fontManager);
+        TextRunPlan plan = BuildPlan(normalized, primaryFont, secondaryFont, fontManager, composition);
 
         if (Cache.Count >= MaxCacheEntries)
         {
@@ -120,6 +137,28 @@ public static class BilingualRunPlanner
         Cache[cacheKey] = plan;
 
         return plan;
+    }
+
+    private static string GetRoleFingerprint(StructuredTextComposition? composition, int length, FontRole? activeRole)
+    {
+        if (composition == null || composition.Spans.Count == 0)
+            return activeRole.HasValue ? (activeRole.Value == FontRole.Secondary ? "AR:S" : "AR:P") : "P";
+
+        StringBuilder sb = new();
+        if (activeRole.HasValue)
+        {
+            sb.Append("AR:").Append(activeRole.Value == FontRole.Secondary ? "S" : "P").Append('|');
+        }
+        for (int i = 0; i < composition.Spans.Count; i++)
+        {
+            RoleSpan s = composition.Spans[i];
+            sb.Append(s.Role == FontRole.Secondary ? "S" : "P")
+              .Append(s.Start)
+              .Append('-')
+              .Append(s.Length)
+              .Append(';');
+        }
+        return sb.ToString();
     }
 
     private static TextRunPlan BuildNormalizedPrimaryPlan(string text, SpriteFont primaryFont)
@@ -163,8 +202,9 @@ public static class BilingualRunPlanner
     private static TextRunPlan BuildPlan(
         string text,
         SpriteFont primaryFont,
-        SpriteFont secondaryFont,
-        BilingualFontManager? fontManager)
+        SpriteFont? secondaryFont,
+        BilingualFontManager? fontManager,
+        StructuredTextComposition? composition)
     {
         bool wasMeasuring = BilingualFontRenderer.IsMeasuringActive;
         BilingualFontRenderer.IsMeasuringActive = true;
@@ -175,33 +215,49 @@ public static class BilingualRunPlanner
 
             float currentY = 0f;
             float maxLineWidth = 0f;
+            int charOffset = 0;
 
             for (int lineIdx = 0; lineIdx < rawLines.Length; lineIdx++)
             {
                 string line = rawLines[lineIdx];
                 if (line.Length == 0)
                 {
-                    // Empty newline
                     currentY += primaryFont.LineSpacing;
+                    charOffset += GetNewlineLength(text, charOffset);
                     continue;
                 }
 
-                // Inspect line character coverage
+                // Inspect line roles and coverage
+                bool allSecondaryRole = composition != null;
+                bool allPrimaryRole = true;
                 bool lineHasMissingInPrimary = false;
-                bool lineAllInSecondary = true;
+                bool lineAllInSecondary = secondaryFont != null;
+                bool lineAllInPrimary = true;
 
                 for (int i = 0; i < line.Length; i++)
                 {
                     char c = line[i];
+                    FontRole role = composition?.GetRoleAt(charOffset + i) ?? FontRole.Primary;
+
+                    if (role == FontRole.Secondary)
+                    {
+                        allPrimaryRole = false;
+                    }
+                    else
+                    {
+                        allSecondaryRole = false;
+                    }
+
                     if (c == '\t' || c == ' ')
                         continue;
 
                     bool inPrimary = fontManager?.ContainsCharacter(primaryFont, c) ?? primaryFont.Characters.Contains(c);
-                    bool inSecondary = fontManager?.ContainsCharacter(secondaryFont, c) ?? secondaryFont.Characters.Contains(c);
+                    bool inSecondary = secondaryFont != null && (fontManager?.ContainsCharacter(secondaryFont, c) ?? secondaryFont.Characters.Contains(c));
 
                     if (!inPrimary)
                     {
                         lineHasMissingInPrimary = true;
+                        lineAllInPrimary = false;
                         if (!inSecondary)
                         {
                             fontManager?.ReportMissingGlyphOnce(c, text);
@@ -216,23 +272,28 @@ public static class BilingualRunPlanner
 
                 List<TextRun> lineRuns = new();
 
-                // Segment preference rule:
-                // If the whole line can be rendered by secondary font and has secondary-specific glyphs,
-                // render the entire line with secondary font to keep accent baselines and kerning uniform.
-                if (lineHasMissingInPrimary && lineAllInSecondary)
+                // Whole-line optimization rules:
+                // Rule 1: Line is explicitly designated as Secondary role and secondaryFont covers the characters
+                if (allSecondaryRole && secondaryFont != null && lineAllInSecondary)
                 {
                     Vector2 size = secondaryFont.MeasureString(line);
                     lineRuns.Add(new TextRun(line, secondaryFont, new Vector2(0f, currentY), size));
                 }
-                else if (!lineHasMissingInPrimary)
+                // Rule 2: Line is explicitly designated as Primary role (or untracked) and primaryFont covers the characters
+                else if (allPrimaryRole && lineAllInPrimary)
                 {
-                    // Pure primary line
                     Vector2 size = primaryFont.MeasureString(line);
                     lineRuns.Add(new TextRun(line, primaryFont, new Vector2(0f, currentY), size));
                 }
+                // Rule 3: Whole-line fallback: line has characters missing in primary, but secondaryFont covers the whole line
+                else if (lineHasMissingInPrimary && lineAllInSecondary && secondaryFont != null)
+                {
+                    Vector2 size = secondaryFont.MeasureString(line);
+                    lineRuns.Add(new TextRun(line, secondaryFont, new Vector2(0f, currentY), size));
+                }
                 else
                 {
-                    // Mixed line: segment into contiguous runs
+                    // Mixed line: segment into contiguous runs based on explicit roles or character font coverage
                     float lineX = 0f;
                     StringBuilder runBuffer = new();
                     SpriteFont currentRunFont = primaryFont;
@@ -240,25 +301,65 @@ public static class BilingualRunPlanner
                     for (int i = 0; i < line.Length; i++)
                     {
                         char c = line[i];
+                        FontRole role = composition?.GetRoleAt(charOffset + i) ?? FontRole.Primary;
                         bool inPrimary = fontManager?.ContainsCharacter(primaryFont, c) ?? primaryFont.Characters.Contains(c);
-                        bool inSecondary = fontManager?.ContainsCharacter(secondaryFont, c) ?? secondaryFont.Characters.Contains(c);
+                        bool inSecondary = secondaryFont != null && (fontManager?.ContainsCharacter(secondaryFont, c) ?? secondaryFont.Characters.Contains(c));
 
                         SpriteFont targetFont;
-                        if (!inPrimary && inSecondary)
+                        if (composition != null)
                         {
-                            targetFont = secondaryFont;
-                        }
-                        else if (inPrimary && !inSecondary)
-                        {
-                            targetFont = primaryFont;
+                            if (role == FontRole.Secondary)
+                            {
+                                if (secondaryFont != null && inSecondary)
+                                {
+                                    targetFont = secondaryFont;
+                                }
+                                else if (inPrimary)
+                                {
+                                    targetFont = primaryFont;
+                                }
+                                else
+                                {
+                                    fontManager?.ReportMissingGlyphOnce(c, text);
+                                    targetFont = secondaryFont ?? primaryFont;
+                                }
+                            }
+                            else // FontRole.Primary
+                            {
+                                if (inPrimary)
+                                {
+                                    targetFont = primaryFont;
+                                }
+                                else if (secondaryFont != null && inSecondary)
+                                {
+                                    targetFont = secondaryFont;
+                                }
+                                else
+                                {
+                                    fontManager?.ReportMissingGlyphOnce(c, text);
+                                    targetFont = primaryFont;
+                                }
+                            }
                         }
                         else
                         {
-                            // Both support it (or whitespace/neither): keep current run font to avoid needless segmentation
-                            targetFont = currentRunFont;
+                            // Untracked text: contiguous segment rule
+                            if (!inPrimary && inSecondary)
+                            {
+                                targetFont = secondaryFont!;
+                            }
+                            else if (inPrimary && !inSecondary)
+                            {
+                                targetFont = primaryFont;
+                            }
+                            else
+                            {
+                                // Both support it (or whitespace/neither): keep current run font to avoid needless segmentation
+                                targetFont = currentRunFont;
+                            }
                         }
 
-                        if (runBuffer.Length > 0 && targetFont != currentRunFont)
+                        if (runBuffer.Length > 0 && !ReferenceEquals(targetFont, currentRunFont))
                         {
                             string runText = runBuffer.ToString();
                             Vector2 runSize = currentRunFont.MeasureString(runText);
@@ -300,6 +401,23 @@ public static class BilingualRunPlanner
 
                 runs.AddRange(lineRuns);
                 currentY += lineHeight;
+
+                charOffset += line.Length;
+                if (charOffset < text.Length)
+                {
+                    if (text[charOffset] == '\r')
+                    {
+                        charOffset++;
+                        if (charOffset < text.Length && text[charOffset] == '\n')
+                        {
+                            charOffset++;
+                        }
+                    }
+                    else if (text[charOffset] == '\n')
+                    {
+                        charOffset++;
+                    }
+                }
             }
 
             Vector2 totalSize = new(maxLineWidth, currentY);
@@ -309,5 +427,21 @@ public static class BilingualRunPlanner
         {
             BilingualFontRenderer.IsMeasuringActive = wasMeasuring;
         }
+    }
+
+    private static int GetNewlineLength(string text, int index)
+    {
+        if (index >= text.Length)
+            return 0;
+
+        if (text[index] == '\r')
+        {
+            return (index + 1 < text.Length && text[index + 1] == '\n') ? 2 : 1;
+        }
+        if (text[index] == '\n')
+        {
+            return 1;
+        }
+        return 0;
     }
 }

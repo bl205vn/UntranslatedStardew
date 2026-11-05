@@ -6,6 +6,7 @@ using System.Reflection;
 using HarmonyLib;
 using Microsoft.Win32;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Netcode;
 using StardewValley.GameData;
 using StardewValley.ItemTypeDefinitions;
@@ -21,7 +22,7 @@ namespace UntranslatedStardew.Tests;
 /// Lexicon pluralization, displayNameFormat precedence, tool upgrades, stable API lifecycle,
 /// and real XNB asset loading from disk.
 /// </summary>
-public static class Program
+public static partial class Program
 {
     private static int _passed;
     private static int _failed;
@@ -63,6 +64,10 @@ public static class Program
         TestBilingualDiagnosticAndLifecycle();
         TestHarmonyInterceptionAndRecursionGuards();
         TestAcceptanceFixesLeadReview();
+        TestVersion130Features();
+        TestRoleFontAcceptance();
+        TestStandardCustomLanguagePack();
+        TestInstalledCustomLanguagePairs();
 
         Console.WriteLine();
         Console.WriteLine($"=== Results: {_passed} Passed, {_failed} Failed ===");
@@ -1043,8 +1048,8 @@ public static class Program
             null,
             (req, fb) => { warnedRequested = req; warnedFallback = fb; });
 
-        Assert(rawUnsupported.EffectiveLanguage == "default", "rawUnsupported fell back to 'default'");
-        Assert(warnedRequested == "unsupported_xyz" && warnedFallback == "default", "rawUnsupported triggered fallback warning with ('unsupported_xyz', 'default')");
+        Assert(rawUnsupported.EffectiveLanguage == "unsupported_xyz" && !rawUnsupported.IsSecondaryAvailable, "rawUnsupported retains requested locale and disables unavailable secondary");
+        Assert(warnedRequested == "unsupported_xyz" && warnedFallback!.Contains("primary-only"), "rawUnsupported reports primary-only when no custom source exists");
 
         // 4. Default config uses "default"
         var config = new ModConfig();
@@ -2885,5 +2890,365 @@ public static class Program
     public class TestMockServiceProvider : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;
+    }
+
+    private static bool _headlessCaptureActive;
+    private static List<(SpriteFont Font, string Text, Vector2 Origin)>? _capturedDrawCalls;
+
+    private static bool HeadlessCaptureDrawStringPrefix(SpriteBatch __instance, SpriteFont spriteFont, string? text, Vector2 position, Color color, float rotation, Vector2 origin, Vector2 scale, SpriteEffects effects, float layerDepth)
+    {
+        if (_headlessCaptureActive && _capturedDrawCalls != null && text != null)
+        {
+            _capturedDrawCalls.Add((spriteFont, text, origin));
+            return false; // Skip native MonoGame rendering in headless tests
+        }
+        return true;
+    }
+
+    private static void TestVersion130Features()
+    {
+        Console.WriteLine("\n-- Testing Version 1.3.0 Features (Fixed Role Fonts, Generic Sources, WP/FL) --");
+
+        string? gamePath = LocateGamePath();
+        bool hasGame = gamePath != null && Directory.Exists(gamePath);
+
+        // 1. Wallpaper and Flooring XNB Resolution Across Locales and Distinct Cache Keys
+        if (hasGame)
+        {
+            string contentRoot = Path.Combine(gamePath!, "Content");
+            var testService = new DummyServiceProvider();
+
+            // English (en / default)
+            var extReg = new ExternalTranslationRegistry();
+            var rawEn = new RawContentProvider(() => testService, contentRoot, "en");
+            var resolverEn = new ItemNameResolver(rawEn, externalRegistry: extReg);
+
+            string? wpEn0 = resolverEn.GetSecondaryNameById("(WP)0");
+            string? wpEn1 = resolverEn.GetSecondaryNameById("(WP)1");
+            string? wpEn50 = resolverEn.GetSecondaryNameById("(WP)50");
+            string? flEn0 = resolverEn.GetSecondaryNameById("(FL)0");
+            string? flEn1 = resolverEn.GetSecondaryNameById("(FL)1");
+            string? flEn30 = resolverEn.GetSecondaryNameById("(FL)30");
+
+            Assert(wpEn0 == "Wallpaper", $"WP/FL en: (WP)0 resolves 'Wallpaper' (got '{wpEn0}')");
+            Assert(wpEn1 == "Wallpaper", $"WP/FL en: (WP)1 resolves 'Wallpaper' (got '{wpEn1}')");
+            Assert(wpEn50 == "Wallpaper", $"WP/FL en: (WP)50 resolves 'Wallpaper' (got '{wpEn50}')");
+            Assert(flEn0 == "Flooring", $"WP/FL en: (FL)0 resolves 'Flooring' (got '{flEn0}')");
+            Assert(flEn1 == "Flooring", $"WP/FL en: (FL)1 resolves 'Flooring' (got '{flEn1}')");
+            Assert(flEn30 == "Flooring", $"WP/FL en: (FL)30 resolves 'Flooring' (got '{flEn30}')");
+
+            // Cache distinction: same-name items across IDs remain separate entries in cache
+            var cacheField = typeof(ItemNameResolver).GetField("_cache", BindingFlags.NonPublic | BindingFlags.Instance);
+            var cache = cacheField?.GetValue(resolverEn) as System.Collections.IDictionary;
+            Assert(cache != null && cache.Count >= 6, "WP/FL Cache: All 6 distinct item IDs cached independently without clobbering");
+
+            // ParsedItemData with RawData = null
+            var dummyWpDef = new WallpaperDataDefinition();
+            var parsedWp = new ParsedItemData(dummyWpDef, "5", 0, "LooseSprites/none", "(WP)5", "Wallpaper", "Desc", -100, null, null);
+            string? parsedWpResolved = resolverEn.ResolveFromParsedData(parsedWp);
+            Assert(parsedWpResolved == "Wallpaper", $"WP/FL en: ParsedItemData (RawData=null) for (WP)5 resolves 'Wallpaper' (got '{parsedWpResolved}')");
+
+            var dummyFlDef = new FlooringDataDefinition();
+            var parsedFl = new ParsedItemData(dummyFlDef, "12", 0, "LooseSprites/none", "(FL)12", "Flooring", "Desc", -100, null, null);
+            string? parsedFlResolved = resolverEn.ResolveFromParsedData(parsedFl);
+            Assert(parsedFlResolved == "Flooring", $"WP/FL en: ParsedItemData (RawData=null) for (FL)12 resolves 'Flooring' (got '{parsedFlResolved}')");
+
+            // Across all available built-ins
+            string[] checkLocales = { "es", "de", "fr", "ja", "zh", "ru", "pt", "ko", "it", "tr", "hu" };
+            foreach (var loc in checkLocales)
+            {
+                var rawLoc = new RawContentProvider(() => testService, contentRoot, loc);
+                var resLoc = new ItemNameResolver(rawLoc);
+                string? wpLoc = resLoc.GetSecondaryNameById("(WP)20");
+                string? flLoc = resLoc.GetSecondaryNameById("(FL)20");
+                Assert(!string.IsNullOrEmpty(wpLoc) && wpLoc != "InternalName", $"WP/FL {loc}: (WP)20 resolves localized string '{wpLoc}'");
+                Assert(!string.IsNullOrEmpty(flLoc) && flLoc != "InternalName", $"WP/FL {loc}: (FL)20 resolves localized string '{flLoc}'");
+            }
+
+            // Vietnamese mod Content if present
+            string modContentRoot = Path.Combine(gamePath!, "Mods", "Stardew Valley Viethoa", "assets", "Content");
+            if (Directory.Exists(modContentRoot))
+            {
+                var rawVi = new RawContentProvider(() => testService, contentRoot, "vi", modContentRoot);
+                var resVi = new ItemNameResolver(rawVi);
+                string? wpVi = resVi.GetSecondaryNameById("(WP)0");
+                string? flVi = resVi.GetSecondaryNameById("(FL)0");
+                Assert(!string.IsNullOrEmpty(wpVi), $"WP/FL vi: (WP)0 resolves '{wpVi}'");
+                Assert(!string.IsNullOrEmpty(flVi), $"WP/FL vi: (FL)0 resolves '{flVi}'");
+            }
+
+            // Custom Wallpaper / Flooring via external registry
+            extReg.RegisterModTranslation("TestMod", "Item", "(WP)CustomFloralWP", "en", "Giấy dán tường hoa");
+            extReg.RegisterModTranslation("TestMod", "Item", "(FL)CustomWoodFL", "en", "Sàn gỗ cổ điển");
+            Assert(resolverEn.GetSecondaryNameById("(WP)CustomFloralWP") == "Giấy dán tường hoa", "Custom WP: Resolves translation from external registry");
+            Assert(resolverEn.GetSecondaryNameById("(FL)CustomWoodFL") == "Sàn gỗ cổ điển", "Custom FL: Resolves translation from external registry");
+        }
+
+        // 2. Duplicate Suppression & Structured Composition Registration
+        {
+            string dupTitle = TooltipFormatter.FormatTitle("Wallpaper", "Wallpaper", "Wallpaper");
+            Assert(dupTitle == "Wallpaper", $"Duplicate Suppression: Same primary and secondary name suppresses duplicate ('{dupTitle}')");
+            Assert(!BilingualStringTracker.IsTracked(dupTitle), "Duplicate Suppression: Suppressed title remains ordinary untracked string");
+
+            string diffTitle = TooltipFormatter.FormatTitle("Diamond", "Diamond", "Kim cương");
+            Assert(diffTitle.Contains("Diamond") && diffTitle.Contains("Kim cương"), "TooltipFormatter: Different names format both");
+            Assert(BilingualStringTracker.IsTracked(diffTitle), "TooltipFormatter: Bilingual title is tracked");
+            Assert(BilingualStringTracker.TryGetComposition(diffTitle, out var compDiff), "TooltipFormatter: Registers bilingual composition");
+            Assert(compDiff != null && compDiff.Spans.Count == 2, "TooltipFormatter: Composition has 2 spans (Primary and Secondary)");
+            Assert(compDiff!.Spans[0].Role == FontRole.Primary && compDiff.Spans[1].Role == FontRole.Secondary, "TooltipFormatter: Spans have correct Primary and Secondary roles");
+        }
+
+        // 3. All Built-in Font Descriptors Resolve Glyph Metadata
+        if (hasGame)
+        {
+            string fontsDir = Path.Combine(gamePath!, "Content", "Fonts");
+            var builtins = new[]
+            {
+                ("en", "SmallFont.xnb", 'A'),
+                ("es", "SmallFont.es-ES.xnb", 'ñ'),
+                ("de", "SmallFont.de-DE.xnb", 'ä'),
+                ("fr", "SmallFont.fr-FR.xnb", 'é'),
+                ("pt", "SmallFont.pt-BR.xnb", 'ã'),
+                ("ru", "SmallFont.ru-RU.xnb", 'д'),
+                ("ja", "SmallFont.ja-JP.xnb", 'あ'),
+                ("zh", "SmallFont.zh-CN.xnb", '汉'),
+                ("ko", "SmallFont.ko-KR.xnb", '가'),
+                ("it", "SmallFont.xnb", 'A'), // it falls back to unsuffixed SmallFont.xnb
+                ("tr", "SmallFont.tr-TR.xnb", 'ğ'),
+                ("hu", "SmallFont.hu-HU.xnb", 'ő')
+            };
+
+            foreach (var (code, fontFile, testChar) in builtins)
+            {
+                string fullPath = Path.Combine(fontsDir, fontFile);
+                Assert(File.Exists(fullPath), $"Builtin Font: {fontFile} exists on disk for locale '{code}'");
+                var meta = XnbFontMetadataParser.ParseFile(fullPath);
+                Assert(meta.Characters.Count > 0, $"Builtin Font: {fontFile} parsed {meta.Characters.Count} characters");
+                Assert(meta.Characters.Contains(testChar), $"Builtin Font: {fontFile} contains target script glyph '{testChar}' for locale '{code}'");
+                var headlessFont = meta.CreateHeadlessSpriteFont();
+                Assert(headlessFont.MeasureString(testChar.ToString()).X > 0, $"Builtin Font: {fontFile} measures '{testChar}' headless");
+            }
+        }
+
+        // 4. Fixed Role Plan With TWO Fake Fonts Both Covering SAME ASCII
+        var metaFakePrimary = new SpriteFontMetadata { LineSpacing = 20, Spacing = 0, DefaultCharacter = '?' };
+        var metaFakeSecondary = new SpriteFontMetadata { LineSpacing = 26, Spacing = 0, DefaultCharacter = '?' };
+        for (char c = ' '; c <= 'z'; c++)
+        {
+            metaFakePrimary.Characters.Add(c);
+            metaFakePrimary.Glyphs.Add(new Rectangle(0, 0, 10, 15));
+            metaFakePrimary.Cropping.Add(new Rectangle(0, 0, 10, 15));
+            metaFakePrimary.Kerning.Add(new Vector3(0, 10, 0));
+
+            metaFakeSecondary.Characters.Add(c);
+            metaFakeSecondary.Glyphs.Add(new Rectangle(0, 0, 14, 20));
+            metaFakeSecondary.Cropping.Add(new Rectangle(0, 0, 14, 20));
+            metaFakeSecondary.Kerning.Add(new Vector3(0, 14, 0));
+        }
+        var fakeFontPrimary = metaFakePrimary.CreateHeadlessSpriteFont();
+        var fakeFontSecondary = metaFakeSecondary.CreateHeadlessSpriteFont();
+
+        // 4A. Normal Order: "Sword\nBlade"
+        // Primary chunk: "Sword"
+        // Secondary chunk: "Blade"
+        var compNormal = StructuredTextComposition.CreateBilingual("Sword", "Blade", secondaryFirst: false);
+        BilingualStringTracker.RegisterComposition(compNormal);
+
+        var planNormal = BilingualRunPlanner.Plan(compNormal.FullText, fakeFontPrimary, fakeFontSecondary);
+        Assert(planNormal != null, "Fixed Role: Plan generated for ASCII bilingual composition");
+        var runSword = planNormal!.Runs.FirstOrDefault(r => r.Text.Contains("Sword"));
+        var runBlade = planNormal.Runs.FirstOrDefault(r => r.Text.Contains("Blade"));
+        Assert(runSword != null && ReferenceEquals(runSword.Font, fakeFontPrimary), "Fixed Role: 'Sword' Primary chunk uses Primary font");
+        Assert(runBlade != null && ReferenceEquals(runBlade.Font, fakeFontSecondary), "Fixed Role: 'Blade' Secondary chunk uses Secondary font even though Primary font covers ASCII");
+
+        // 4B. SecondaryFirst: "Blade\nSword"
+        var compSecFirst = StructuredTextComposition.CreateBilingual("Sword", "Blade", secondaryFirst: true);
+        BilingualStringTracker.RegisterComposition(compSecFirst);
+
+        var planSecFirst = BilingualRunPlanner.Plan(compSecFirst.FullText, fakeFontPrimary, fakeFontSecondary);
+        Assert(planSecFirst != null, "Fixed Role: Plan generated for SecondaryFirst bilingual composition");
+        var runSecBlade = planSecFirst!.Runs.FirstOrDefault(r => r.Text.Contains("Blade"));
+        var runSecSword = planSecFirst.Runs.FirstOrDefault(r => r.Text.Contains("Sword"));
+        Assert(runSecBlade != null && ReferenceEquals(runSecBlade.Font, fakeFontSecondary), "Fixed Role SecondaryFirst: 'Blade' Secondary chunk STILL uses Secondary font");
+        Assert(runSecSword != null && ReferenceEquals(runSecSword.Font, fakeFontPrimary), "Fixed Role SecondaryFirst: 'Sword' Primary chunk STILL uses Primary font");
+
+        // 5. Role Metadata Across Wrapped Lines and Primary Body Remainder
+        string multiWrapped = "Ancient Fruit\nOld Fruit\nTakes 28 days to grow.\nHarvest repeatedly.";
+        int primaryTitleLen = "Ancient Fruit".Length;
+        int secondaryTitleStart = primaryTitleLen + 1;
+        int secondaryTitleLen = "Old Fruit".Length;
+        int bodyStart = secondaryTitleStart + secondaryTitleLen + 1;
+        int bodyLen = "Takes 28 days to grow.\nHarvest repeatedly.".Length;
+
+        var compWrapped = new StructuredTextComposition(
+            multiWrapped,
+            new[]
+            {
+                new RoleSpan(0, primaryTitleLen, FontRole.Primary),
+                new RoleSpan(secondaryTitleStart, secondaryTitleLen, FontRole.Secondary),
+                new RoleSpan(bodyStart, bodyLen, FontRole.Primary)
+            }
+        );
+        BilingualStringTracker.RegisterComposition(compWrapped);
+
+        var planWrapped = BilingualRunPlanner.Plan(multiWrapped, fakeFontPrimary, fakeFontSecondary);
+        Assert(planWrapped != null && planWrapped.Runs.Count >= 3, "Wrapped & Body: Plan produced for multiline structured composition");
+        var line0 = planWrapped!.Runs.FirstOrDefault(r => r.Text.Contains("Ancient Fruit"));
+        var line1 = planWrapped.Runs.FirstOrDefault(r => r.Text.Contains("Old Fruit"));
+        var line2 = planWrapped.Runs.FirstOrDefault(r => r.Text.Contains("Takes 28 days"));
+        var line3 = planWrapped.Runs.FirstOrDefault(r => r.Text.Contains("Harvest repeatedly"));
+
+        Assert(line0 != null && ReferenceEquals(line0.Font, fakeFontPrimary), "Wrapped & Body: Primary title line 0 uses Primary font");
+        Assert(line1 != null && ReferenceEquals(line1.Font, fakeFontSecondary), "Wrapped & Body: Secondary title line 1 uses Secondary font");
+        Assert(line2 != null && ReferenceEquals(line2.Font, fakeFontPrimary), "Wrapped & Body: Body line 2 uses Primary font");
+        Assert(line3 != null && ReferenceEquals(line3.Font, fakeFontPrimary), "Wrapped & Body: Body line 3 uses Primary font");
+
+        // 6. Real Harmony Patched Pipeline Measure & Draw Capture Headless
+        var captureHarmony = new Harmony("test.v130.pipeline.capture");
+        var capturedDraws = new List<(SpriteFont Font, string Text, Vector2 Origin)>();
+
+        var drawMethod4Param = typeof(SpriteBatch).GetMethod(
+            nameof(SpriteBatch.DrawString),
+            new[] { typeof(SpriteFont), typeof(string), typeof(Vector2), typeof(Color) }
+        );
+        var drawMethod9Param = typeof(SpriteBatch).GetMethod(
+            nameof(SpriteBatch.DrawString),
+            new[] { typeof(SpriteFont), typeof(string), typeof(Vector2), typeof(Color), typeof(float), typeof(Vector2), typeof(Vector2), typeof(SpriteEffects), typeof(float) }
+        );
+
+        captureHarmony.Patch(
+            drawMethod4Param,
+            prefix: new HarmonyMethod(typeof(FontInterceptionPatches.SpriteBatchDrawStringColorPatch).GetMethod(nameof(FontInterceptionPatches.SpriteBatchDrawStringColorPatch.Prefix)))
+        );
+        captureHarmony.Patch(
+            drawMethod9Param,
+            prefix: new HarmonyMethod(typeof(Program).GetMethod(nameof(HeadlessCaptureDrawStringPrefix), BindingFlags.NonPublic | BindingFlags.Static)) { priority = Priority.First }
+        );
+
+        var fakeBatch = (SpriteBatch)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(SpriteBatch));
+        var testManager = new BilingualFontManager(() => null, "C:\\FakeGame", "C:\\FakeMod", "vi");
+        testManager.SetSecondaryFontForTesting(fakeFontPrimary, fakeFontSecondary);
+
+        var compDraw = StructuredTextComposition.CreateBilingual("Diamond", "Gemstone", secondaryFirst: false);
+        BilingualStringTracker.RegisterComposition(compDraw);
+
+        _capturedDrawCalls = capturedDraws;
+        _headlessCaptureActive = true;
+
+        try
+        {
+            using (BilingualRenderScope.Begin())
+            {
+                fakeBatch.DrawString(fakeFontPrimary, compDraw.FullText, new Vector2(100f, 200f), Color.White);
+            }
+        }
+        finally
+        {
+            _headlessCaptureActive = false;
+            _capturedDrawCalls = null;
+            captureHarmony.UnpatchAll("test.v130.pipeline.capture");
+            testManager.Dispose();
+        }
+
+        Assert(capturedDraws.Count >= 2, $"Patched Pipeline Capture: Captured {capturedDraws.Count} draw calls from real Harmony pipeline");
+        var drawDiamond = capturedDraws.FirstOrDefault(d => d.Text.Contains("Diamond"));
+        var drawGemstone = capturedDraws.FirstOrDefault(d => d.Text.Contains("Gemstone"));
+        Assert(drawDiamond.Font != null && ReferenceEquals(drawDiamond.Font, fakeFontPrimary), "Patched Pipeline Capture: Primary chunk drawn with Primary font");
+        Assert(drawGemstone.Font != null && ReferenceEquals(drawGemstone.Font, fakeFontSecondary), "Patched Pipeline Capture: Secondary chunk drawn with Secondary font");
+
+        // 7. Custom Language Source Registry Security & Lifecycle
+        var registry = new LanguageSourceRegistry();
+        bool changedFired = false;
+        registry.OnChanged += () => changedFired = true;
+
+        // Path boundary security validation
+        string safeBase = @"C:\Games\Stardew Valley\Mods\CustomLanguagePack";
+        Assert(LanguageSourceRegistry.TryResolveSafePath(safeBase, "assets/strings.xnb", out string path1) && path1.StartsWith(safeBase), "Path Safety: Valid subpath accepted");
+        Assert(LanguageSourceRegistry.TryResolveSafePath(safeBase, "fonts/nested/font.xnb", out string path2) && path2.StartsWith(safeBase), "Path Safety: Valid nested subpath accepted");
+        Assert(!LanguageSourceRegistry.TryResolveSafePath(safeBase, "../../Windows/System32/cmd.exe", out _), "Path Safety: Traversal outside root rejected");
+        Assert(!LanguageSourceRegistry.TryResolveSafePath(safeBase, @"..\..\secret.json", out _), "Path Safety: Relative escape rejected");
+        Assert(!LanguageSourceRegistry.TryResolveSafePath(safeBase, @"D:\OtherDrive\file.xnb", out _), "Path Safety: Absolute path outside root rejected");
+
+        // C# Register / Unregister lifecycle & generation priority
+        var descUk1 = new LanguageSourceDescriptor
+        {
+            LanguageCode = "uk",
+            SourceModId = "Author1.UkrainianPack",
+            ContentRoot = @"Mods/UkrainianPack/assets",
+            AssetPattern = "{Asset}_uk.xnb"
+        };
+        changedFired = false;
+        var token = registry.Register(descUk1);
+        Assert(changedFired, "Registry Lifecycle: OnChanged fired on Register");
+        Assert(registry.TryGetSource("uk", out var regUk1) && regUk1?.SourceModId == "Author1.UkrainianPack", "Registry Lifecycle: Source registered for 'uk'");
+
+        var descUk2 = new LanguageSourceDescriptor
+        {
+            LanguageCode = "uk",
+            SourceModId = "Author2.UkrainianPackV2",
+            ContentRoot = @"Mods/UkrainianPackV2/assets",
+            AssetPattern = "{Asset}_uk2.xnb"
+        };
+        registry.Register(descUk2);
+        Assert(registry.TryGetSource("uk", out var regUk2) && regUk2?.SourceModId == "Author2.UkrainianPackV2", "Registry Precedence: Newer generation overrides older");
+
+        token.Dispose(); // Older token unregister
+        Assert(registry.TryGetSource("uk", out var stillUk2) && stillUk2?.SourceModId == "Author2.UkrainianPackV2", "Registry Lifecycle: Token disposal of older keeps active newer generation");
+
+        changedFired = false;
+        registry.Unregister("Author2.UkrainianPackV2");
+        Assert(changedFired, "Registry Lifecycle: OnChanged fired on Unregister");
+        Assert(!registry.TryGetSource("uk", out _), "Registry Lifecycle: Source removed after unregistering all mods for 'uk'");
+
+        // 8. Content Patcher Asset Schema Source Map & Stale Data Purge
+        var registryCP = new LanguageSourceRegistry();
+        bool cpChangedFired = false;
+        registryCP.OnChanged += () => cpChangedFired = true;
+
+        var cpDict = new Dictionary<string, LanguageSourceDescriptor>
+        {
+            ["uk"] = new LanguageSourceDescriptor
+            {
+                SourceModId = "Community.UkrainianCP",
+                ContentRoot = "Mods/UkrainianCP/assets",
+                AssetPattern = "assets/{Asset}_uk.xnb",
+                SmallFont = "assets/Fonts/SmallFont_uk.xnb",
+                DialogueFont = "assets/Fonts/SpriteFont1_uk.xnb",
+                Strings = new Dictionary<string, string>
+                {
+                    ["Strings/Objects:Honey_Wild_Name"] = "Дикий мед"
+                }
+            },
+            ["th"] = new LanguageSourceDescriptor
+            {
+                SourceModId = "Community.ThaiCP",
+                ContentRoot = "Mods/ThaiCP/assets",
+                AssetPattern = "assets/{Asset}_th.xnb",
+                Strings = new Dictionary<string, string>
+                {
+                    ["Strings/Objects:Honey_Wild_Name"] = "น้ำผึ้งป่า"
+                }
+            }
+        };
+
+        registryCP.LoadFromAssetDictionary(cpDict);
+        Assert(cpChangedFired, "CP Asset Schema: OnChanged fired on LoadFromAssetDictionary");
+        Assert(registryCP.TryGetSource("uk", out var descUkCP) && descUkCP?.SmallFont == "assets/Fonts/SmallFont_uk.xnb", "CP Asset Schema: uk source descriptor loaded with font refs");
+        Assert(registryCP.TryGetSource("th", out var descThCP) && descThCP?.Strings?["Strings/Objects:Honey_Wild_Name"] == "น้ำผึ้งป่า", "CP Asset Schema: th source descriptor loaded with strings map");
+
+        var dummyService = new DummyServiceProvider();
+        var rawUk = new RawContentProvider(() => dummyService, "C:\\GameContent", "uk", sourceRegistry: registryCP);
+        bool foundUk = rawUk.TryGetString("Strings/Objects", "Honey_Wild_Name", out string? ukHoney);
+        Assert(foundUk && ukHoney == "Дикий мед", "RawContentProvider: Resolves string from CP descriptor strings dictionary");
+
+        // Clear sources and verify stale data is purged
+        cpChangedFired = false;
+        registryCP.Clear();
+        Assert(cpChangedFired, "CP Asset Schema: OnChanged fired on Clear");
+        Assert(!registryCP.TryGetSource("uk", out _), "CP Asset Schema: No source found for 'uk' after Clear");
+
+        rawUk.Invalidate();
+        bool foundAfterPurge = rawUk.TryGetString("Strings/Objects", "Honey_Wild_Name", out _);
+        Assert(!foundAfterPurge, "RawContentProvider: Stale data purged after source removed and cache invalidated");
     }
 }

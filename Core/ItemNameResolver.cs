@@ -45,6 +45,8 @@ public sealed class ItemNameResolver : IDisposable
         _powerDataResolver = powerDataResolver;
         _externalRegistry = externalRegistry ?? new ExternalTranslationRegistry();
         _externalRegistry.OnChanged += InvalidateCache;
+        if (_contentProvider is RawContentProvider raw && raw.SourceRegistry != null)
+            raw.SourceRegistry.OnChanged += InvalidateCache;
     }
 
     /// <summary>
@@ -53,6 +55,8 @@ public sealed class ItemNameResolver : IDisposable
     public void Dispose()
     {
         _externalRegistry.OnChanged -= InvalidateCache;
+        if (_contentProvider is RawContentProvider raw && raw.SourceRegistry != null)
+            raw.SourceRegistry.OnChanged -= InvalidateCache;
         _cache.Clear();
     }
 
@@ -85,7 +89,7 @@ public sealed class ItemNameResolver : IDisposable
 
         // 1. External registered translations (Content Patcher or C# mods) have highest priority
         string? external = _externalRegistry.GetTranslation("Item", item.QualifiedItemId, EffectiveLanguage);
-        if (string.IsNullOrWhiteSpace(external) && !string.IsNullOrEmpty(item.ItemId))
+        if (string.IsNullOrWhiteSpace(external) && item.QualifiedItemId.StartsWith("(O)", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(item.ItemId))
         {
             external = _externalRegistry.GetTranslation("Item", item.ItemId, EffectiveLanguage);
         }
@@ -94,6 +98,9 @@ public sealed class ItemNameResolver : IDisposable
             _cache[key] = external;
             return external;
         }
+
+        if (!_contentProvider.IsSecondaryAvailable)
+            return null;
 
         string? resolved = ResolveItem(item);
         _cache[key] = resolved;
@@ -130,6 +137,9 @@ public sealed class ItemNameResolver : IDisposable
         var key = new ItemCacheKey(qualifiedId, null, null, null, upgradeLevel);
         if (_cache.TryGetValue(key, out string? cachedName))
             return cachedName;
+
+        if (!_contentProvider.IsSecondaryAvailable)
+            return null;
 
         ParsedItemData? data = ItemRegistry.GetData(qualifiedId);
         if (data != null)
@@ -191,6 +201,36 @@ public sealed class ItemNameResolver : IDisposable
             }
         }
 
+        if (itemId.StartsWith("(WP)", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_contentProvider.TryGetString("Strings/StringsFromCSFiles", "Wallpaper.cs.13204", out string? wpName) && !string.IsNullOrWhiteSpace(wpName))
+            {
+                _cache[key] = wpName;
+                return wpName;
+            }
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
+            {
+                _cache[key] = "Wallpaper";
+                return "Wallpaper";
+            }
+            return null;
+        }
+
+        if (itemId.StartsWith("(FL)", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_contentProvider.TryGetString("Strings/StringsFromCSFiles", "Wallpaper.cs.13203", out string? flName) && !string.IsNullOrWhiteSpace(flName))
+            {
+                _cache[key] = flName;
+                return flName;
+            }
+            if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
+            {
+                _cache[key] = "Flooring";
+                return "Flooring";
+            }
+            return null;
+        }
+
         return null;
     }
 
@@ -208,6 +248,13 @@ public sealed class ItemNameResolver : IDisposable
         string? external = _externalRegistry.GetTranslation("Power", trimmed, EffectiveLanguage);
         if (!string.IsNullOrWhiteSpace(external))
             return external;
+
+        if (!_contentProvider.IsSecondaryAvailable)
+            return null;
+
+        string? patchedTitle = GetPatchedDisplayName("Data/Powers", trimmed);
+        if (patchedTitle != null)
+            return patchedTitle;
 
         // 1. Check data resolver or IPowerDataProvider
         StardewValley.GameData.Powers.PowersData? powerData = _powerDataResolver != null
@@ -243,6 +290,13 @@ public sealed class ItemNameResolver : IDisposable
         if (profName == null)
             return null;
 
+        string? external = _externalRegistry.GetTranslation("Skill", profName, EffectiveLanguage);
+        if (!string.IsNullOrWhiteSpace(external))
+            return external;
+
+        if (!_contentProvider.IsSecondaryAvailable)
+            return null;
+
         if (_contentProvider.TryGetString("Strings/UI", $"LevelUp_ProfessionName_{profName}", out string? localizedTitle) && !string.IsNullOrWhiteSpace(localizedTitle))
             return localizedTitle;
 
@@ -257,12 +311,23 @@ public sealed class ItemNameResolver : IDisposable
     /// </summary>
     public string? GetSecondarySkillName(int skillIndex)
     {
+        string? skillDefault = SkillProfessionData.GetSkillDefaultName(skillIndex);
+        if (skillDefault != null)
+        {
+            string? external = _externalRegistry.GetTranslation("Skill", skillDefault, EffectiveLanguage);
+            if (!string.IsNullOrWhiteSpace(external))
+                return external;
+        }
+
+        if (!_contentProvider.IsSecondaryAvailable)
+            return null;
+
         string? key = SkillProfessionData.GetSkillStringKey(skillIndex);
         if (key != null && _contentProvider.TryGetString("Strings/StringsFromCSFiles", key, out string? localizedSkill) && !string.IsNullOrWhiteSpace(localizedSkill))
             return localizedSkill;
 
         if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage))
-            return SkillProfessionData.GetSkillDefaultName(skillIndex);
+            return skillDefault;
 
         return null;
     }
@@ -281,6 +346,9 @@ public sealed class ItemNameResolver : IDisposable
         string? external = _externalRegistry.GetTranslation("Achievement", trimmed, EffectiveLanguage);
         if (!string.IsNullOrWhiteSpace(external))
             return external;
+
+        if (!_contentProvider.IsSecondaryAvailable)
+            return null;
 
         if (_contentProvider.TryGetString("Data/Achievements", trimmed, out string? raw) && !string.IsNullOrWhiteSpace(raw))
         {
@@ -308,6 +376,9 @@ public sealed class ItemNameResolver : IDisposable
         if (!string.IsNullOrWhiteSpace(external))
             return external;
 
+        if (!_contentProvider.IsSecondaryAvailable)
+            return null;
+
         // 1. Live Data/mail from isolated secondary content provider
         if (_contentProvider.TryGetString("Data/mail", trimmed, out string? rawMail) && !string.IsNullOrEmpty(rawMail))
         {
@@ -333,6 +404,9 @@ public sealed class ItemNameResolver : IDisposable
         string? external = _externalRegistry.GetTranslation("SecretNote", noteIndex.ToString(), EffectiveLanguage);
         if (!string.IsNullOrWhiteSpace(external))
             return external;
+
+        if (!_contentProvider.IsSecondaryAvailable)
+            return null;
 
         const int journalIndex = 1000;
         if (noteIndex >= journalIndex)
@@ -366,6 +440,7 @@ public sealed class ItemNameResolver : IDisposable
         if (!string.IsNullOrWhiteSpace(external))
             return external;
 
+        if (!_contentProvider.IsSecondaryAvailable) return null;
         string? key = tabId switch
         {
             0 => "Collections_Shipped",
@@ -422,6 +497,8 @@ public sealed class ItemNameResolver : IDisposable
         if (!string.IsNullOrWhiteSpace(fromRegistry))
             return fromRegistry;
 
+        if (!_contentProvider.IsSecondaryAvailable) return null;
+
         // Fallback using Data/Objects directly when ItemRegistry is not initialized (e.g. offline tests or raw data)
         if (_contentProvider is RawContentProvider rawProvider && rawProvider.TryGetObjectData(unqualified, out StardewValley.GameData.Objects.ObjectData? objData) && objData != null)
         {
@@ -456,6 +533,15 @@ public sealed class ItemNameResolver : IDisposable
 
             if (LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) && IsUsableLiteralName(template))
                 return template;
+        }
+
+        // 0b. Wallpaper and Flooring
+        if (item is StardewValley.Objects.Wallpaper wp)
+        {
+            string key = wp.isFloor.Value ? "Wallpaper.cs.13203" : "Wallpaper.cs.13204";
+            if (_contentProvider.TryGetString("Strings/StringsFromCSFiles", key, out string? wpName) && !string.IsNullOrWhiteSpace(wpName))
+                return wpName;
+            return LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) ? (wp.isFloor.Value ? "Flooring" : "Wallpaper") : null;
         }
 
         // 1. In vanilla GetObjectDisplayName, displayNameFormat is prioritized over preserveType
@@ -495,6 +581,19 @@ public sealed class ItemNameResolver : IDisposable
     public string? ResolveFromParsedData(ParsedItemData data, int? upgradeLevel = null)
     {
         object? raw = data.RawData;
+        string? patchedAsset = data.ItemType.Identifier switch
+        {
+            "(O)" => "Data/Objects",
+            "(BC)" => "Data/BigCraftables",
+            "(W)" => "Data/Weapons",
+            "(T)" => "Data/Tools",
+            "(TR)" => "Data/Trinkets",
+            "(P)" => "Data/Pants",
+            "(S)" => "Data/Shirts",
+            _ => null
+        };
+        if (patchedAsset != null && GetPatchedDisplayName(patchedAsset, data.ItemId) is string patchedTitle)
+            return patchedTitle;
 
         // A. StardewValley.GameData.Objects.ObjectData
         if (raw is ObjectData objData)
@@ -714,10 +813,40 @@ public sealed class ItemNameResolver : IDisposable
         }
 
         // H. Mannequins (where RawData is null by game design)
-        if (data.ItemType.Identifier == "(M)" || data.QualifiedItemId.StartsWith("(M)"))
+        if (data.ItemType?.Identifier == "(M)" || data.QualifiedItemId.StartsWith("(M)"))
         {
             if (_contentProvider.TryGetString("Strings/1_6_Strings", $"{data.ItemId}_Name", out string? byId) && !string.IsNullOrEmpty(byId))
                 return byId;
+        }
+
+        // I. Wallpaper (where RawData is null by vanilla game design)
+        if (data.ItemType?.Identifier == ItemRegistry.type_wallpaper || data.QualifiedItemId.StartsWith("(WP)"))
+        {
+            if (data.RawData != null && TryParseLocalizedToken(data.DisplayName, out string tokenAsset, out string tokenKey))
+            {
+                if (_contentProvider.TryGetString(tokenAsset, tokenKey, out string? tokenVal) && !string.IsNullOrEmpty(tokenVal))
+                    return tokenVal;
+            }
+
+            if (_contentProvider.TryGetString("Strings/StringsFromCSFiles", "Wallpaper.cs.13204", out string? wpName) && !string.IsNullOrWhiteSpace(wpName))
+                return wpName;
+
+            return LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) ? "Wallpaper" : null;
+        }
+
+        // J. Flooring (where RawData is null by vanilla game design)
+        if (data.ItemType?.Identifier == ItemRegistry.type_floorpaper || data.QualifiedItemId.StartsWith("(FL)"))
+        {
+            if (data.RawData != null && TryParseLocalizedToken(data.DisplayName, out string tokenAsset, out string tokenKey))
+            {
+                if (_contentProvider.TryGetString(tokenAsset, tokenKey, out string? tokenVal) && !string.IsNullOrEmpty(tokenVal))
+                    return tokenVal;
+            }
+
+            if (_contentProvider.TryGetString("Strings/StringsFromCSFiles", "Wallpaper.cs.13203", out string? flName) && !string.IsNullOrWhiteSpace(flName))
+                return flName;
+
+            return LanguageHelper.IsBaseOrEnglish(_contentProvider.EffectiveLanguage) ? "Flooring" : null;
         }
 
         // I. Fallback: InternalName if secondary is English and InternalName is human-readable
@@ -858,6 +987,14 @@ public sealed class ItemNameResolver : IDisposable
         }
 
         return parsedFormat;
+    }
+
+    private string? GetPatchedDisplayName(string asset, string id)
+    {
+        if (_contentProvider is not RawContentProvider raw || raw.GetPatchedDisplayName(asset, id) is not string title)
+            return null;
+        string resolved = ResolveLocalizedTokens(title);
+        return string.IsNullOrWhiteSpace(resolved) || LocalizedTokenRegex.IsMatch(resolved) ? null : resolved;
     }
 
     private string ResolveLocalizedTokens(string text)

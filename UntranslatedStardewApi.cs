@@ -15,16 +15,19 @@ public sealed class UntranslatedStardewApi : IUntranslatedStardewApi
     private readonly Func<ItemNameResolver?> _getResolver;
     private readonly Func<ModConfig> _getConfig;
     private readonly Func<string, ItemNameResolver?>? _getResolverForLanguage;
+    private readonly Func<LanguageSourceRegistry?>? _getLanguageSourceRegistry;
     private readonly HashSet<string> _loggedErrors = new(StringComparer.OrdinalIgnoreCase);
 
     public UntranslatedStardewApi(
         Func<ItemNameResolver?> getResolver,
         Func<ModConfig> getConfig,
-        Func<string, ItemNameResolver?>? getResolverForLanguage = null)
+        Func<string, ItemNameResolver?>? getResolverForLanguage = null,
+        Func<LanguageSourceRegistry?>? getLanguageSourceRegistry = null)
     {
         _getResolver = getResolver ?? (() => null);
         _getConfig = getConfig ?? (() => new ModConfig());
         _getResolverForLanguage = getResolverForLanguage;
+        _getLanguageSourceRegistry = getLanguageSourceRegistry;
     }
 
     public (string? PrimaryName, string? SecondaryName) GetNames(Item? item)
@@ -204,6 +207,67 @@ public sealed class UntranslatedStardewApi : IUntranslatedStardewApi
         catch (Exception ex)
         {
             LogErrorOnce(sourceModId, $"Failed to unregister translations for mod '{sourceModId}': {ex.Message}");
+            return false;
+        }
+    }
+
+    public IDisposable RegisterLanguageSource(string sourceModId, string languageCode, string? contentRoot, string? assetPattern = null, string? smallFont = null, string? dialogueFont = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(sourceModId))
+                throw new ArgumentException("sourceModId cannot be null or empty.", nameof(sourceModId));
+            if (string.IsNullOrWhiteSpace(languageCode))
+                throw new ArgumentException("languageCode cannot be null or empty.", nameof(languageCode));
+
+            LanguageSourceRegistry? registry = _getLanguageSourceRegistry?.Invoke() ?? ModEntry.Instance?.SourceRegistry;
+            if (registry == null)
+                return new EmptyDisposable();
+
+            var desc = new LanguageSourceDescriptor
+            {
+                SourceModId = sourceModId,
+                LanguageCode = languageCode,
+                ContentRoot = contentRoot,
+                AssetPattern = assetPattern,
+                SmallFont = smallFont,
+                DialogueFont = dialogueFont
+            };
+
+            IDisposable token = registry.Register(desc);
+            _getResolver()?.Invalidate();
+            ModEntry.Instance?.FontManager?.Invalidate();
+            return token;
+        }
+        catch (Exception ex)
+        {
+            LogErrorOnce(sourceModId, $"Failed to register language source for mod '{sourceModId}': {ex.Message}");
+            return new EmptyDisposable();
+        }
+    }
+
+    public bool UnregisterLanguageSource(string sourceModId, string? languageCode = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(sourceModId))
+                return false;
+
+            LanguageSourceRegistry? registry = _getLanguageSourceRegistry?.Invoke() ?? ModEntry.Instance?.SourceRegistry;
+            if (registry == null)
+                return false;
+
+            bool removed = registry.Unregister(sourceModId, languageCode);
+            if (removed)
+            {
+                _getResolver()?.Invalidate();
+                ModEntry.Instance?.FontManager?.Invalidate();
+            }
+            return removed;
+        }
+        catch (Exception ex)
+        {
+            LogErrorOnce(sourceModId, $"Failed to unregister language source for mod '{sourceModId}': {ex.Message}");
             return false;
         }
     }

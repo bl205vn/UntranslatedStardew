@@ -76,4 +76,25 @@ public interface IUntranslatedStardewApi
     /// <param name="sourceModId">The unique ID of the mod to unregister.</param>
     /// <returns>True if translations were found and removed; otherwise false.</returns>
     bool UnregisterTranslations(string sourceModId);
+
+    /// <summary>
+    /// Registers a custom language content source descriptor provided by another C# mod.
+    /// Returns an IDisposable token that unregisters the source when disposed.
+    /// </summary>
+    /// <param name="sourceModId">The unique ID of the mod providing the language source.</param>
+    /// <param name="languageCode">The target language code (e.g. "vi", "eo", "tl").</param>
+    /// <param name="contentRoot">Validated path to the mod's Content folder.</param>
+    /// <param name="assetPattern">Asset mapping pattern (e.g. "{asset}_vi" or "{asset}.{locale}").</param>
+    /// <param name="smallFont">Secondary SmallFont asset name (e.g. "Fonts/SmallFont_vi").</param>
+    /// <param name="dialogueFont">Secondary DialogueFont asset name (e.g. "Fonts/SpriteFont1_vi").</param>
+    /// <returns>An IDisposable token to safely unregister the source.</returns>
+    IDisposable RegisterLanguageSource(string sourceModId, string languageCode, string? contentRoot, string? assetPattern = null, string? smallFont = null, string? dialogueFont = null);
+
+    /// <summary>
+    /// Unregisters language source(s) registered by a given mod ID.
+    /// </summary>
+    /// <param name="sourceModId">The unique ID of the mod to unregister.</param>
+    /// <param name="languageCode">Optional specific language code to unregister.</param>
+    /// <returns>True if sources were found and removed; otherwise false.</returns>
+    bool UnregisterLanguageSource(string sourceModId, string? languageCode = null);
 }

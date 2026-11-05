@@ -1,10 +1,32 @@
 # Untranslated Stardew
 
-Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển thị tên vật phẩm và giao diện song ngữ trong bảng thông tin (tooltip), menu kỹ năng, menu thăng cấp nghề, tab quyền hạn, bộ sưu tập (bao gồm tiêu đề thư từ, ghi chú bí ẩn và tab bên lề), đồng thời hỗ trợ nạp tên song ngữ từ các mod Content Patcher / C# bên thứ ba, cung cấp API tra cứu tên đa ngôn ngữ và tìm kiếm không dấu (chuẩn hóa tiếng Việt `đ`/`Đ`).
+Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển thị tên vật phẩm và giao diện song ngữ trong bảng thông tin (tooltip), menu kỹ năng, menu thăng cấp nghề, tab quyền hạn, bộ sưu tập (bao gồm tiêu đề thư từ, ghi chú bí ẩn và tab bên lề), hỗ trợ font theo vai trò cố định (Fixed Role Fonts) cho mọi ngôn ngữ game và ngôn ngữ tùy chỉnh, xử lý đầy đủ các loại vật phẩm bao gồm giấy dán tường và sàn nhà, đồng thời hỗ trợ nạp nguồn ngôn ngữ và tên song ngữ từ các mod Content Patcher / C# bên thứ ba, cung cấp API tra cứu tên đa ngôn ngữ và tìm kiếm không dấu (chuẩn hóa tiếng Việt `đ`/`Đ`).
+
+Chi tiết hợp đồng custom language, giới hạn font và cách kiểm tra: [Font theo vai trò 1.3.0](docs/LOCALE-ROLE-FONTS-1.3.0.md). Custom pack khác Việt hóa cần khai báo nguồn; hỗ trợ không đồng nghĩa tự nhận mọi định dạng pack.
 
 ---
 
 ## 1. Tính năng chính (Features)
+
+- **Font Theo Vai Trò Cố Định (Fixed Role Fonts):**
+  - **Phân định vai trò cứng (Strict Role Binding):** Đoạn chữ thuộc ngôn ngữ chính luôn dùng font chính (`Game1.dialogueFont`, `Game1.smallFont`); đoạn chữ thuộc ngôn ngữ phụ luôn dùng font phụ (nạp từ XNB của locale tương ứng hoặc nguồn tùy chỉnh), kể cả đối với các từ thuần ASCII hoặc không dấu. Không còn chọn font chính chỉ vì font chính cũng chứa ký tự của tên phụ. Nếu font vai trò thiếu glyph/tài nguyên, vẫn có dự phòng và cảnh báo.
+  - **Bất biến vai trò khi đổi vị trí (`SecondaryFirst` Invariance):** Khi bật tùy chọn `SecondaryFirst = true`, mod hoán đổi vị trí hiển thị (ngôn ngữ phụ ở trên, ngôn ngữ chính ở dưới) nhưng giữ liên kết font - vai trò; đoạn phụ vẫn dùng font phụ, đoạn chính vẫn dùng font chính.
+  - **Cấu trúc thành phần văn bản (`StructuredTextComposition`):** Mọi chuỗi song ngữ đều được gắn kèm siêu dữ liệu vai trò rõ ràng, duy trì qua quá trình ngắt dòng (`line wrapping`), tính toán kích thước (`MeasureString`), và vẽ (`DrawString`).
+  - **Hỗ trợ đầy đủ 12 ngôn ngữ game:** `en` (default), `es`, `de`, `fr`, `pt`, `ru`, `ja`, `zh`, `ko` (+16px line spacing), `it` (fallback font gốc), `tr` (+4px line spacing), `hu`.
+
+- **Hiển thị Song ngữ Giấy dán tường & Sàn nhà (`Wallpaper & Flooring`):**
+  - Khắc phục lỗi thiếu tên song ngữ cho các vật phẩm Giấy dán tường `(WP)` và Sàn nhà `(FL)` do game vanilla thiết kế `WallpaperDataDefinition` và `FlooringDataDefinition` trả về `RawData = null`.
+  - Phân giải chuẩn xác qua các khóa chuỗi chia sẻ `Wallpaper.cs.13204` (Wallpaper) và `Wallpaper.cs.13203` (Flooring) trong `Strings/StringsFromCSFiles` cho mọi ngôn ngữ hỗ trợ.
+  - Hỗ trợ đầy đủ **toàn bộ 13 tiền tố loại định danh vật phẩm**: `(O)`, `(BC)`, `(B)`, `(FL)`, `(F)`, `(H)`, `(M)`, `(P)`, `(S)`, `(T)`, `(TR)`, `(WP)`, `(W)`.
+  - Lưu trữ cache độc lập theo Qualified Item ID, bảo đảm các mẫu khác ID nhưng cùng tên hiển thị (như các loại giấy dán tường) không bị ghi đè hoặc đánh rơi bản ghi.
+
+- **Cơ chế Nguồn Ngôn ngữ Tùy chỉnh Tổng quát (Generic Language Sources):**
+  - Đọc descriptor tường minh từ CP/API hoặc CustomFields của `Data/AdditionalLanguages`; không tự suy luận font/asset của mọi pack.
+  - Cung cấp asset từ điển SMAPI mở `Mods/GiaHung.UntranslatedStardew/LanguageSources` để các tác giả gói Content Patcher khai báo nguồn chuỗi (`Strings`), tệp font (`SmallFont`, `DialogueFont`), mẫu tài nguyên (`AssetPattern`) và thư mục gốc (`ContentRoot`).
+  - Cung cấp C# API `RegisterLanguageSource` và `UnregisterLanguageSource` trong `IUntranslatedStardewApi` cho các mod C#.
+  - Kiểm tra asset không dùng `..` thoát ContentRoot; không xem đây là sandbox chống junction/symlink.
+  - Khai báo bộ nạp tương thích ngược (bundled descriptor) cho bản dịch tiếng Việt `Kou.ViethoaSV` mà không cần người dùng sửa gói pack cũ.
+  - Cảnh báo khi thiếu nguồn custom/font/glyph; tên hai ngôn ngữ giống nhau chỉ hiển thị một lần.
 
 - **Mở rộng Giao diện Song ngữ (UI Expansion):**
   - **Bảng Kỹ năng (`SkillsPage`)**: Hiển thị tên kỹ năng (Trồng trọt, Câu cá, Hái lượm, Khai khoáng, Chiến đấu, May mắn) và tên nghề nghiệp cấp 5 / 10 ở dạng song ngữ khi rà chuột (hover). Giữ nguyên mô tả tăng chỉ số theo ngôn ngữ chính.
@@ -91,7 +113,7 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
 
 ### Cài đặt:
 1. Tải bản build đóng gói tại:  
-   `bin/Release/net6.0/UntranslatedStardew 1.2.2.zip`
+   `bin/Release/net6.0/UntranslatedStardew 1.3.0.zip`
 2. Giải nén thư mục `UntranslatedStardew` vào thư mục `Mods/` của game:  
    `Stardew Valley/Mods/UntranslatedStardew/`
 3. Cấu trúc thư mục mod:
@@ -291,10 +313,32 @@ Bộ kiểm thử gồm **668 ca kiểm tra** đã qua toàn diện, gồm kiể
 24. `Bilingual Run Planner & Metrics`: Kiểm tra phân đoạn văn bản theo font runs, ưu tiên vẽ cả dòng từ cùng một phông để bảo toàn baseline dấu, kiểm tra chuẩn hóa NFC từ input phân rã NFD, tính toán chiều cao dòng cực đại (`per-line max height`), và hoán đổi thứ tự `SecondaryFirst`.
 25. `Bilingual Font Manager & Diagnostic Lifecycle`: Kiểm tra cảnh báo ký tự không được hỗ trợ phát ra duy nhất 1 lần, làm mới bộ nhớ cache và giải phóng ContentManager độc lập.
 26. `Harmony Interception & Recursion Guards`: Kiểm tra bảo vệ phạm vi scoped (chỉ can thiệp khi `BilingualRenderScope.IsActive == true`), chống đệ quy vô hạn khi vẽ và đo đạc, passthrough an toàn cho các chuỗi thuần ASCII.
+27. `Fixed Role Fonts, Multi-Locale Surfaces & Generic Language Sources (v1.3.0)`: Kiểm tra độ phủ phân giải Giấy dán tường `(WP)` và Sàn nhà `(FL)` trên toàn bộ 12 ngôn ngữ game và gói Việt hóa, kiểm tra lưu trữ cache phân biệt giữa các item ID cùng tên hiển thị, kiểm tra phân định font theo vai trò cố định với 2 phông giả lập cùng chứa mã ASCII (đoạn phụ bắt buộc dùng phông phụ, không bị phông chính nuốt chửng), kiểm tra bất biến vai trò khi đổi vị trí `SecondaryFirst`, kiểm tra siêu dữ liệu vai trò xuyên suốt dòng ngắt và thân mô tả, kiểm tra pipeline Harmony thực tế bắt lệnh vẽ headless không cần GPU, kiểm tra an ninh chặn thoát đường dẫn `../` và vòng đời C# register/unregister của `LanguageSourceRegistry`, nạp cấu trúc Content Patcher từ điển `LanguageSources` và xóa sạch dữ liệu đệm cũ.
 
 ---
 
 ## 8. Nhật ký thay đổi (Changelog)
+
+### v1.3.0
+- **Font Theo Vai Trò Cố Định (Fixed Role Fonts):**
+  - **Phân định vai trò cứng (Strict Role Binding):** Loại bỏ cơ chế chọn font phụ thuộc đơn thuần vào việc thiếu glyph. Đoạn chữ thuộc vai trò chính luôn luôn dùng font chính (`Game1.dialogueFont`, `Game1.smallFont`); đoạn chữ thuộc vai trò phụ luôn luôn dùng font phụ, kể cả khi từ đó thuần ASCII và font chính cũng có thể vẽ được.
+  - **Bảo toàn liên kết font - vai trò khi `SecondaryFirst`:** Đổi thứ tự hiển thị chỉ hoán đổi vị trí dòng (dòng phụ nằm trên, dòng chính nằm dưới), tuyệt đối không đảo lộn liên kết giữa đoạn chữ và font tương ứng.
+  - **Cấu trúc thành phần văn bản (`StructuredTextComposition` & `RoleSpan`):** Siêu dữ liệu vai trò được truyền xuyên suốt quá trình ngắt dòng của game, tính toán kích thước và vẽ chuỗi.
+  - **Hỗ trợ đầy đủ font của 12 ngôn ngữ tích hợp trong game:** `en` (default), `es`, `de`, `fr`, `pt`, `ru`, `ja`, `zh`, `ko` (+16px line spacing), `it` (fallback font gốc), `tr` (+4px line spacing), `hu`.
+- **Hiển thị Song ngữ Giấy dán tường & Sàn nhà (`Wallpaper & Flooring`):**
+  - Khắc phục triệt để lỗi thiếu tên song ngữ ở Giấy dán tường `(WP)` và Sàn nhà `(FL)` do vanilla Stardew trả về `RawData = null`.
+  - Phân giải trực tiếp qua các khóa chuỗi chia sẻ `Wallpaper.cs.13204` ("Wallpaper") và `Wallpaper.cs.13203` ("Flooring") trong `Strings/StringsFromCSFiles` cho mọi ngôn ngữ.
+  - Hỗ trợ đầy đủ **13 tiền tố loại định danh vật phẩm**: `(O)`, `(BC)`, `(B)`, `(FL)`, `(F)`, `(H)`, `(M)`, `(P)`, `(S)`, `(T)`, `(TR)`, `(WP)`, `(W)`.
+  - Phân tách độc lập các khóa cache theo Qualified Item ID, bảo đảm các mẫu khác ID nhưng trùng tên hiển thị không ghi đè lẫn nhau.
+- **Cơ chế Nguồn Ngôn ngữ Tùy chỉnh Tổng quát (Generic Language Sources):**
+  - Đọc nguồn custom có CustomFields tường minh trong `Data/AdditionalLanguages`, hoặc đăng ký qua CP/API.
+  - Cung cấp asset từ điển SMAPI `Mods/GiaHung.UntranslatedStardew/LanguageSources` cho phép các gói Content Patcher khai báo nguồn chuỗi, font và mẫu asset.
+  - Cung cấp C# API `RegisterLanguageSource` và `UnregisterLanguageSource` trên `IUntranslatedStardewApi`.
+  - Kiểm tra đường dẫn asset nằm trong ContentRoot đã khai báo.
+  - Tự động làm mới cache và xóa sạch dữ liệu đệm cũ khi nguồn bị hủy đăng ký.
+  - Đóng gói sẵn descriptor tương thích ngược cho mod tiếng Việt `Kou.ViethoaSV`.
+  - Ghi cảnh báo khi thiếu nguồn/font/glyph; không sinh bản dịch cho nội dung chưa có nguồn.
+- **Bộ Kiểm thử Tự động:** Mở rộng lên **885 assertions hồi quy đạt**, gồm XNB thực, Harmony headless và vòng đời nguồn custom. Chưa xác minh trực quan trong game.
 
 ### v1.2.2
 - **Khắc phục lỗi phông chữ giao diện thiếu ký tự (UI Missing Glyphs Bug Fix):**

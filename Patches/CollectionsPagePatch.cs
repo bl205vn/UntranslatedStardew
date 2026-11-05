@@ -55,15 +55,22 @@ internal static class CollectionsPagePatch
                             // Text note: title + delimiter + body
                             string primaryTitle = __result.Substring(0, delimIdx);
                             string remainder = __result.Substring(delimIdx + delimiter.Length);
-                            string formattedTitle = TooltipFormatter.FormatTitle(primaryTitle, primaryTitle, secondaryTitle, secondaryFirst);
-                            __result = $"{formattedTitle}{delimiter}{remainder}";
-                            BilingualStringTracker.Register(__result);
+                            if (string.Equals(primaryTitle.Trim(), secondaryTitle.Trim(), StringComparison.OrdinalIgnoreCase)) return;
+                            StructuredTextComposition noteComp = StructuredTextComposition.CreateBilingual(
+                                primaryChunk: primaryTitle,
+                                secondaryChunk: secondaryTitle,
+                                secondaryFirst: secondaryFirst,
+                                delimiter: "\n",
+                                body: remainder,
+                                bodyDelimiter: delimiter
+                            );
+                            BilingualStringTracker.RegisterComposition(noteComp);
+                            __result = noteComp.FullText;
                         }
                         else
                         {
                             // Image note: title only, no body
                             __result = TooltipFormatter.FormatTitle(__result, __result, secondaryTitle, secondaryFirst);
-                            BilingualStringTracker.Register(__result);
                         }
                     }
                 }
@@ -100,9 +107,19 @@ internal static class CollectionsPagePatch
             if (string.IsNullOrWhiteSpace(secondaryItemTitle))
                 return;
 
-            string formattedItemTitle = TooltipFormatter.FormatTitle(primaryTitleItem, primaryTitleItem, secondaryItemTitle, secondaryFirst);
-            __result = $"{formattedItemTitle}{doubleNewline}{remainderItem}";
-            BilingualStringTracker.Register(__result);
+            if (!string.Equals(primaryTitleItem.Trim(), secondaryItemTitle.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                StructuredTextComposition itemComp = StructuredTextComposition.CreateBilingual(
+                    primaryChunk: primaryTitleItem,
+                    secondaryChunk: secondaryItemTitle,
+                    secondaryFirst: secondaryFirst,
+                    delimiter: "\n",
+                    body: remainderItem,
+                    bodyDelimiter: doubleNewline
+                );
+                BilingualStringTracker.RegisterComposition(itemComp);
+                __result = itemComp.FullText;
+            }
         }
         catch (Exception ex)
         {

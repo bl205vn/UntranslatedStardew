@@ -48,12 +48,16 @@ internal static class CollectionsPageHoverPatch
                         {
                             using (BilingualRenderScope.Begin())
                             {
-                                string parsedPrimary = Game1.parseText(c.hoverText, Game1.smallFont, 256);
-                                string parsedSecondary = Game1.parseText(secTabName, Game1.smallFont, 256);
-                                ___hoverText = secondaryFirst
-                                    ? $"{parsedSecondary}\n{parsedPrimary}"
-                                    : $"{parsedPrimary}\n{parsedSecondary}";
-                                BilingualStringTracker.Register(___hoverText);
+                                string parsedPrimary = RoleTextWrapper.WrapForRole(c.hoverText, Game1.smallFont, 256, FontRole.Primary);
+                                string parsedSecondary = RoleTextWrapper.WrapForRole(secTabName, Game1.smallFont, 256, FontRole.Secondary);
+                                StructuredTextComposition tabComp = StructuredTextComposition.CreateBilingual(
+                                    primaryChunk: parsedPrimary,
+                                    secondaryChunk: parsedSecondary,
+                                    secondaryFirst: secondaryFirst,
+                                    delimiter: "\n"
+                                );
+                                BilingualStringTracker.RegisterComposition(tabComp);
+                                ___hoverText = tabComp.FullText;
                             }
                         }
                         return;
@@ -87,17 +91,20 @@ internal static class CollectionsPageHoverPatch
                                             string? secTitle = resolver.GetSecondaryMailTitle(mailId);
                                             if (!string.IsNullOrWhiteSpace(secTitle) && !string.Equals(primaryTitle.Trim(), secTitle.Trim(), StringComparison.OrdinalIgnoreCase))
                                             {
-                                                // Parse primary and secondary sections independently to 256px
-                                                // so native wrapping of long primary titles cannot suppress the secondary title
-                                                using (BilingualRenderScope.Begin())
-                                                {
-                                                    string parsedPrimary = Game1.parseText(primaryTitle, Game1.smallFont, 256);
-                                                    string parsedSecondary = Game1.parseText(secTitle, Game1.smallFont, 256);
-                                                    ___hoverText = secondaryFirst
-                                                        ? $"{parsedSecondary}\n{parsedPrimary}"
-                                                        : $"{parsedPrimary}\n{parsedSecondary}";
-                                                    BilingualStringTracker.Register(___hoverText);
-                                                }
+                                                // Parse primary and secondary sections independently to 256px using explicit role scopes
+                                                // so line wrapping accurately measures against the corresponding role font metrics
+                                                string parsedPrimary = RoleTextWrapper.WrapForRole(primaryTitle, Game1.smallFont, 256, FontRole.Primary);
+
+                                                string parsedSecondary = RoleTextWrapper.WrapForRole(secTitle, Game1.smallFont, 256, FontRole.Secondary);
+
+                                                StructuredTextComposition mailComp = StructuredTextComposition.CreateBilingual(
+                                                    primaryChunk: parsedPrimary,
+                                                    secondaryChunk: parsedSecondary,
+                                                    secondaryFirst: secondaryFirst,
+                                                    delimiter: "\n"
+                                                );
+                                                BilingualStringTracker.RegisterComposition(mailComp);
+                                                ___hoverText = mailComp.FullText;
                                             }
                                         }
                                     }

@@ -212,6 +212,11 @@ public sealed class ExternalTranslationRegistry
         return null;
     }
 
+    public static readonly string[] KnownQualifiers =
+    {
+        "(O)", "(BC)", "(B)", "(FL)", "(F)", "(H)", "(M)", "(P)", "(S)", "(T)", "(TR)", "(WP)", "(W)"
+    };
+
     private static string? TryLookupInDict(Dictionary<string, string> dict, string category, string id, string targetLanguage)
     {
         if (dict.Count == 0)
@@ -245,36 +250,51 @@ public sealed class ExternalTranslationRegistry
                 }
             }
 
-            // For items, also allow qualified/unqualified variations (e.g. (W), (O), (BC), (B), (H), (TR))
+            // For items, allow qualified/unqualified variations for standard objects without cross-type alias collisions.
+            // Specifically, (WP) and (FL) IDs must never alias to/from unqualified object IDs.
             if (category.Equals("Item", StringComparison.OrdinalIgnoreCase))
             {
                 if (id.StartsWith("(") && id.IndexOf(')') > 0)
                 {
+                    string prefix = id.Substring(0, id.IndexOf(')') + 1);
                     string unq = id.Substring(id.IndexOf(')') + 1);
-                    if (dict.TryGetValue($"Item/{unq}@{lang}", out val) && !string.IsNullOrWhiteSpace(val))
-                        return val.Trim();
 
-                    if (lang.Equals("default", StringComparison.OrdinalIgnoreCase))
+                    // Only allow unqualified alias if prefix is "(O)" (standard objects)
+                    // (WP), (FL), (BC), (B), (W), etc. MUST NOT alias to unqualified "0", "1", etc.
+                    if (!prefix.Equals("(WP)", StringComparison.OrdinalIgnoreCase) && !prefix.Equals("(FL)", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (dict.TryGetValue($"Item/{unq}", out val) && !string.IsNullOrWhiteSpace(val))
+                        if (dict.TryGetValue($"Item/{unq}@{lang}", out val) && !string.IsNullOrWhiteSpace(val))
                             return val.Trim();
-                    }
-                }
-                else
-                {
-                    // Caller passed unqualified ID; check common qualifiers
-                    string[] qualifiers = { "(O)", "(W)", "(BC)", "(B)", "(H)", "(TR)" };
-                    foreach (string q in qualifiers)
-                    {
-                        if (dict.TryGetValue($"Item/{q}{id}@{lang}", out val) && !string.IsNullOrWhiteSpace(val))
+
+                        if (dict.TryGetValue($"Item:{unq}@{lang}", out val) && !string.IsNullOrWhiteSpace(val))
                             return val.Trim();
 
                         if (lang.Equals("default", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (dict.TryGetValue($"Item/{q}{id}", out val) && !string.IsNullOrWhiteSpace(val))
+                            if (dict.TryGetValue($"Item/{unq}", out val) && !string.IsNullOrWhiteSpace(val))
+                                return val.Trim();
+
+                            if (dict.TryGetValue($"Item:{unq}", out val) && !string.IsNullOrWhiteSpace(val))
                                 return val.Trim();
                         }
                     }
+                }
+                else
+                {
+                    string? match = null;
+                    foreach (string q in KnownQualifiers)
+                    {
+                        if (q == "(WP)" || q == "(FL)") continue;
+                        string? candidate = null;
+                        if (dict.TryGetValue($"Item/{q}{id}@{lang}", out val) || dict.TryGetValue($"Item:{q}{id}@{lang}", out val)) candidate = val;
+                        if (string.IsNullOrWhiteSpace(candidate) && lang.Equals("default", StringComparison.OrdinalIgnoreCase)
+                            && (dict.TryGetValue($"Item/{q}{id}", out val) || dict.TryGetValue($"Item:{q}{id}", out val))) candidate = val;
+                        if (string.IsNullOrWhiteSpace(candidate)) continue;
+                        if (q == "(O)") return candidate.Trim();
+                        if (match != null) return null; // ambiguous legacy ID: require qualification
+                        match = candidate.Trim();
+                    }
+                    if (match != null) return match;
                 }
             }
         }

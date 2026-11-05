@@ -20,6 +20,7 @@ public sealed class ModEntry : Mod
     public ModConfig Config { get; private set; } = null!;
     public ItemNameResolver? Resolver => _nameResolver;
     public BilingualFontManager? FontManager => _fontManager;
+    public LanguageSourceRegistry SourceRegistry { get; } = new();
 
     private Harmony? _harmony;
     private RawContentProvider? _contentProvider;
@@ -42,8 +43,26 @@ public sealed class ModEntry : Mod
             Config.SecondaryLanguage = "default";
         }
 
+        // DirectoryPath is concrete SMAPI metadata, not part of IModInfo; fail closed if unavailable.
+        SourceRegistry.ModDirectoryResolver = sourceId =>
+        {
+            try
+            {
+                IModInfo? info = Helper.ModRegistry.Get(sourceId);
+                return info?.GetType().GetProperty("DirectoryPath")?.GetValue(info) as string;
+            }
+            catch { return null; }
+        };
+        // Initialize language source registry and bundled compatibility descriptor
+        SourceRegistry.OnChanged += () =>
+        {
+            _nameResolver?.Invalidate();
+            _fontManager?.Invalidate();
+            ClearLanguageResolvers();
+        };
+
         // Initialize stable API referencing resolver dynamically
-        _api = new UntranslatedStardewApi(() => _nameResolver, () => Config, GetResolverForLanguage);
+        _api = new UntranslatedStardewApi(() => _nameResolver, () => Config, GetResolverForLanguage, () => SourceRegistry);
 
         // Build initial resolver with lazy service provider
         InitializeResolver();
@@ -102,6 +121,8 @@ public sealed class ModEntry : Mod
         // Re-initialize to ensure ServiceProvider is bound once game content pipeline is live
         InitializeResolver();
         ReloadCpTranslations();
+        ReloadLanguageSources();
+        DiscoverAdditionalLanguages();
 
         RegisterGenericModConfigMenu();
 
@@ -124,6 +145,10 @@ public sealed class ModEntry : Mod
         {
             e.LoadFrom(() => new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), AssetLoadPriority.Exclusive);
         }
+        else if (e.NameWithoutLocale.IsEquivalentTo("Mods/GiaHung.UntranslatedStardew/LanguageSources"))
+        {
+            e.LoadFrom(() => new System.Collections.Generic.Dictionary<string, LanguageSourceDescriptor>(StringComparer.OrdinalIgnoreCase), AssetLoadPriority.Exclusive);
+        }
     }
 
     private void OnAssetsInvalidated(object? sender, AssetsInvalidatedEventArgs e)
@@ -131,6 +156,16 @@ public sealed class ModEntry : Mod
         if (e.NamesWithoutLocale.Any(name => name.IsEquivalentTo("Mods/GiaHung.UntranslatedStardew/Names")))
         {
             ReloadCpTranslations();
+            _nameResolver?.Invalidate();
+            _fontManager?.Invalidate();
+            ClearLanguageResolvers();
+            // A CP reload can invalidate both Names and LanguageSources in the same batch.
+        }
+
+        if (e.NamesWithoutLocale.Any(name => name.IsEquivalentTo("Mods/GiaHung.UntranslatedStardew/LanguageSources") || name.IsEquivalentTo("Data/AdditionalLanguages")))
+        {
+            ReloadLanguageSources();
+            DiscoverAdditionalLanguages();
             _nameResolver?.Invalidate();
             _fontManager?.Invalidate();
             ClearLanguageResolvers();
@@ -191,6 +226,73 @@ public sealed class ModEntry : Mod
         }
     }
 
+    private void ReloadLanguageSources()
+    {
+        if (Game1.content != null)
+        {
+            try
+            {
+                var sourcesDict = Game1.content.Load<System.Collections.Generic.Dictionary<string, LanguageSourceDescriptor>>("Mods/GiaHung.UntranslatedStardew/LanguageSources");
+                if (sourcesDict != null)
+                {
+                    SourceRegistry.LoadFromAssetDictionary(sourcesDict);
+                }
+            }
+            catch (Exception)
+            {
+                // Asset might not be ready yet
+            }
+        }
+    }
+
+    private void DiscoverAdditionalLanguages()
+    {
+        if (Game1.content == null) return;
+        try
+        {
+            var descriptors = new System.Collections.Generic.List<LanguageSourceDescriptor>();
+            var packs = Helper.ModRegistry.GetAll()
+                .Where(info => string.Equals(info.Manifest.ContentPackFor?.UniqueID, "Pathoschild.ContentPatcher", StringComparison.OrdinalIgnoreCase))
+                .Select(info => (Id: info.Manifest.UniqueID, Directory: SourceRegistry.ModDirectoryResolver?.Invoke(info.Manifest.UniqueID)))
+                .Where(pack => pack.Directory != null)
+                .Select(pack => (pack.Id, pack.Directory!))
+                .ToArray();
+            foreach (var language in DataLoader.AdditionalLanguages(Game1.content))
+            {
+                if (language == null || string.IsNullOrWhiteSpace(language.LanguageCode)) continue;
+                var fields = language.CustomFields ?? new System.Collections.Generic.Dictionary<string, string>();
+                fields.TryGetValue("UntranslatedStardew.SourceModId", out string? owner);
+                bool detected = string.IsNullOrWhiteSpace(owner);
+                var reader = new CustomLanguagePackReader(language.LanguageCode, Game1.content.ServiceProvider,
+                    message => Monitor.Log(message, LogLevel.Trace));
+                var strings = reader.Read(packs);
+                fields.TryGetValue("UntranslatedStardew.ContentRoot", out string? root);
+                fields.TryGetValue("UntranslatedStardew.AssetPattern", out string? pattern);
+                fields.TryGetValue("UntranslatedStardew.SmallFont", out string? small);
+                fields.TryGetValue("UntranslatedStardew.DialogueFont", out string? dialogue);
+                descriptors.Add(new LanguageSourceDescriptor
+                {
+                    SourceModId = detected ? ModManifest.UniqueID : owner!,
+                    LanguageCode = language.LanguageCode,
+                    ContentRoot = root,
+                    AssetPattern = pattern,
+                    SmallFont = small,
+                    DialogueFont = dialogue,
+                    CustomFields = fields,
+                    Strings = strings,
+                    SpriteFontAssets = reader.SpriteFontAssets,
+                    BitmapFontAsset = language.UseLatinFont ? null : language.FontFile,
+                    BitmapFontZoom = language.FontPixelZoom,
+                    UseGameLatinFont = language.UseLatinFont,
+                    GameSmallFontLineSpacing = language.SmallFontLineSpacing,
+                    DetectedFromGame = detected
+                });
+            }
+            SourceRegistry.LoadFromAdditionalLanguages(descriptors);
+        }
+        catch (Exception ex) { Monitor.Log($"Could not reload custom language descriptors: {ex.Message}", LogLevel.Trace); }
+    }
+
     private void OnAuditCommand(string command, string[] args)
     {
         if (_nameResolver == null)
@@ -203,6 +305,13 @@ public sealed class ModEntry : Mod
         string secondaryLang = _nameResolver.EffectiveLanguage;
 
         Monitor.Log($"=== Untranslated Stardew Coverage Audit (Secondary: {secondaryLang}) ===", LogLevel.Info);
+
+        bool sourceConfigured = _contentProvider != null && _contentProvider.EffectiveLanguage.Equals(LanguageHelper.CanonicalizeLanguageCode(Config.SecondaryLanguage), StringComparison.OrdinalIgnoreCase);
+        bool smallFontAvailable = Game1.smallFont != null && _fontManager?.GetSecondaryFont(Game1.smallFont) != null;
+        bool dialogueFontAvailable = Game1.dialogueFont != null && _fontManager?.GetSecondaryFont(Game1.dialogueFont) != null;
+
+        Monitor.Log($"Language Source: {(sourceConfigured ? "Registered & Active" : $"Unregistered or Missing for '{Config.SecondaryLanguage}' (effective: {_contentProvider?.EffectiveLanguage})")}", LogLevel.Info);
+        Monitor.Log($"Secondary Fonts: SmallFont: {(smallFontAvailable ? "Available" : "Unavailable (primary fallback)")} | DialogueFont: {(dialogueFontAvailable ? "Available" : "Unavailable (primary fallback)")}", LogLevel.Info);
 
         int totalItems = 0;
         int totalResolved = 0;
@@ -339,25 +448,24 @@ public sealed class ModEntry : Mod
         _fontManager?.Dispose();
 
         string gameContentRoot = Path.Combine(Constants.GamePath, "Content");
-        string? modContentRoot = DiscoverVietnamesePackContentPath();
 
         RawContentProvider contentProvider = new(
             () => Game1.content?.ServiceProvider,
             gameContentRoot,
             Config.SecondaryLanguage,
-            modContentRoot,
-            (requested, fallback) => Monitor.Log(I18n.Log_SecondaryFallback(requested, fallback), LogLevel.Warn)
+            onFallbackWarning: (requested, fallback) => Monitor.Log(I18n.Log_SecondaryFallback(requested, fallback), LogLevel.Warn),
+            sourceRegistry: SourceRegistry
         );
         _contentProvider = contentProvider;
 
-        string effectiveLang = contentProvider.EffectiveLanguage;
         _fontManager = new BilingualFontManager(
             () => Game1.content?.ServiceProvider,
             gameContentRoot,
-            modContentRoot,
-            effectiveLang,
+            null,
+            Config.SecondaryLanguage,
             (glyph, source, lang) => Monitor.Log(I18n.Log_MissingGlyph(glyph, ((int)glyph).ToString("X4"), source, lang), LogLevel.Warn),
-            diagnostic => Monitor.Log(diagnostic, LogLevel.Warn)
+            diagnostic => Monitor.Log(diagnostic, LogLevel.Warn),
+            SourceRegistry
         );
 
         ExternalTranslationRegistry externalRegistry = _nameResolver?.ExternalRegistry ?? new ExternalTranslationRegistry();
@@ -377,13 +485,12 @@ public sealed class ModEntry : Mod
         var pair = _languageResolvers.GetOrAdd(canonical, code =>
         {
             string gameContentRoot = Path.Combine(Constants.GamePath, "Content");
-            string? modContentRoot = DiscoverVietnamesePackContentPath();
 
             var provider = new RawContentProvider(
                 () => Game1.content?.ServiceProvider,
                 gameContentRoot,
                 code,
-                modContentRoot
+                sourceRegistry: SourceRegistry
             );
 
             ExternalTranslationRegistry externalRegistry = _nameResolver?.ExternalRegistry ?? new ExternalTranslationRegistry();
@@ -402,29 +509,6 @@ public sealed class ModEntry : Mod
             pair.Provider.Dispose();
         }
         _languageResolvers.Clear();
-    }
-
-    private string? DiscoverVietnamesePackContentPath()
-    {
-        // 1. Try public SMAPI ModRegistry for Kou.ViethoaSV
-        IModInfo? modInfo = Helper.ModRegistry.Get("Kou.ViethoaSV");
-        if (modInfo != null)
-        {
-            string? dir = modInfo.GetType().GetProperty("DirectoryPath")?.GetValue(modInfo) as string;
-            if (!string.IsNullOrEmpty(dir))
-            {
-                string targetContent = Path.Combine(dir, "assets", "Content");
-                if (Directory.Exists(targetContent))
-                    return targetContent;
-            }
-        }
-
-        // 2. Fallback to standard mod folder name
-        string standardFolder = Path.Combine(Constants.GamePath, "Mods", "Stardew Valley Viethoa", "assets", "Content");
-        if (Directory.Exists(standardFolder))
-            return standardFolder;
-
-        return null;
     }
 
     private void ValidatePatchSignatures()
