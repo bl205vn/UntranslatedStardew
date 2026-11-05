@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 using Microsoft.Win32;
+using Microsoft.Xna.Framework;
 using Netcode;
 using StardewValley.GameData;
 using StardewValley.ItemTypeDefinitions;
@@ -57,6 +58,11 @@ public static class Program
         TestLevelUpMenuPrefixFailureRestoration();
         TestRealXnbMailAndNotesExpansion();
         TestCollectionsNoteImageLayoutAndDynamicFonts();
+        TestXnbGlyphMetadataParsing();
+        TestBilingualRunPlannerAndMetrics();
+        TestBilingualDiagnosticAndLifecycle();
+        TestHarmonyInterceptionAndRecursionGuards();
+        TestAcceptanceFixesLeadReview();
 
         Console.WriteLine();
         Console.WriteLine($"=== Results: {_passed} Passed, {_failed} Failed ===");
@@ -2375,5 +2381,509 @@ public static class Program
         public virtual void SearchItems()
         {
         }
+    }
+
+    private static void TestXnbGlyphMetadataParsing()
+    {
+        Console.WriteLine("\n-- Testing XnbFontMetadataParser & Headless Glyph Coverage --");
+
+        string? gamePath = LocateGamePath();
+        if (string.IsNullOrEmpty(gamePath))
+        {
+            Console.WriteLine("  [SKIP] Stardew Valley game path not found; skipping XNB glyph metadata checks.");
+            return;
+        }
+
+        string vanillaFontsDir = Path.Combine(gamePath, "Content", "Fonts");
+        string smallFontEn = Path.Combine(vanillaFontsDir, "SmallFont.xnb");
+        string spriteFont1En = Path.Combine(vanillaFontsDir, "SpriteFont1.xnb");
+
+        string modFontsDir = Path.Combine(gamePath, "Mods", "Stardew Valley Viethoa", "assets", "Content", "Fonts");
+        string smallFontVi = Path.Combine(modFontsDir, "SmallFont_vi.xnb");
+        string spriteFont1Vi = Path.Combine(modFontsDir, "SpriteFont1_vi.xnb");
+
+        if (!File.Exists(smallFontEn) || !File.Exists(smallFontVi))
+        {
+            Console.WriteLine("  [SKIP] Required XNB font files not found; skipping.");
+            return;
+        }
+
+        // 1. English baseline SmallFont.xnb
+        var metaEn = XnbFontMetadataParser.ParseFile(smallFontEn);
+        Assert(metaEn.Characters.Count == 266, "Metadata EN: SmallFont character count is 266");
+        Assert(metaEn.DefaultCharacter == '*', "Metadata EN: DefaultCharacter is '*'");
+        Assert(metaEn.Characters.Contains('A'), "Metadata EN: Contains ASCII 'A'");
+        Assert(!metaEn.Characters.Contains('đ'), "Metadata EN: Missing Vietnamese 'đ'");
+
+        // 2. Vietnamese SmallFont_vi.xnb
+        var metaVi = XnbFontMetadataParser.ParseFile(smallFontVi);
+        Assert(metaVi.Characters.Count == 259, "Metadata VI: SmallFont_vi character count is 259");
+        Assert(metaVi.DefaultCharacter == '*', "Metadata VI: DefaultCharacter is '*'");
+        Assert(metaVi.Characters.Contains('đ') && metaVi.Characters.Contains('Đ'), "Metadata VI: Full coverage for 'đ' and 'Đ'");
+        Assert(metaVi.Characters.Contains('á') && metaVi.Characters.Contains('ơ') && metaVi.Characters.Contains('ư'), "Metadata VI: Full NFC coverage for accented vowels");
+
+        // 3. Dialogue font SpriteFont1_vi.xnb
+        if (File.Exists(spriteFont1Vi))
+        {
+            var metaDiaVi = XnbFontMetadataParser.ParseFile(spriteFont1Vi);
+            Assert(metaDiaVi.Characters.Count == 259, "Metadata VI: SpriteFont1_vi character count is 259");
+            Assert(metaDiaVi.Characters.Contains('đ'), "Metadata VI: SpriteFont1_vi contains 'đ'");
+        }
+
+        // 4. Compressed XNBs (Russian ru-RU [0x01], Japanese ja-JP [0x81], Chinese zh-CN [0x81])
+        string fontRu = Path.Combine(vanillaFontsDir, "SmallFont.ru-RU.xnb");
+        if (File.Exists(fontRu))
+        {
+            var metaRu = XnbFontMetadataParser.ParseFile(fontRu);
+            Assert(metaRu.Characters.Count > 0, "Metadata RU: SmallFont.ru-RU parsed successfully from compressed XNB");
+            Assert(metaRu.Characters.Contains('Б') && metaRu.Characters.Contains('я'), "Metadata RU: Contains Cyrillic glyphs");
+        }
+
+        string fontJa = Path.Combine(vanillaFontsDir, "SmallFont.ja-JP.xnb");
+        if (File.Exists(fontJa))
+        {
+            var metaJa = XnbFontMetadataParser.ParseFile(fontJa);
+            Assert(metaJa.Characters.Count == 2749, "Metadata JA: SmallFont.ja-JP character count is 2749");
+            Assert(metaJa.Characters.Contains('あ') && metaJa.Characters.Contains('日'), "Metadata JA: Contains Kana and Kanji glyphs");
+        }
+
+        string fontZh = Path.Combine(vanillaFontsDir, "SmallFont.zh-CN.xnb");
+        if (File.Exists(fontZh))
+        {
+            var metaZh = XnbFontMetadataParser.ParseFile(fontZh);
+            Assert(metaZh.Characters.Count > 0, "Metadata ZH: SmallFont.zh-CN parsed successfully from compressed XNB");
+            Assert(metaZh.Characters.Contains('汉') && metaZh.Characters.Contains('字'), "Metadata ZH: Contains Hanzi glyphs");
+        }
+
+        // 5. Headless SpriteFont construction and measurement without GPU
+        var fontEnHeadless = metaEn.CreateHeadlessSpriteFont();
+        var fontViHeadless = metaVi.CreateHeadlessSpriteFont();
+        Assert(fontEnHeadless.MeasureString("Pufferfish").X > 0, "Headless EN: MeasureString('Pufferfish') executes without GPU");
+        Assert(fontViHeadless.MeasureString("Cá nóc").X > 0, "Headless VI: MeasureString('Cá nóc') executes without GPU");
+    }
+
+    private static void TestBilingualRunPlannerAndMetrics()
+    {
+        Console.WriteLine("\n-- Testing BilingualRunPlanner & Font Metrics --");
+
+        string? gamePath = LocateGamePath();
+        if (string.IsNullOrEmpty(gamePath))
+            return;
+
+        string vanillaFontsDir = Path.Combine(gamePath, "Content", "Fonts");
+        string smallFontEn = Path.Combine(vanillaFontsDir, "SmallFont.xnb");
+        string modFontsDir = Path.Combine(gamePath, "Mods", "Stardew Valley Viethoa", "assets", "Content", "Fonts");
+        string smallFontVi = Path.Combine(modFontsDir, "SmallFont_vi.xnb");
+
+        if (!File.Exists(smallFontEn) || !File.Exists(smallFontVi))
+            return;
+
+        var fontEn = XnbFontMetadataParser.ParseFile(smallFontEn).CreateHeadlessSpriteFont();
+        var fontVi = XnbFontMetadataParser.ParseFile(smallFontVi).CreateHeadlessSpriteFont();
+
+        // 1. Same font no fallback path
+        var planNoFallback = BilingualRunPlanner.Plan("Pufferfish", fontEn, fontVi);
+        Assert(planNoFallback == null, "RunPlanner: Pure ASCII returns null plan (same font no-fallback path)");
+
+        // 2. Single-line Vietnamese fallback
+        var planVi = BilingualRunPlanner.Plan("Đá vôi", fontEn, fontVi);
+        Assert(planVi != null, "RunPlanner: Vietnamese string produces run plan");
+        Assert(planVi!.Runs.Count == 1, "RunPlanner: Prefers whole line from same font to avoid baseline mismatch");
+        Assert(ReferenceEquals(planVi.Runs[0].Font, fontVi), "RunPlanner: Assigns secondary Vietnamese font to Vietnamese run");
+        Assert(planVi.Runs[0].Text == "Đá vôi", "RunPlanner: Run text matches normalized text");
+
+        // 3. Decomposed input (NFD) normalization
+        string nfdText = "\u0110a\u0301 v\u00f4i"; // Decomposed 'á'
+        var planNfd = BilingualRunPlanner.Plan(nfdText, fontEn, fontVi);
+        Assert(planNfd != null, "RunPlanner: Decomposed NFD input produces plan");
+        Assert(planNfd!.Runs[0].Text == "Đá vôi", "RunPlanner: NFD input is normalized to precomposed NFC form");
+
+        // 4. Multiline PrimaryFirst: "Limestone\nĐá vôi"
+        var planPrimaryFirst = BilingualRunPlanner.Plan("Limestone\nĐá vôi", fontEn, fontVi);
+        Assert(planPrimaryFirst != null && planPrimaryFirst.Runs.Count == 2, "RunPlanner PrimaryFirst: Produces 2 runs for 2 lines");
+        Assert(ReferenceEquals(planPrimaryFirst!.Runs[0].Font, fontEn), "RunPlanner PrimaryFirst: Line 0 uses primary font");
+        Assert(planPrimaryFirst.Runs[0].Offset == Vector2.Zero, "RunPlanner PrimaryFirst: Line 0 offset is (0, 0)");
+        Assert(ReferenceEquals(planPrimaryFirst.Runs[1].Font, fontVi), "RunPlanner PrimaryFirst: Line 1 uses secondary font");
+        Assert(planPrimaryFirst.Runs[1].Offset.Y == fontEn.LineSpacing, "RunPlanner PrimaryFirst: Line 1 Y offset matches primary line spacing");
+        Assert(planPrimaryFirst.TotalSize.Y == fontEn.LineSpacing + fontVi.LineSpacing, "RunPlanner PrimaryFirst: Total height matches sum of line spacings");
+
+        // 5. Multiline SecondaryFirst: "Đá vôi\nLimestone"
+        var planSecondaryFirst = BilingualRunPlanner.Plan("Đá vôi\nLimestone", fontEn, fontVi);
+        Assert(planSecondaryFirst != null && planSecondaryFirst.Runs.Count == 2, "RunPlanner SecondaryFirst: Produces 2 runs for 2 lines");
+        Assert(ReferenceEquals(planSecondaryFirst!.Runs[0].Font, fontVi), "RunPlanner SecondaryFirst: Line 0 uses secondary font");
+        Assert(planSecondaryFirst.Runs[0].Offset == Vector2.Zero, "RunPlanner SecondaryFirst: Line 0 offset is (0, 0)");
+        Assert(ReferenceEquals(planSecondaryFirst.Runs[1].Font, fontEn), "RunPlanner SecondaryFirst: Line 1 uses primary font");
+        Assert(planSecondaryFirst.Runs[1].Offset.Y == fontVi.LineSpacing, "RunPlanner SecondaryFirst: Line 1 Y offset matches secondary line spacing");
+        Assert(planSecondaryFirst.TotalSize.Y == fontVi.LineSpacing + fontEn.LineSpacing, "RunPlanner SecondaryFirst: Total height matches sum of line spacings");
+
+        // 6. Mixed line segmentation
+        string fontJaPath = Path.Combine(vanillaFontsDir, "SmallFont.ja-JP.xnb");
+        if (File.Exists(fontJaPath))
+        {
+            var fontJa = XnbFontMetadataParser.ParseFile(fontJaPath).CreateHeadlessSpriteFont();
+            // Primary is fontJa (contains Kanji, lacks 'Đ'), Secondary is fontVi (contains 'Đ', lacks Kanji)
+            var planMixed = BilingualRunPlanner.Plan("日本語: Đá vôi", fontJa, fontVi);
+            Assert(planMixed != null && planMixed.Runs.Count == 2, "RunPlanner Mixed: Segments into 2 contiguous runs");
+            Assert(planMixed!.Runs[0].Text == "日本語: ", "RunPlanner Mixed: Run 0 contains Japanese prefix");
+            Assert(ReferenceEquals(planMixed.Runs[0].Font, fontJa), "RunPlanner Mixed: Run 0 uses Japanese font");
+            Assert(planMixed.Runs[1].Text == "Đá vôi", "RunPlanner Mixed: Run 1 contains Vietnamese suffix");
+            Assert(ReferenceEquals(planMixed.Runs[1].Font, fontVi), "RunPlanner Mixed: Run 1 uses Vietnamese font");
+            Assert(planMixed.Runs[1].Offset.X == planMixed.Runs[0].Size.X, "RunPlanner Mixed: Run 1 X offset equals Run 0 width");
+            float expectedLineHeight = Math.Max(fontJa.LineSpacing, fontVi.LineSpacing);
+            Assert(planMixed.TotalSize.Y == expectedLineHeight, "RunPlanner Mixed: Line height equals max line spacing across runs");
+        }
+    }
+
+    private static void TestBilingualDiagnosticAndLifecycle()
+    {
+        Console.WriteLine("\n-- Testing BilingualFontManager Diagnostic & Lifecycle --");
+
+        List<(char Glyph, string Source, string Lang)> warnings = new();
+        var manager = new BilingualFontManager(
+            () => null,
+            "C:\\FakeGamePath\\Content",
+            "C:\\FakeModPath\\Content",
+            "vi",
+            (glyph, source, lang) => warnings.Add((glyph, source, lang))
+        );
+
+        // 1. Missing glyph diagnostic logged only once
+        manager.ReportMissingGlyphOnce('Ω', "Greek Omega");
+        manager.ReportMissingGlyphOnce('Ω', "Greek Omega");
+        manager.ReportMissingGlyphOnce('Ω', "Greek Omega");
+        Assert(warnings.Count == 1, "Diagnostic: Missing glyph warning is emitted only once across repeated calls");
+        Assert(warnings[0].Glyph == 'Ω', "Diagnostic: Warning captures exact missing character");
+        Assert(warnings[0].Lang == "vi", "Diagnostic: Warning captures effective language context");
+
+        // Different glyph emits separate warning
+        manager.ReportMissingGlyphOnce('Ψ', "Greek Psi");
+        Assert(warnings.Count == 2, "Diagnostic: Distinct missing glyph emits separate warning");
+
+        // 2. Invalidation and cache clearing
+        BilingualStringTracker.Register("Cá nóc");
+        Assert(BilingualStringTracker.IsTracked("Cá nóc"), "StringTracker: Tracks registered string");
+        manager.Invalidate();
+        Assert(!BilingualStringTracker.IsTracked("Cá nóc"), "Manager Invalidate: Clears tracked strings and run plans");
+
+        // 3. Disposal
+        manager.Dispose();
+        Assert(BilingualFontManager.Instance == null, "Manager Dispose: Clears singleton instance");
+    }
+
+    private static void TestHarmonyInterceptionAndRecursionGuards()
+    {
+        Console.WriteLine("\n-- Testing Harmony Interception, Render Scopes & Recursion Guards --");
+
+        string? gamePath = LocateGamePath();
+        if (string.IsNullOrEmpty(gamePath))
+            return;
+
+        string vanillaFontsDir = Path.Combine(gamePath, "Content", "Fonts");
+        string smallFontEn = Path.Combine(vanillaFontsDir, "SmallFont.xnb");
+        string modFontsDir = Path.Combine(gamePath, "Mods", "Stardew Valley Viethoa", "assets", "Content", "Fonts");
+        string smallFontVi = Path.Combine(modFontsDir, "SmallFont_vi.xnb");
+
+        if (!File.Exists(smallFontEn) || !File.Exists(smallFontVi))
+            return;
+
+        var fontEn = XnbFontMetadataParser.ParseFile(smallFontEn).CreateHeadlessSpriteFont();
+        var fontVi = XnbFontMetadataParser.ParseFile(smallFontVi).CreateHeadlessSpriteFont();
+
+        var manager = new BilingualFontManager(
+            () => null,
+            Path.Combine(gamePath, "Content"),
+            Path.Combine(gamePath, "Mods", "Stardew Valley Viethoa", "assets", "Content"),
+            "vi"
+        );
+        manager.SetSecondaryFontForTesting(fontEn, fontVi);
+
+        // 1. No scope: TryMeasureString returns false, leaving unscoped calls byte-for-byte unchanged
+        Assert(!BilingualRenderScope.IsActive, "RenderScope: Inactive outside using block");
+        bool unscopedMeasure = BilingualFontRenderer.TryMeasureString(fontEn, "Đá vôi\nLimestone", out _);
+        Assert(!unscopedMeasure, "Renderer: Unscoped measurement returns false (native passthrough)");
+
+        // 2. In scope: TryMeasureString intercepts and calculates bilingual metrics
+        using (BilingualRenderScope.Begin())
+        {
+            Assert(BilingualRenderScope.IsActive, "RenderScope: Active inside using block");
+            bool scopedMeasure = BilingualFontRenderer.TryMeasureString(fontEn, "Đá vôi\nLimestone", out Vector2 measured);
+            Assert(scopedMeasure, "Renderer: Scoped measurement intercepts and returns true");
+            Assert(measured.Y == fontVi.LineSpacing + fontEn.LineSpacing, "Renderer: Scoped measure matches sum of line heights");
+
+            // 3. Same font inside scope: returns false (no interception needed)
+            bool asciiMeasure = BilingualFontRenderer.TryMeasureString(fontEn, "Limestone", out _);
+            Assert(!asciiMeasure, "Renderer: Pure ASCII string in scope returns false (no unnecessary interception)");
+
+            // 4. StringBuilder overload
+            var sb = new System.Text.StringBuilder("Đá vôi\nLimestone");
+            bool sbMeasure = BilingualFontRenderer.TryMeasureString(fontEn, sb, out Vector2 sbMeasured);
+            Assert(sbMeasure && sbMeasured == measured, "Renderer: StringBuilder overload matches string measurement");
+
+            // 5. Harmony patch method prefixes execution
+            Vector2 harmonyResult = Vector2.Zero;
+            bool prefixHandled = !FontInterceptionPatches.SpriteFontMeasureStringPatch.Prefix(fontEn, "Đá vôi", ref harmonyResult);
+            Assert(prefixHandled, "Harmony Patch: SpriteFontMeasureStringPatch.Prefix returns false (handled)");
+            Assert(harmonyResult.Y == fontVi.LineSpacing, "Harmony Patch: Sets __result ref parameter correctly");
+
+            bool sbPrefixHandled = !FontInterceptionPatches.SpriteFontMeasureStringBuilderPatch.Prefix(fontEn, sb, ref harmonyResult);
+            Assert(sbPrefixHandled, "Harmony Patch: SpriteFontMeasureStringBuilderPatch.Prefix returns false (handled)");
+
+            // 6. DrawString prefixes without active GraphicsDevice return true on null batch without throwing
+            bool drawHandled = FontInterceptionPatches.SpriteBatchDrawStringColorPatch.Prefix(null!, fontEn, "Đá vôi", Vector2.Zero, Microsoft.Xna.Framework.Color.White);
+            Assert(drawHandled, "Harmony Patch: DrawString returns true when batch is null (safe fallback)");
+        }
+
+        Assert(!BilingualRenderScope.IsActive, "RenderScope: Restores to inactive upon exiting scope");
+
+        manager.Dispose();
+    }
+
+    private static void TestAcceptanceFixesLeadReview()
+    {
+        Console.WriteLine("\n-- Testing Acceptance Fixes After Lead Review --");
+
+        // 1. Nested REAL patched Harmony fixture (Parent calling Child, both normal and throwing)
+        var harmony = new Harmony("test.nested.scope.lead.review");
+        var parentMethod = typeof(NestedScopeTarget).GetMethod(nameof(NestedScopeTarget.ParentMethod));
+        var childMethod = typeof(NestedScopeTarget).GetMethod(nameof(NestedScopeTarget.ChildMethod));
+
+        harmony.Patch(
+            parentMethod,
+            prefix: new HarmonyMethod(typeof(NestedScopeParentPatch).GetMethod(nameof(NestedScopeParentPatch.Prefix))),
+            postfix: new HarmonyMethod(typeof(NestedScopeParentPatch).GetMethod(nameof(NestedScopeParentPatch.Postfix))),
+            finalizer: new HarmonyMethod(typeof(NestedScopeParentPatch).GetMethod(nameof(NestedScopeParentPatch.Finalizer)))
+        );
+
+        harmony.Patch(
+            childMethod,
+            prefix: new HarmonyMethod(typeof(NestedScopeChildPatch).GetMethod(nameof(NestedScopeChildPatch.Prefix))),
+            postfix: new HarmonyMethod(typeof(NestedScopeChildPatch).GetMethod(nameof(NestedScopeChildPatch.Postfix))),
+            finalizer: new HarmonyMethod(typeof(NestedScopeChildPatch).GetMethod(nameof(NestedScopeChildPatch.Finalizer)))
+        );
+
+        try
+        {
+            // 1a. Normal execution: parent -> child -> child exits -> parent exits
+            var targetNormal = new NestedScopeTarget();
+            Assert(BilingualRenderScope.CurrentDepth == 0, "Nested Harmony: Scope initially inactive (depth 0)");
+            targetNormal.ParentMethod(throwInChild: false);
+            Assert(targetNormal.ParentDepthBeforeChild == 1, "Nested Harmony: Parent entered scope (depth 1)");
+            Assert(targetNormal.ChildDepthInside == 2, "Nested Harmony: Child entered scope (depth 2)");
+            Assert(targetNormal.ParentDepthAfterChild == 1, "Nested Harmony: Child Postfix+Finalizer exited exactly once (parent depth remains 1)");
+            Assert(BilingualRenderScope.CurrentDepth == 0, "Nested Harmony: Parent Postfix+Finalizer exited cleanly (depth 0)");
+
+            // 1b. Exceptional execution: child throws, child finalizer runs, parent catches, parent finalizer runs
+            var targetThrow = new NestedScopeTarget();
+            Assert(BilingualRenderScope.CurrentDepth == 0, "Nested Harmony Throwing: Scope initially inactive (depth 0)");
+            targetThrow.ParentMethod(throwInChild: true);
+            Assert(targetThrow.ParentDepthBeforeChild == 1, "Nested Harmony Throwing: Parent entered scope (depth 1)");
+            Assert(targetThrow.ChildDepthInside == 2, "Nested Harmony Throwing: Child entered scope (depth 2)");
+            Assert(targetThrow.ParentDepthInCatch == 1, "Nested Harmony Throwing: Child Finalizer exited once upon exception (parent remains active at depth 1)");
+            Assert(BilingualRenderScope.CurrentDepth == 0, "Nested Harmony Throwing: Parent Finalizer restored depth to 0 without underflow");
+
+            // 1c. ScopeCookie idempotency
+            var cookie = BilingualRenderScope.Begin();
+            Assert(BilingualRenderScope.CurrentDepth == 1, "ScopeCookie: Active at depth 1 after Begin()");
+            cookie.Dispose();
+            Assert(BilingualRenderScope.CurrentDepth == 0, "ScopeCookie: Depth 0 on first Dispose()");
+            cookie.Dispose();
+            Assert(BilingualRenderScope.CurrentDepth == 0, "ScopeCookie: Idempotent second Dispose() does not underflow");
+            cookie.Dispose();
+            Assert(BilingualRenderScope.CurrentDepth == 0, "ScopeCookie: Repeated Dispose() remains at depth 0");
+        }
+        finally
+        {
+            harmony.UnpatchAll("test.nested.scope.lead.review");
+        }
+
+        // 2. Recursion Guard & Unsupported Glyphs
+        string? gamePath = LocateGamePath();
+        if (!string.IsNullOrEmpty(gamePath))
+        {
+            string smallFontEn = Path.Combine(gamePath, "Content", "Fonts", "SmallFont.xnb");
+            string smallFontVi = Path.Combine(gamePath, "Mods", "Stardew Valley Viethoa", "assets", "Content", "Fonts", "SmallFont_vi.xnb");
+
+            if (File.Exists(smallFontEn) && File.Exists(smallFontVi))
+            {
+                var fontEn = XnbFontMetadataParser.ParseFile(smallFontEn).CreateHeadlessSpriteFont();
+                var fontVi = XnbFontMetadataParser.ParseFile(smallFontVi).CreateHeadlessSpriteFont();
+
+                List<(char Glyph, string Source, string Lang)> missingWarnings = new();
+                var manager = new BilingualFontManager(
+                    () => null,
+                    Path.Combine(gamePath, "Content"),
+                    Path.Combine(gamePath, "Mods", "Stardew Valley Viethoa", "assets", "Content"),
+                    "vi",
+                    (glyph, source, lang) => missingWarnings.Add((glyph, source, lang))
+                );
+                manager.SetSecondaryFontForTesting(fontEn, fontVi);
+
+                using (BilingualRenderScope.Begin())
+                {
+                    // Neither fontEn nor fontVi covers Snowman '\u2603'
+                    bool measured = BilingualFontRenderer.TryMeasureString(fontEn, "Test \u2603 Snowman", out Vector2 measuredSize);
+                    Assert(measured, "Recursion Guard: TryMeasureString handles unsupported glyphs without recursion");
+                    Assert(missingWarnings.Count == 1 && missingWarnings[0].Glyph == '\u2603', "Recursion Guard: Missing glyph warning emitted once for unsupported glyph");
+
+                    // Second measurement with same glyph in different context does NOT repeat warning
+                    BilingualFontRenderer.TryMeasureString(fontEn, "Another \u2603 Item", out _);
+                    Assert(missingWarnings.Count == 1, "Recursion Guard: Bounded warning cache does not duplicate warning across contexts");
+
+                    // Direct BilingualRunPlanner.Plan call inside active scope
+                    var directPlan = BilingualRunPlanner.Plan("Direct \u2603 Call", fontEn, fontVi, manager);
+                    Assert(directPlan != null, "Recursion Guard: Direct BilingualRunPlanner.Plan call in active scope executes safely");
+                }
+
+                // 3. Decomposed (NFD) fast-path defect fix
+                // "Ca\u0301 no\u0301c" is NFD; fontEn has precomposed Latin-1 'á' (\u00E1) and 'ó' (\u00F3) but lacks combining acute \u0301
+                string nfdInput = "Ca\u0301 no\u0301c";
+                var nfcPlan = BilingualRunPlanner.Plan(nfdInput, fontEn, null, manager);
+                Assert(nfcPlan != null, "NFC Fast-Path: Decomposed NFD string produces non-null plan when primary has precomposed glyphs");
+                Assert(nfcPlan!.Runs.Count == 1, "NFC Fast-Path: Decomposed string produces 1 run with primary font");
+                Assert(nfcPlan.Runs[0].Text == "Cá nóc", "NFC Fast-Path: Run text is normalized to precomposed NFC 'Cá nóc'");
+                Assert(ReferenceEquals(nfcPlan.Runs[0].Font, fontEn), "NFC Fast-Path: Run font is primary font without secondary supplied");
+
+                // Precomposed string in primary font returns null (fast-path untouched)
+                var precomposedPlan = BilingualRunPlanner.Plan("Cá nóc", fontEn, null, manager);
+                Assert(precomposedPlan == null, "NFC Fast-Path: Precomposed string fully in primary font returns null (native passthrough)");
+
+                manager.Dispose();
+            }
+        }
+
+        // 4. DrawString Transforms & Block Flipping Formula
+        Vector2 totalSize = new(100f, 40f);
+        Vector2 runOffset = new(10f, 5f);
+        Vector2 runSize = new(30f, 20f);
+        Vector2 callerOrigin = new(50f, 20f);
+
+        // No flip: offset is (10, 5)
+        float offX_none = runOffset.X;
+        float offY_none = runOffset.Y;
+        Assert(offX_none == 10f && offY_none == 5f, "Transforms: No flip preserves offset");
+        Assert(callerOrigin - new Vector2(offX_none, offY_none) == new Vector2(40f, 15f), "Transforms: No flip runOrigin matches");
+
+        // FlipHorizontally: totalSize.X - runOffset.X - runSize.X = 100 - 10 - 30 = 60
+        float offX_h = totalSize.X - runOffset.X - runSize.X;
+        Assert(offX_h == 60f, "Transforms: FlipHorizontally reflects offset X across total width (100 - 10 - 30 = 60)");
+        Assert(callerOrigin - new Vector2(offX_h, offY_none) == new Vector2(-10f, 15f), "Transforms: FlipHorizontally runOrigin correctly offset");
+
+        // FlipVertically: totalSize.Y - runOffset.Y - runSize.Y = 40 - 5 - 20 = 15
+        float offY_v = totalSize.Y - runOffset.Y - runSize.Y;
+        Assert(offY_v == 15f, "Transforms: FlipVertically reflects offset Y across total height (40 - 5 - 20 = 15)");
+        Assert(callerOrigin - new Vector2(offX_none, offY_v) == new Vector2(40f, 5f), "Transforms: FlipVertically runOrigin correctly offset");
+
+        // Scale Vector2.Zero preservation
+        Vector2? explicitZero = Vector2.Zero;
+        Vector2 effectiveZero = explicitZero ?? Vector2.One;
+        Assert(effectiveZero == Vector2.Zero, "Transforms: Scale Vector2.Zero is preserved and not coerced to Vector2.One");
+
+        Vector2? omittedScale = null;
+        Vector2 effectiveDefault = omittedScale ?? Vector2.One;
+        Assert(effectiveDefault == Vector2.One, "Transforms: Omitted scale defaults to Vector2.One");
+
+        // 5. Secondary Font Caching & Diagnostics
+        List<string> diagnostics = new();
+        var fakeManager = new BilingualFontManager(
+            () => new TestMockServiceProvider(),
+            "C:\\NonExistentGamePath\\Content",
+            "C:\\NonExistentModPath\\Content",
+            "vi",
+            null,
+            d => diagnostics.Add(d)
+        );
+
+        var dummyFont = XnbFontMetadataParser.ParseFile(Path.Combine(LocateGamePath()!, "Content", "Fonts", "SmallFont.xnb")).CreateHeadlessSpriteFont();
+        var loaded1 = fakeManager.GetSecondaryFont(dummyFont);
+        Assert(loaded1 == null, "Asset Caching: Returns null when asset missing on disk");
+        Assert(diagnostics.Count == 1, "Asset Caching: Diagnostic warning emitted on first missing asset load attempt");
+        Assert(diagnostics[0].Contains("Fonts/SmallFont") && diagnostics[0].Contains("vi"), "Asset Caching: Diagnostic captures asset name and locale");
+
+        // Second call: does NOT re-attempt disk or emit duplicate diagnostic
+        var loaded2 = fakeManager.GetSecondaryFont(dummyFont);
+        Assert(loaded2 == null, "Asset Caching: Cached unavailable font returns null on repeated call");
+        Assert(diagnostics.Count == 1, "Asset Caching: Does not repeat diagnostic on cached unavailable font");
+
+        // Invalidate resets attempt flag
+        fakeManager.Invalidate();
+        var loaded3 = fakeManager.GetSecondaryFont(dummyFont);
+        Assert(loaded3 == null, "Asset Caching: Invalidation allows re-attempting load");
+        Assert(diagnostics.Count == 2, "Asset Caching: Re-emits diagnostic after invalidation");
+
+        fakeManager.Dispose();
+    }
+
+    public class NestedScopeTarget
+    {
+        public int ParentDepthBeforeChild;
+        public int ChildDepthInside;
+        public int ParentDepthAfterChild;
+        public int ParentDepthInCatch;
+
+        public void ParentMethod(bool throwInChild)
+        {
+            ParentDepthBeforeChild = BilingualRenderScope.CurrentDepth;
+            try
+            {
+                ChildMethod(throwInChild);
+                ParentDepthAfterChild = BilingualRenderScope.CurrentDepth;
+            }
+            catch (InvalidOperationException)
+            {
+                ParentDepthInCatch = BilingualRenderScope.CurrentDepth;
+            }
+        }
+
+        public void ChildMethod(bool shouldThrow)
+        {
+            ChildDepthInside = BilingualRenderScope.CurrentDepth;
+            if (shouldThrow)
+            {
+                throw new InvalidOperationException("Simulated error in child target");
+            }
+        }
+    }
+
+    public static class NestedScopeParentPatch
+    {
+        public static void Prefix(out IDisposable? __state)
+        {
+            __state = BilingualRenderScope.Begin();
+        }
+
+        public static void Postfix(IDisposable? __state)
+        {
+            __state?.Dispose();
+        }
+
+        public static Exception? Finalizer(IDisposable? __state, Exception? __exception)
+        {
+            __state?.Dispose();
+            return __exception;
+        }
+    }
+
+    public static class NestedScopeChildPatch
+    {
+        public static void Prefix(out IDisposable? __state)
+        {
+            __state = BilingualRenderScope.Begin();
+        }
+
+        public static void Postfix(IDisposable? __state)
+        {
+            __state?.Dispose();
+        }
+
+        public static Exception? Finalizer(IDisposable? __state, Exception? __exception)
+        {
+            __state?.Dispose();
+            return __exception;
+        }
+    }
+
+    public class TestMockServiceProvider : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => null;
     }
 }

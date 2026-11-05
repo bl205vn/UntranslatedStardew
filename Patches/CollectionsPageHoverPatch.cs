@@ -46,11 +46,15 @@ internal static class CollectionsPageHoverPatch
                         string? secTabName = resolver.GetSecondarySideTabName(tabId);
                         if (!string.IsNullOrWhiteSpace(secTabName) && !string.Equals(c.hoverText.Trim(), secTabName.Trim(), StringComparison.OrdinalIgnoreCase))
                         {
-                            string parsedPrimary = Game1.parseText(c.hoverText, Game1.smallFont, 256);
-                            string parsedSecondary = Game1.parseText(secTabName, Game1.smallFont, 256);
-                            ___hoverText = secondaryFirst
-                                ? $"{parsedSecondary}\n{parsedPrimary}"
-                                : $"{parsedPrimary}\n{parsedSecondary}";
+                            using (BilingualRenderScope.Begin())
+                            {
+                                string parsedPrimary = Game1.parseText(c.hoverText, Game1.smallFont, 256);
+                                string parsedSecondary = Game1.parseText(secTabName, Game1.smallFont, 256);
+                                ___hoverText = secondaryFirst
+                                    ? $"{parsedSecondary}\n{parsedPrimary}"
+                                    : $"{parsedPrimary}\n{parsedSecondary}";
+                                BilingualStringTracker.Register(___hoverText);
+                            }
                         }
                         return;
                     }
@@ -85,11 +89,15 @@ internal static class CollectionsPageHoverPatch
                                             {
                                                 // Parse primary and secondary sections independently to 256px
                                                 // so native wrapping of long primary titles cannot suppress the secondary title
-                                                string parsedPrimary = Game1.parseText(primaryTitle, Game1.smallFont, 256);
-                                                string parsedSecondary = Game1.parseText(secTitle, Game1.smallFont, 256);
-                                                ___hoverText = secondaryFirst
-                                                    ? $"{parsedSecondary}\n{parsedPrimary}"
-                                                    : $"{parsedPrimary}\n{parsedSecondary}";
+                                                using (BilingualRenderScope.Begin())
+                                                {
+                                                    string parsedPrimary = Game1.parseText(primaryTitle, Game1.smallFont, 256);
+                                                    string parsedSecondary = Game1.parseText(secTitle, Game1.smallFont, 256);
+                                                    ___hoverText = secondaryFirst
+                                                        ? $"{parsedSecondary}\n{parsedPrimary}"
+                                                        : $"{parsedPrimary}\n{parsedSecondary}";
+                                                    BilingualStringTracker.Register(___hoverText);
+                                                }
                                             }
                                         }
                                     }

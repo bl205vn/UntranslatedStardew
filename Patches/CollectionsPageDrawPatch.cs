@@ -74,6 +74,7 @@ public static class CollectionsPageDrawPatch
                 && ___hoverText != "???")
             {
                 __state = new CollectionsNoteImageState(__instance, __instance.secretNoteImage, ___hoverText);
+                BilingualStringTracker.Register(___hoverText);
                 // Suppress both fields so vanilla drawHoverText and fixed-offset textureBox do not render
                 __instance.secretNoteImage = -1;
                 ___hoverText = "";
@@ -96,57 +97,60 @@ public static class CollectionsPageDrawPatch
         {
             if (__state != null && __state.SecretNoteImage != -1 && !string.IsNullOrEmpty(__state.HoverText) && __instance.secretNoteImageTexture != null && b != null)
             {
-                CollectionsNoteImageLayoutResult layout = CollectionsNoteImageLayoutHelper.CalculateLayout(
-                    Game1.getOldMouseX(),
-                    Game1.getOldMouseY(),
-                    __state.HoverText,
-                    s => Game1.smallFont != null ? Game1.smallFont.MeasureString(s) : Vector2.Zero,
-                    Utility.getSafeArea()
-                );
+                using (BilingualRenderScope.Begin())
+                {
+                    CollectionsNoteImageLayoutResult layout = CollectionsNoteImageLayoutHelper.CalculateLayout(
+                        Game1.getOldMouseX(),
+                        Game1.getOldMouseY(),
+                        __state.HoverText,
+                        s => Game1.smallFont != null ? Game1.smallFont.MeasureString(s) : Vector2.Zero,
+                        Utility.getSafeArea()
+                    );
 
-                // 1. Render the hover tooltip header via native drawHoverText with explicit override coordinates
-                IClickableMenu.drawHoverText(
-                    b,
-                    __state.HoverText,
-                    Game1.smallFont,
-                    xOffset: 0,
-                    yOffset: 0,
-                    moneyAmountToDisplayAtBottom: -1,
-                    boldTitleText: null,
-                    healAmountToDisplay: -1,
-                    buffIconsToDisplay: null,
-                    hoveredItem: null,
-                    currencySymbol: 0,
-                    extraItemToShowIndex: null,
-                    extraItemToShowAmount: -1,
-                    overrideX: layout.HeaderX,
-                    overrideY: layout.HeaderY
-                );
+                    // 1. Render the hover tooltip header via native drawHoverText with explicit override coordinates
+                    IClickableMenu.drawHoverText(
+                        b,
+                        __state.HoverText,
+                        Game1.smallFont,
+                        xOffset: 0,
+                        yOffset: 0,
+                        moneyAmountToDisplayAtBottom: -1,
+                        boldTitleText: null,
+                        healAmountToDisplay: -1,
+                        buffIconsToDisplay: null,
+                        hoveredItem: null,
+                        currencySymbol: 0,
+                        extraItemToShowIndex: null,
+                        extraItemToShowAmount: -1,
+                        overrideX: layout.HeaderX,
+                        overrideY: layout.HeaderY
+                    );
 
-                // 2. Render coordinated image preview texture box
-                IClickableMenu.drawTextureBox(b, layout.BoxX, layout.BoxY, layout.BoxWidth, layout.BoxHeight, Color.White);
+                    // 2. Render coordinated image preview texture box
+                    IClickableMenu.drawTextureBox(b, layout.BoxX, layout.BoxY, layout.BoxWidth, layout.BoxHeight, Color.White);
 
-                // 3. Render note preview image
-                Texture2D texture = __instance.secretNoteImageTexture;
-                int image = __state.SecretNoteImage;
-                Rectangle sourceRect = new Rectangle(
-                    image * 64 % texture.Width,
-                    image * 64 / texture.Width * 64,
-                    64,
-                    64
-                );
+                    // 3. Render note preview image
+                    Texture2D texture = __instance.secretNoteImageTexture;
+                    int image = __state.SecretNoteImage;
+                    Rectangle sourceRect = new Rectangle(
+                        image * 64 % texture.Width,
+                        image * 64 / texture.Width * 64,
+                        64,
+                        64
+                    );
 
-                b.Draw(
-                    texture,
-                    new Vector2(layout.ImageX, layout.ImageY),
-                    sourceRect,
-                    Color.White,
-                    0f,
-                    Vector2.Zero,
-                    layout.ImageScale,
-                    SpriteEffects.None,
-                    0.865f
-                );
+                    b.Draw(
+                        texture,
+                        new Vector2(layout.ImageX, layout.ImageY),
+                        sourceRect,
+                        Color.White,
+                        0f,
+                        Vector2.Zero,
+                        layout.ImageScale,
+                        SpriteEffects.None,
+                        0.865f
+                    );
+                }
             }
         }
         catch (Exception ex)

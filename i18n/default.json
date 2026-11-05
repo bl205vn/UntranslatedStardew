@@ -9,5 +9,6 @@
   "config.diacritic-insensitive.description": "Ignore diacritics and normalize characters like đ/Đ during search matching.",
   "log.mod-loaded": "Untranslated Stardew loaded successfully. Secondary language: {{language}}.",
   "log.patch-failed": "Failed to apply UI patch: {{error}}.",
-  "log.secondary-fallback": "Language '{{language}}' is not supported as a built-in secondary language and custom assets were not found. Falling back to '{{fallback}}'."
+  "log.secondary-fallback": "Language '{{language}}' is not supported as a built-in secondary language and custom assets were not found. Falling back to '{{fallback}}'.",
+  "log.missing-glyph": "Glyph '{{glyph}}' (U+{{codepoint}}) from '{{source}}' is not supported in active fonts for language '{{language}}'."
 }

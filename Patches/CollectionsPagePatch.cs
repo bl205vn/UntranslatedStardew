@@ -57,11 +57,13 @@ internal static class CollectionsPagePatch
                             string remainder = __result.Substring(delimIdx + delimiter.Length);
                             string formattedTitle = TooltipFormatter.FormatTitle(primaryTitle, primaryTitle, secondaryTitle, secondaryFirst);
                             __result = $"{formattedTitle}{delimiter}{remainder}";
+                            BilingualStringTracker.Register(__result);
                         }
                         else
                         {
                             // Image note: title only, no body
                             __result = TooltipFormatter.FormatTitle(__result, __result, secondaryTitle, secondaryFirst);
+                            BilingualStringTracker.Register(__result);
                         }
                     }
                 }
@@ -100,6 +102,7 @@ internal static class CollectionsPagePatch
 
             string formattedItemTitle = TooltipFormatter.FormatTitle(primaryTitleItem, primaryTitleItem, secondaryItemTitle, secondaryFirst);
             __result = $"{formattedItemTitle}{doubleNewline}{remainderItem}";
+            BilingualStringTracker.Register(__result);
         }
         catch (Exception ex)
         {

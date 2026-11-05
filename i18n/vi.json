@@ -9,5 +9,6 @@
   "config.diacritic-insensitive.description": "Bỏ qua dấu thanh và chuẩn hóa các ký tự như đ/Đ khi tìm kiếm.",
   "log.mod-loaded": "Untranslated Stardew đã tải thành công. Ngôn ngữ phụ: {{language}}.",
   "log.patch-failed": "Không thể áp dụng bản vá giao diện: {{error}}.",
-  "log.secondary-fallback": "Ngôn ngữ '{{language}}' không phải ngôn ngữ có sẵn và không tìm thấy asset mod; chuyển về '{{fallback}}'."
+  "log.secondary-fallback": "Ngôn ngữ '{{language}}' không phải ngôn ngữ có sẵn và không tìm thấy asset mod; chuyển về '{{fallback}}'.",
+  "log.missing-glyph": "Ký tự '{{glyph}}' (U+{{codepoint}}) từ '{{source}}' không được hỗ trợ trong phông chữ hiện hành cho ngôn ngữ '{{language}}'."
 }

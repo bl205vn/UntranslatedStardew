@@ -19,10 +19,12 @@ public sealed class ModEntry : Mod
 
     public ModConfig Config { get; private set; } = null!;
     public ItemNameResolver? Resolver => _nameResolver;
+    public BilingualFontManager? FontManager => _fontManager;
 
     private Harmony? _harmony;
     private RawContentProvider? _contentProvider;
     private ItemNameResolver? _nameResolver;
+    private BilingualFontManager? _fontManager;
     private UntranslatedStardewApi? _api;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (RawContentProvider Provider, ItemNameResolver Resolver)> _languageResolvers = new(StringComparer.OrdinalIgnoreCase);
 
@@ -113,6 +115,7 @@ public sealed class ModEntry : Mod
     private void OnLocaleChanged(object? sender, LocaleChangedEventArgs e)
     {
         _nameResolver?.Invalidate();
+        _fontManager?.Invalidate();
     }
 
     private void OnAssetRequested(object? sender, AssetRequestedEventArgs e)
@@ -129,6 +132,7 @@ public sealed class ModEntry : Mod
         {
             ReloadCpTranslations();
             _nameResolver?.Invalidate();
+            _fontManager?.Invalidate();
             ClearLanguageResolvers();
             return;
         }
@@ -159,9 +163,11 @@ public sealed class ModEntry : Mod
             name.IsEquivalentTo("Data/Achievements") ||
             name.IsEquivalentTo("Data/Pants") ||
             name.IsEquivalentTo("Data/Shirts") ||
-            name.IsEquivalentTo("Data/Mannequins")))
+            name.IsEquivalentTo("Data/Mannequins") ||
+            name.StartsWith("Fonts")))
         {
             _nameResolver?.Invalidate();
+            _fontManager?.Invalidate();
             ClearLanguageResolvers();
         }
     }
@@ -330,20 +336,32 @@ public sealed class ModEntry : Mod
         ClearLanguageResolvers();
         _nameResolver?.Dispose();
         _contentProvider?.Dispose();
+        _fontManager?.Dispose();
 
         string gameContentRoot = Path.Combine(Constants.GamePath, "Content");
         string? modContentRoot = DiscoverVietnamesePackContentPath();
 
-        _contentProvider = new RawContentProvider(
+        RawContentProvider contentProvider = new(
             () => Game1.content?.ServiceProvider,
             gameContentRoot,
             Config.SecondaryLanguage,
             modContentRoot,
             (requested, fallback) => Monitor.Log(I18n.Log_SecondaryFallback(requested, fallback), LogLevel.Warn)
         );
+        _contentProvider = contentProvider;
+
+        string effectiveLang = contentProvider.EffectiveLanguage;
+        _fontManager = new BilingualFontManager(
+            () => Game1.content?.ServiceProvider,
+            gameContentRoot,
+            modContentRoot,
+            effectiveLang,
+            (glyph, source, lang) => Monitor.Log(I18n.Log_MissingGlyph(glyph, ((int)glyph).ToString("X4"), source, lang), LogLevel.Warn),
+            diagnostic => Monitor.Log(diagnostic, LogLevel.Warn)
+        );
 
         ExternalTranslationRegistry externalRegistry = _nameResolver?.ExternalRegistry ?? new ExternalTranslationRegistry();
-        _nameResolver = new ItemNameResolver(_contentProvider, externalRegistry: externalRegistry);
+        _nameResolver = new ItemNameResolver(contentProvider, externalRegistry: externalRegistry);
         ReloadCpTranslations();
     }
 
@@ -419,7 +437,17 @@ public sealed class ModEntry : Mod
             (typeof(StardewValley.Menus.PowersTab), nameof(StardewValley.Menus.PowersTab.performHoverAction), null),
             (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.createDescription), new[] { typeof(string) }),
             (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.performHoverAction), new[] { typeof(int), typeof(int) }),
-            (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) })
+            (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) }),
+            (typeof(Microsoft.Xna.Framework.Graphics.SpriteFont), nameof(Microsoft.Xna.Framework.Graphics.SpriteFont.MeasureString), new[] { typeof(string) }),
+            (typeof(Microsoft.Xna.Framework.Graphics.SpriteFont), nameof(Microsoft.Xna.Framework.Graphics.SpriteFont.MeasureString), new[] { typeof(System.Text.StringBuilder) }),
+            (typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch), nameof(Microsoft.Xna.Framework.Graphics.SpriteBatch.DrawString), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteFont), typeof(string), typeof(Microsoft.Xna.Framework.Vector2), typeof(Microsoft.Xna.Framework.Color) }),
+            (typeof(StardewValley.Menus.IClickableMenu), nameof(StardewValley.Menus.IClickableMenu.drawHoverText), new[]
+            {
+                typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch), typeof(string), typeof(Microsoft.Xna.Framework.Graphics.SpriteFont), typeof(int), typeof(int), typeof(int), typeof(string),
+                typeof(int), typeof(string[]), typeof(Item), typeof(int), typeof(string), typeof(int), typeof(int), typeof(int),
+                typeof(float), typeof(CraftingRecipe), typeof(System.Collections.Generic.IList<Item>), typeof(Microsoft.Xna.Framework.Graphics.Texture2D), typeof(Microsoft.Xna.Framework.Rectangle?), typeof(Microsoft.Xna.Framework.Color?),
+                typeof(Microsoft.Xna.Framework.Color?), typeof(float), typeof(int), typeof(int)
+            })
         };
 
         foreach (var (type, method, paramTypes) in targets)
@@ -469,9 +497,11 @@ public sealed class ModEntry : Mod
 
             ClearLanguageResolvers();
             _nameResolver?.Dispose();
-        _contentProvider?.Dispose();
+            _contentProvider?.Dispose();
+            _fontManager?.Dispose();
             _contentProvider = null;
             _nameResolver = null;
+            _fontManager = null;
 
             _harmony?.UnpatchAll(ModManifest.UniqueID);
             _harmony = null;

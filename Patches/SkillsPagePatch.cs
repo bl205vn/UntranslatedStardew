@@ -41,6 +41,7 @@ internal static class SkillsPagePatch
                             if (!string.IsNullOrWhiteSpace(secTitle))
                             {
                                 ___hoverTitle = TooltipFormatter.FormatTitle(___hoverTitle, ___hoverTitle, secTitle, secondaryFirst);
+                                BilingualStringTracker.Register(___hoverTitle);
                             }
                         }
                         return;
@@ -61,6 +62,7 @@ internal static class SkillsPagePatch
                             if (!string.IsNullOrWhiteSpace(secSkill))
                             {
                                 ___hoverTitle = TooltipFormatter.FormatTitle(___hoverTitle, ___hoverTitle, secSkill, secondaryFirst);
+                                BilingualStringTracker.Register(___hoverTitle);
                             }
                         }
                         return;

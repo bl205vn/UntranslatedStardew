@@ -24,6 +24,7 @@ public sealed class LevelUpMenuState
     public string? SubtitleRight { get; set; }
     public bool LeftSwapped { get; set; }
     public bool RightSwapped { get; set; }
+    public BilingualRenderScope.ScopeCookie? ScopeCookie { get; set; }
     private bool _restored;
 
     /// <summary>
@@ -36,6 +37,9 @@ public sealed class LevelUpMenuState
             return;
 
         _restored = true;
+
+        ScopeCookie?.Dispose();
+        ScopeCookie = null;
 
         if (LeftSwapped && OriginalLeft != null && LeftList?.Count > 0)
         {
@@ -58,10 +62,12 @@ public sealed class LevelUpMenuState
         if (instance == null || b == null)
             return;
 
-        float leftTitleH = 48f;
-        float rightTitleH = 48f;
-        float leftSubH = 24f;
-        float rightSubH = 24f;
+        using (BilingualRenderScope.Begin())
+        {
+            float leftTitleH = 48f;
+            float rightTitleH = 48f;
+            float leftSubH = 24f;
+            float rightSubH = 24f;
 
         if (Game1.dialogueFont != null)
         {
@@ -139,6 +145,7 @@ public sealed class LevelUpMenuState
                 SpriteEffects.None,
                 1f
             );
+        }
         }
     }
 }
@@ -229,6 +236,16 @@ public static class LevelUpMenuPatch
                         state.SubtitleRight = secRight;
                     }
                 }
+            }
+
+            if (!string.IsNullOrEmpty(state.SubtitleLeft)) BilingualStringTracker.Register(state.SubtitleLeft);
+            if (!string.IsNullOrEmpty(state.SubtitleRight)) BilingualStringTracker.Register(state.SubtitleRight);
+            if (state.LeftSwapped && ___leftProfessionDescription?.Count > 0) BilingualStringTracker.Register(___leftProfessionDescription[0]);
+            if (state.RightSwapped && ___rightProfessionDescription?.Count > 0) BilingualStringTracker.Register(___rightProfessionDescription[0]);
+
+            if (state.SubtitleLeft != null || state.SubtitleRight != null || state.LeftSwapped || state.RightSwapped)
+            {
+                state.ScopeCookie = BilingualRenderScope.Begin();
             }
         }
         catch (Exception ex)

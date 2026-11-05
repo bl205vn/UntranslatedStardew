@@ -42,8 +42,12 @@ internal static class PowersTabPatch
                     if (!string.IsNullOrWhiteSpace(secondaryTitle))
                     {
                         string formattedTitle = TooltipFormatter.FormatTitle(c.label, c.label, secondaryTitle, secondaryFirst);
+                        BilingualStringTracker.Register(formattedTitle);
                         __instance.hoverText = formattedTitle;
-                        __instance.descriptionText = Game1.parseText(c.hoverText, Game1.smallFont, Math.Max((int)Game1.dialogueFont.MeasureString(__instance.hoverText).X, 320));
+                        using (BilingualRenderScope.Begin())
+                        {
+                            __instance.descriptionText = Game1.parseText(c.hoverText, Game1.smallFont, Math.Max((int)Game1.dialogueFont.MeasureString(__instance.hoverText).X, 320));
+                        }
                     }
                     break;
                 }

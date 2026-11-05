@@ -91,7 +91,7 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
 
 ### Cài đặt:
 1. Tải bản build đóng gói tại:  
-   `bin/Release/net6.0/UntranslatedStardew 1.2.1.zip`
+   `bin/Release/net6.0/UntranslatedStardew 1.2.2.zip`
 2. Giải nén thư mục `UntranslatedStardew` vào thư mục `Mods/` của game:  
    `Stardew Valley/Mods/UntranslatedStardew/`
 3. Cấu trúc thư mục mod:
@@ -258,13 +258,13 @@ Các ngôn ngữ sau có sẵn tệp XNB trong thư mục `Content/` của game:
 dotnet build -c Release /p:EnableModDeploy=false /p:EnableModZip=true
 ```
 - Kết quả thư mục mod: `bin/Release/net6.0/`
-- Tệp nén Release zip: `bin/Release/net6.0/UntranslatedStardew 1.2.1.zip` (chỉ chứa `manifest.json`, `UntranslatedStardew.dll` và thư mục `i18n/`, loại trừ toàn bộ thư mục `examples/` và mã kiểm thử).
+- Tệp nén Release zip: `bin/Release/net6.0/UntranslatedStardew 1.2.2.zip` (chỉ chứa `manifest.json`, `UntranslatedStardew.dll` và thư mục `i18n/`, loại trừ toàn bộ thư mục `examples/` và mã kiểm thử).
 
 ### Chạy bộ kiểm thử hồi quy (Regression Test Suite & Real XNB Smoke Check):
 ```pwsh
 dotnet run --project tests/UntranslatedStardew.Tests/UntranslatedStardew.Tests.csproj
 ```
-Bộ kiểm thử gồm **579 ca kiểm tra** đã qua toàn diện, gồm kiểm tra biên Harmony CJB, UI Expansion, bố cục LevelUpMenu scoped & dynamic fonts, nạp XNB thật, và tích hợp modded content:
+Bộ kiểm thử gồm **668 ca kiểm tra** đã qua toàn diện, gồm kiểm tra biên Harmony CJB, UI Expansion, bố cục LevelUpMenu scoped & dynamic fonts, nạp XNB thật, phân giải phông song ngữ và tích hợp modded content:
 1. `LanguageHelper`: Phân giải mã chuẩn ISO, hỗ trợ `default` và vanilla built-in vs Tiếng Việt, ánh xạ hậu tố tệp XNB.
 2. `SearchMatcher Accent & 'đ'`: Chuẩn hóa Unicode FormD, loại bỏ dấu thanh, ánh xạ `đ`/`Đ` -> `d`/`D`.
 3. `SearchMatcher Query Matching`: Khớp chuỗi không phân biệt hoa thường, chuỗi con, cờ phân biệt dấu, phát sinh từ khóa tìm kiếm.
@@ -287,10 +287,35 @@ Bộ kiểm thử gồm **579 ca kiểm tra** đã qua toàn diện, gồm kiể
 20. `C# Public API, Lifecycle & Thread Safety`: Kiểm tra vòng đời đăng ký C#, tính năng hủy tự động `IDisposable` kèm đồng bộ xóa cache resolver tức thì, quyền sở hữu token theo thế hệ (generation) chống ghi đè nhầm, phân xử xung đột ưu tiên đăng ký sau cùng, an toàn đa luồng (thread-safe copy-on-write), hợp đồng ngôn ngữ rõ ràng không tự động trả về tiếng Pháp khi hỏi tiếng Việt, và cô lập lỗi an toàn.
 21. `Real XNB Mail & Secret Notes Smoke Check`: Nạp thực tế tiêu đề thư Robin và mật thư từ các tệp XNB thật của English, French và tiếng Việt.
 22. `Note Image Preview Layout, Safe Area Clamping & Dynamic Fonts`: Kiểm tra đối chiếu mã lệnh IL gốc của game với các giá trị tọa độ cố định (`mouseY+96`, `mouseY+112`, `288x288`), xác nhận bảo toàn 100% tọa độ gốc khi tiêu đề đơn dòng, tự động dịch chuyển cả khung và ảnh theo cùng độ dời delta khi tiêu đề đa dòng (song ngữ Việt-Anh hoặc phông chữ lớn), xác thực kẹp biên vùng an toàn màn hình (`Safe Area Right/Bottom/Top/Left`), cô lập an toàn trạng thái scoped (`CollectionsNoteImageState`) và phục hồi qua `Finalizer` khi gặp ngoại lệ, kiểm tra bố cục phông chữ động `LevelUpMenu` và tính năng thu phóng an toàn (`bounded scaling`).
+23. `XNB Font Metadata Parsing & Headless Glyph Coverage`: Giải mã nhị phân tệp XNB thật (uncompressed, LZX compressed 0x01/0x81, HiDef), trích xuất mảng ký tự và DefaultCharacter mà không cần thiết bị đồ họa GPU. Xác thực đầy đủ 134 ký tự có dấu và chữ `đ`/`Đ` của tiếng Việt, độ phủ Cyrillic tiếng Nga (ru-RU), Kana/Kanji tiếng Nhật (ja-JP) và Hanzi tiếng Trung (zh-CN).
+24. `Bilingual Run Planner & Metrics`: Kiểm tra phân đoạn văn bản theo font runs, ưu tiên vẽ cả dòng từ cùng một phông để bảo toàn baseline dấu, kiểm tra chuẩn hóa NFC từ input phân rã NFD, tính toán chiều cao dòng cực đại (`per-line max height`), và hoán đổi thứ tự `SecondaryFirst`.
+25. `Bilingual Font Manager & Diagnostic Lifecycle`: Kiểm tra cảnh báo ký tự không được hỗ trợ phát ra duy nhất 1 lần, làm mới bộ nhớ cache và giải phóng ContentManager độc lập.
+26. `Harmony Interception & Recursion Guards`: Kiểm tra bảo vệ phạm vi scoped (chỉ can thiệp khi `BilingualRenderScope.IsActive == true`), chống đệ quy vô hạn khi vẽ và đo đạc, passthrough an toàn cho các chuỗi thuần ASCII.
 
 ---
 
 ## 8. Nhật ký thay đổi (Changelog)
+
+### v1.2.2
+- **Khắc phục lỗi phông chữ giao diện thiếu ký tự (UI Missing Glyphs Bug Fix):**
+  - **Mô tả sự cố (Bug Finding):** Phông chữ giao diện (`Game1.smallFont`, `Game1.dialogueFont`) được nạp cố định duy nhất theo ngôn ngữ chính khi khởi động game. Gói Content Patcher Việt hóa (`Kou.ViethoaSV`) đặt điều kiện nạp phông `"When": { "Language": "vi" }`, nên khi ngôn ngữ chính khác `vi` (ví dụ tiếng Anh `en`), game chỉ dùng phông tiếng Anh vanilla. MonoGame `SpriteFont` trong Stardew Valley cài đặt `DefaultCharacter` là `'*'` (mã ASCII 42), khiến mọi ký tự ngoài bảng mã tiếng Anh tự động biến thành dấu sao (ví dụ: `Cá nóc` -> `C* n*c`).
+  - **Kiến trúc Phân đoạn Phông (Per-Language Font Runs):** Thay vì gộp texture atlas (Glyph-Union tốn kém VRAM và lỗi GPU trong môi trường headless), mod triển khai cơ chế phân đoạn chuỗi theo font runs. Các ký tự thuộc ngôn ngữ phụ được vẽ nối tiếp bằng phông phụ nạp riêng biệt qua instance `ContentManager` độc lập; tuyệt đối không đụng chạm đến cache tĩnh `LocalizedContentManager.localizedAssetNames` hay hoán đổi locale toàn cục.
+  - **Ưu tiên Baseline Đồng nhất & Chuẩn hóa Unicode NFC:** Ưu tiên phân đoạn cả dòng theo phông phụ khi dòng đó chứa ký tự của ngôn ngữ phụ để đảm bảo đường chân chữ (baseline), kerning và khoảng cách dấu thanh hoàn toàn đồng nhất. Tự động chuẩn hóa mọi chuỗi sang Unicode Form C (NFC) trước khi đo đạc và vẽ, khắc phục lỗi dấu thanh bị vẽ lệch khi chuỗi đầu vào ở dạng NFD.
+  - **Điểm Vá Toàn Cục với Cơ chế Passthrough Phạm vi Nghiêm ngặt (Process-Wide Harmony Entrypoints with Strict Active-Scope Passthrough):** Cài đặt điểm vá Harmony trên các phương thức toàn cục `SpriteFont.MeasureString` và `SpriteBatch.DrawString` trong MonoGame, nhưng áp dụng cơ chế active-scope passthrough tuyệt đối (chỉ can thiệp khi `BilingualRenderScope.IsActive == true` và chuỗi được theo dõi bởi `BilingualStringTracker`). Khi ở ngoài phạm vi menu của mod hoặc chuỗi không thuộc mod, phương thức trả về `true` ngay lập tức để chạy mã gốc MonoGame 100% byte-for-byte.
+  - **Khắc phục lỗi Double-Exit Scope qua Cookie Tham chiếu Độc lập (`ScopeCookie`):** Sử dụng đối tượng cookie tham chiếu (`class`) hỗ trợ `Interlocked.Exchange` cho mỗi lời gọi render scope. Khắc phục triệt để lỗi scope bị thoát hai lần khi cả `Postfix` và `Finalizer` cùng thực thi trên một invocation của Harmony, bảo đảm scope cha vẫn duy trì nguyên vẹn khi scope con hoàn tất hoặc ném ngoại lệ.
+  - **Chống Đệ quy Vô hạn & Bảo vệ Ký tự Thiếu Cả Hai Phông:** Quản lý cờ luồng `IsMeasuringActive` trong khối `try ... finally` lúc phân đoạn và đo đạc. Khi gặp ký tự không được hỗ trợ bởi cả phông chính lẫn phông phụ, bộ đo đạc không bị tái kích hoạt vô tận gây tràn ngăn xếp (stack overflow); ghi nhận cảnh báo một lần duy nhất theo bảng mã ký tự có giới hạn bộ nhớ (bounded cache).
+  - **Sửa lỗi Đường tắt NFC Chuẩn hóa (NFC Fast-Path):** Khi chuỗi đầu vào ở dạng NFD (ký tự phân tách) nhưng phông chính đã hỗ trợ đầy đủ các ký tự dựng sẵn (NFC), hệ thống tự động trả về plan dựng sẵn qua phông chính thay vì trả về null khiến game vẽ trực tiếp chuỗi NFD gây lỗi dấu thanh.
+  - **Bảo toàn Phép Biến đổi Toàn khối (Block Flipping Transforms & Scale):** Tính toán và phản chiếu tọa độ tương đối của từng run dựa trên `TotalSize` và `run.Size` khi sử dụng `SpriteEffects.FlipHorizontally` hoặc `SpriteEffects.FlipVertically`. Phân biệt chính xác giữa tỉ lệ bị bỏ qua (mặc định là 1) và tỉ lệ hiển thị bằng 0 (`scale: Vector2.Zero`).
+  - **Bộ nhớ Đệm Asset GPU & Cảnh báo Phông Ngôn ngữ Thiếu Rõ ràng:** Lưu vết các phông phụ đã cố gắng tải từ nguồn khởi tạo để tránh việc truy vấn đĩa lặp lại mỗi khung hình khi thiếu asset. Ghi log cảnh báo chẩn đoán rõ ràng khi asset phông của một ngôn ngữ được hỗ trợ không tồn tại trên đĩa.
+  - **Tương thích Phông Động & FontSettings:** Tôn trọng phông chữ hiện hành của game (nếu người dùng cài đặt mod `FontSettings`, phông chữ tùy biến của locale chính được giữ nguyên 100% và chỉ fallback cho các glyph thực sự còn thiếu).
+  - **Ranh giới Tính năng Nghiêm ngặt:** Mod tuyệt đối không bổ sung tùy chỉnh kích thước/màu sắc phông chữ độc lập cho người dùng, không can thiệp hội thoại (`SpriteText`/BMFont) hay bố cục ruby.
+  - **Ma trận Kiểm thử Thủ công (Manual Test Matrix):**
+    1. `en` -> `vi`: Tiếng Anh chính, tiếng Việt phụ hiển thị đầy đủ dấu không bị dấu `*` hay lỗi ngắt dòng.
+    2. `en` -> `ja`: Tiếng Anh chính, Kanji/Kana phụ hiển thị qua phông tiếng Nhật `SmallFont.ja-JP` / `SpriteFont1.ja-JP`.
+    3. `vi` -> `ru`: Tiếng Việt chính, Cyrillic phụ hiển thị qua phông tiếng Nga `SmallFont.ru-RU` / `SpriteFont1.ru-RU`.
+    4. `ja` -> `en`: Tiếng Nhật chính, tiếng Anh phụ hiển thị qua phông chính hoặc fallback.
+    5. Chuyển đổi cấu hình ngôn ngữ phụ / phông chữ mà không cần khởi động lại game: làm mới cache tức thì.
+- **Bộ Kiểm thử Tự động:** Mở rộng lên **706 ca kiểm thử hồi quy** (vượt qua 100% 605 bài test cũ + 101 bài test mới về giải mã XNB, phông chữ động, Harmony nested fixture, transforms và acceptance fixes).
 
 ### v1.2.1
 - **Khắc phục lỗi đè ảnh xem trước Mật thư / Mảnh nhật ký (`CollectionsPage Image Preview Overlap`):**
