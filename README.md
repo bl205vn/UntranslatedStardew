@@ -91,7 +91,7 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
 
 ### Cài đặt:
 1. Tải bản build đóng gói tại:  
-   `bin/Release/net6.0/UntranslatedStardew 1.2.0.zip`
+   `bin/Release/net6.0/UntranslatedStardew 1.2.1.zip`
 2. Giải nén thư mục `UntranslatedStardew` vào thư mục `Mods/` của game:  
    `Stardew Valley/Mods/UntranslatedStardew/`
 3. Cấu trúc thư mục mod:
@@ -247,7 +247,7 @@ Các ngôn ngữ sau có sẵn tệp XNB trong thư mục `Content/` của game:
 - **Tuyệt đối không dịch:** Thân thư, nội dung mật thư, tên NPC, quái vật, hội thoại hay ghi đè logic game của thuộc tính `Item.Name`/`Item.DisplayName`.
 - **Không tự động đoán dịch cho các mod ảo:** Tệp XNB của game gốc không thể thấy các tài nguyên ảo của Content Patcher/C#. Để modded item/mail hiển thị song ngữ, tác giả mod cần khai báo qua `Mods/GiaHung.UntranslatedStardew/Names`, C# API hoặc sử dụng token `[LocalizedText ...]`. Nếu không có bản dịch phụ, mod sẽ hiển thị tên chính nguyên bản một cách sạch sẽ.
 - Tuyệt đối không thay đổi mã ngôn ngữ toàn cục `LocalizedContentManager.CurrentLanguageCode` của game.
-- Chi tiết báo cáo kiểm tra lỗi và ranh giới kỹ thuật: xem thêm tại [`docs/AUDIT-1.2.0.md`](file:///docs/AUDIT-1.2.0.md) và [`docs/UI-COVERAGE.md`](file:///docs/UI-COVERAGE.md).
+- Chi tiết báo cáo kiểm tra lỗi và ranh giới kỹ thuật: xem thêm tại [`docs/DEBUG-MANUAL-1.2.1.md`](file:///docs/DEBUG-MANUAL-1.2.1.md), [`docs/AUDIT-1.2.0.md`](file:///docs/AUDIT-1.2.0.md) và [`docs/UI-COVERAGE.md`](file:///docs/UI-COVERAGE.md).
 
 ---
 
@@ -258,13 +258,13 @@ Các ngôn ngữ sau có sẵn tệp XNB trong thư mục `Content/` của game:
 dotnet build -c Release /p:EnableModDeploy=false /p:EnableModZip=true
 ```
 - Kết quả thư mục mod: `bin/Release/net6.0/`
-- Tệp nén Release zip: `bin/Release/net6.0/UntranslatedStardew 1.2.0.zip` (chỉ chứa `manifest.json`, `UntranslatedStardew.dll` và thư mục `i18n/`, loại trừ toàn bộ thư mục `examples/` và mã kiểm thử).
+- Tệp nén Release zip: `bin/Release/net6.0/UntranslatedStardew 1.2.1.zip` (chỉ chứa `manifest.json`, `UntranslatedStardew.dll` và thư mục `i18n/`, loại trừ toàn bộ thư mục `examples/` và mã kiểm thử).
 
 ### Chạy bộ kiểm thử hồi quy (Regression Test Suite & Real XNB Smoke Check):
 ```pwsh
 dotnet run --project tests/UntranslatedStardew.Tests/UntranslatedStardew.Tests.csproj
 ```
-Bộ kiểm thử gồm **497 ca kiểm tra** đã qua toàn diện, gồm kiểm tra biên Harmony CJB, UI Expansion, bố cục LevelUpMenu scoped, nạp XNB thật, và tích hợp modded content:
+Bộ kiểm thử gồm **579 ca kiểm tra** đã qua toàn diện, gồm kiểm tra biên Harmony CJB, UI Expansion, bố cục LevelUpMenu scoped & dynamic fonts, nạp XNB thật, và tích hợp modded content:
 1. `LanguageHelper`: Phân giải mã chuẩn ISO, hỗ trợ `default` và vanilla built-in vs Tiếng Việt, ánh xạ hậu tố tệp XNB.
 2. `SearchMatcher Accent & 'đ'`: Chuẩn hóa Unicode FormD, loại bỏ dấu thanh, ánh xạ `đ`/`Đ` -> `d`/`D`.
 3. `SearchMatcher Query Matching`: Khớp chuỗi không phân biệt hoa thường, chuỗi con, cờ phân biệt dấu, phát sinh từ khóa tìm kiếm.
@@ -286,10 +286,24 @@ Bộ kiểm thử gồm **497 ca kiểm tra** đã qua toàn diện, gồm kiể
 19. `External Translation Registry & Modded Fallbacks`: Kiểm tra cơ chế đăng ký từ điển `Mods/GiaHung.UntranslatedStardew/Names`, fallback chuẩn SMAPI (`exact -> parent -> default`), tra cứu ID định danh đầy đủ (`(W)Custom_DragonSword`), và độ ưu tiên so với dữ liệu gốc.
 20. `C# Public API, Lifecycle & Thread Safety`: Kiểm tra vòng đời đăng ký C#, tính năng hủy tự động `IDisposable` kèm đồng bộ xóa cache resolver tức thì, quyền sở hữu token theo thế hệ (generation) chống ghi đè nhầm, phân xử xung đột ưu tiên đăng ký sau cùng, an toàn đa luồng (thread-safe copy-on-write), hợp đồng ngôn ngữ rõ ràng không tự động trả về tiếng Pháp khi hỏi tiếng Việt, và cô lập lỗi an toàn.
 21. `Real XNB Mail & Secret Notes Smoke Check`: Nạp thực tế tiêu đề thư Robin và mật thư từ các tệp XNB thật của English, French và tiếng Việt.
+22. `Note Image Preview Layout, Safe Area Clamping & Dynamic Fonts`: Kiểm tra đối chiếu mã lệnh IL gốc của game với các giá trị tọa độ cố định (`mouseY+96`, `mouseY+112`, `288x288`), xác nhận bảo toàn 100% tọa độ gốc khi tiêu đề đơn dòng, tự động dịch chuyển cả khung và ảnh theo cùng độ dời delta khi tiêu đề đa dòng (song ngữ Việt-Anh hoặc phông chữ lớn), xác thực kẹp biên vùng an toàn màn hình (`Safe Area Right/Bottom/Top/Left`), cô lập an toàn trạng thái scoped (`CollectionsNoteImageState`) và phục hồi qua `Finalizer` khi gặp ngoại lệ, kiểm tra bố cục phông chữ động `LevelUpMenu` và tính năng thu phóng an toàn (`bounded scaling`).
 
 ---
 
 ## 8. Nhật ký thay đổi (Changelog)
+
+### v1.2.1
+- **Khắc phục lỗi đè ảnh xem trước Mật thư / Mảnh nhật ký (`CollectionsPage Image Preview Overlap`):**
+  - **Mô tả sự cố (Bug Screenshot Case):** Khi người chơi rà chuột lên Mảnh nhật ký vụn số 4 (`Journal Scrap #4`) hoặc các ghi chú dạng ảnh khác trong Bảng Bộ sưu tập với giao diện song ngữ (ví dụ Tiếng Việt + Tiếng Anh: `"Mảnh nhật ký vụn #4\nJournal Scrap #4"`), khung ảnh và ảnh bản đồ bị vẽ đè trực tiếp lên dòng tiêu đề thứ hai.
+  - **Phân tích nguyên nhân gốc:** Trong mã gốc `CollectionsPage.draw` (dòng ~871-876), game gọi `drawHoverText` rồi vẽ trực tiếp khung ảnh tại `mouseY + 64 + 32` (`mouseY + 96`) và ảnh tại `mouseY + 112`. Game giả định cố định rằng tooltip luôn chỉ có 1 dòng cao 64px. Khi hiển thị song ngữ, tooltip mở rộng lên 96px+, khiến tọa độ cố định của ảnh rơi vào giữa dòng chữ phụ.
+  - **Giải pháp triệt để:** Bổ sung lớp tính toán hình học thuần túy `CollectionsNoteImageLayoutHelper` và điểm vá an toàn `CollectionsPageDrawPatch`. Đo đạc chính xác chiều cao thực tế của chuỗi `hoverText` qua phông chữ hiện hành `Game1.smallFont`, tự động dịch chuyển cả khung ảnh và ảnh xuống cùng một khoảng delta (`ExtraHeight = tooltipHeight - 64`) để nằm khít ngay dưới đáy tooltip. Khi tiêu đề không có dòng phụ, giữ nguyên 100% tọa độ gốc vanilla.
+  - **Kẹp biên an toàn màn hình theo nhóm phối hợp (`Joint Coordinated Clamping`):** Tính toán và kẹp biên đồng thời cả tiêu đề tooltip và khung ảnh như một khối liên kết. Khi ở gần cạnh đáy (`safeArea.Bottom`) hoặc cạnh phải (`safeArea.Right`), cả tooltip và khung ảnh cùng dịch chuyển lên/sang trái, bảo đảm tuyệt đối đáy tooltip luôn nằm trên đỉnh khung ảnh (`headerBottom <= boxY`), không bị tái hiện lỗi đè ảnh khi kẹp độc lập. Hỗ trợ hiển thị song song (side-by-side) hoặc co giãn ảnh theo tỷ lệ khi chiều cao màn hình khả dụng bị thu hẹp.
+  - **Bảo toàn phạm vi & Trạng thái Scoped:** Chỉ can thiệp ảnh xem trước trong `CollectionsPage`; không làm ảnh hưởng đến menu đọc thư (`LetterViewerMenu`), thân thư từ hay tooltip vật phẩm khác. Sử dụng mô hình `Prefix`, `Postfix`, `Finalizer` với đối tượng `CollectionsNoteImageState` tạm ẩn `secretNoteImage = -1` và `___hoverText = ""` lúc vẽ, luôn khôi phục lại giá trị gốc kể cả khi có ngoại lệ.
+- **Tương thích Phông chữ Động & Thu phóng Giới hạn (`Dynamic Font Safety in LevelUpMenu`):**
+  - Trong menu chọn nghề `LevelUpMenu`, thay thế hằng số giả định cứng `top+208` trước đây bằng cơ chế đo đạc thực tế chiều cao của `Game1.dialogueFont` và `Game1.smallFont` mỗi khung hình (frame-by-frame).
+  - Tự động hạ thấp vị trí phụ đề nằm ngay dưới đáy tiêu đề chính đã đo đạc (`SubtitleY >= titleY + titleHeight`), ngăn chặn triệt để nguy cơ phụ đề đè lên tiêu đề chính khi dùng phông chữ Việt hóa lớn hoặc mod tinh chỉnh phông (`FontSettings`).
+  - Tích hợp cơ chế thu phóng có giới hạn (`bounded scaling`) khi cả tiêu đề và phụ đề đều lớn hơn khoảng trống khả dụng trước dòng đạn đầu tiên (`bullet1Y` tại `top+264`). Nếu phông chữ quá lớn khiến không gian khả dụng dưới ngưỡng đọc được (< 12px hoặc tỷ lệ thu phóng < 0.5f), mod an toàn ẩn lớp phủ phụ đề để tránh va chạm chữ thay vì cố vẽ gây đè chữ.
+- **Bộ Kiểm thử Tự động:** Mở rộng lên 605 ca kiểm thử hồi quy (vượt qua 100% 497 bài test cũ + 108 bài test hình học và ranh giới patch mới).
 
 ### v1.2.0
 - **Tiêu đề Thư từ Song ngữ (`Letters` - Tab 7):** Hiển thị tên song ngữ cho các bức thư đã đọc khi rà chuột trong Bảng Bộ sưu tập. Trích xuất chính xác trường tiêu đề sau ký tự phân cách `[#]` từ `Data/mail`; không dịch thân thư. Định dạng độc lập từng phần để tránh việc ngắt dòng của game làm ẩn tiêu đề phụ. Bổ sung guard bỏ qua khi menu xem thư (`letterviewerSubMenu`) đang mở.

@@ -49,40 +49,96 @@ public sealed class LevelUpMenuState
     }
 
     /// <summary>
-    /// Renders secondary profession subtitles using Game1.smallFont inside the measured 104px vertical gap
-    /// between title (top+160) and first bullet (top+264), clamping to max column width.
+    /// Renders secondary profession subtitles using Game1.smallFont inside the measured vertical gap
+    /// between title (top+160) and first bullet (top+264), dynamically measuring actual font heights
+    /// and applying bounded scaling/fit to prevent overlap with dynamic or enlarged fonts.
     /// </summary>
     public void DrawSubtitles(LevelUpMenu instance, SpriteBatch b, Color leftColor, Color rightColor)
     {
         if (instance == null || b == null)
             return;
 
+        float leftTitleH = 48f;
+        float rightTitleH = 48f;
+        float leftSubH = 24f;
+        float rightSubH = 24f;
+
+        if (Game1.dialogueFont != null)
+        {
+            if (LeftList != null && LeftList.Count > 0 && !string.IsNullOrEmpty(LeftList[0]))
+            {
+                leftTitleH = Game1.dialogueFont.MeasureString(LeftList[0]).Y;
+            }
+            if (RightList != null && RightList.Count > 0 && !string.IsNullOrEmpty(RightList[0]))
+            {
+                rightTitleH = Game1.dialogueFont.MeasureString(RightList[0]).Y;
+            }
+        }
+
+        if (Game1.smallFont != null)
+        {
+            if (!string.IsNullOrEmpty(SubtitleLeft))
+            {
+                leftSubH = Game1.smallFont.MeasureString(SubtitleLeft).Y;
+            }
+            if (!string.IsNullOrEmpty(SubtitleRight))
+            {
+                rightSubH = Game1.smallFont.MeasureString(SubtitleRight).Y;
+            }
+        }
+
         LevelUpLayoutResult layout = LevelUpLayoutHelper.CalculateLayout(
             instance.xPositionOnScreen,
             instance.yPositionOnScreen,
             instance.width,
             IClickableMenu.spaceToClearSideBorder,
-            IClickableMenu.spaceToClearTopBorder
+            IClickableMenu.spaceToClearTopBorder,
+            leftTitleH,
+            leftSubH,
+            rightTitleH,
+            rightSubH
         );
 
-        if (!string.IsNullOrEmpty(SubtitleLeft))
+        if (layout.LeftVisible && !string.IsNullOrEmpty(SubtitleLeft) && Game1.smallFont != null)
         {
+            float maxLeftWidth = layout.LeftScale > 0f ? layout.LeftMaxWidth / layout.LeftScale : layout.LeftMaxWidth;
             string leftText = LevelUpLayoutHelper.TruncateToWidth(
                 SubtitleLeft,
-                layout.LeftMaxWidth,
+                maxLeftWidth,
                 s => Game1.smallFont.MeasureString(s).X
             );
-            b.DrawString(Game1.smallFont, leftText, new Vector2(layout.LeftSubtitleX, layout.SubtitleY), leftColor);
+            b.DrawString(
+                Game1.smallFont,
+                leftText,
+                new Vector2(layout.LeftSubtitleX, layout.LeftSubtitleY),
+                leftColor,
+                0f,
+                Vector2.Zero,
+                layout.LeftScale,
+                SpriteEffects.None,
+                1f
+            );
         }
 
-        if (!string.IsNullOrEmpty(SubtitleRight))
+        if (layout.RightVisible && !string.IsNullOrEmpty(SubtitleRight) && Game1.smallFont != null)
         {
+            float maxRightWidth = layout.RightScale > 0f ? layout.RightMaxWidth / layout.RightScale : layout.RightMaxWidth;
             string rightText = LevelUpLayoutHelper.TruncateToWidth(
                 SubtitleRight,
-                layout.RightMaxWidth,
+                maxRightWidth,
                 s => Game1.smallFont.MeasureString(s).X
             );
-            b.DrawString(Game1.smallFont, rightText, new Vector2(layout.RightSubtitleX, layout.SubtitleY), rightColor);
+            b.DrawString(
+                Game1.smallFont,
+                rightText,
+                new Vector2(layout.RightSubtitleX, layout.RightSubtitleY),
+                rightColor,
+                0f,
+                Vector2.Zero,
+                layout.RightScale,
+                SpriteEffects.None,
+                1f
+            );
         }
     }
 }

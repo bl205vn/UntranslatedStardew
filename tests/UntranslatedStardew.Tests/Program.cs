@@ -56,6 +56,7 @@ public static class Program
         TestPublicApiRegistrationAndLifecycle();
         TestLevelUpMenuPrefixFailureRestoration();
         TestRealXnbMailAndNotesExpansion();
+        TestCollectionsNoteImageLayoutAndDynamicFonts();
 
         Console.WriteLine();
         Console.WriteLine($"=== Results: {_passed} Passed, {_failed} Failed ===");
@@ -1088,6 +1089,24 @@ public static class Program
         var fPowersDesc = typeof(StardewValley.Menus.PowersTab).GetField("descriptionText", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         Assert(fPowersDesc != null && fPowersDesc.FieldType == typeof(string), "Reflection: PowersTab.descriptionText (string) exists");
 
+        var mCollectionsDraw = typeof(StardewValley.Menus.CollectionsPage).GetMethod(nameof(StardewValley.Menus.CollectionsPage.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) });
+        Assert(mCollectionsDraw != null, "Reflection: CollectionsPage.draw(SpriteBatch) exists");
+
+        var fSecretNoteImage = typeof(StardewValley.Menus.CollectionsPage).GetField("secretNoteImage", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fSecretNoteImage != null && fSecretNoteImage.FieldType == typeof(int), "Reflection: CollectionsPage.secretNoteImage (int) exists");
+
+        var fSecretNoteTexture = typeof(StardewValley.Menus.CollectionsPage).GetField("secretNoteImageTexture", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(fSecretNoteTexture != null && fSecretNoteTexture.FieldType == typeof(Microsoft.Xna.Framework.Graphics.Texture2D), "Reflection: CollectionsPage.secretNoteImageTexture (Texture2D) exists");
+
+        var mDrawPatchPrefix = typeof(CollectionsPageDrawPatch).GetMethod(nameof(CollectionsPageDrawPatch.Prefix));
+        Assert(mDrawPatchPrefix != null, "Reflection: CollectionsPageDrawPatch.Prefix exists");
+
+        var mDrawPatchPostfix = typeof(CollectionsPageDrawPatch).GetMethod(nameof(CollectionsPageDrawPatch.Postfix));
+        Assert(mDrawPatchPostfix != null, "Reflection: CollectionsPageDrawPatch.Postfix exists");
+
+        var mDrawPatchFinalizer = typeof(CollectionsPageDrawPatch).GetMethod(nameof(CollectionsPageDrawPatch.Finalizer));
+        Assert(mDrawPatchFinalizer != null, "Reflection: CollectionsPageDrawPatch.Finalizer exists");
+
         var fPowersList = typeof(StardewValley.Menus.PowersTab).GetField("powers", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         Assert(fPowersList != null && fPowersList.FieldType == typeof(List<List<StardewValley.Menus.ClickableTextureComponent>>), "Reflection: PowersTab.powers (List<List<ClickableTextureComponent>>) exists");
     }
@@ -1833,6 +1852,292 @@ public static class Program
             string? tabNotesVi = resVi.GetSecondarySideTabName(6);
             Assert(tabNotesVi == "Ghi chú bí ẩn", $"Real Vietnamese mod XNB: Side tab 6 == 'Ghi chú bí ẩn' (got '{tabNotesVi}')");
         }
+    }
+
+    private static void TestCollectionsNoteImageLayoutAndDynamicFonts()
+    {
+        Console.WriteLine("\n-- Testing Note Image Preview Layout, Safe Area Clamping & Dynamic Fonts --");
+
+        // 1. Regression check: verify actual compiled IL of CollectionsPage.draw matches fixed offsets
+        var mCollectionsDraw = typeof(StardewValley.Menus.CollectionsPage).GetMethod(nameof(StardewValley.Menus.CollectionsPage.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) });
+        Assert(mCollectionsDraw != null, "Reflection: CollectionsPage.draw exists");
+
+        var instructions = PatchProcessor.GetOriginalInstructions(mCollectionsDraw!);
+        bool foundSecretNoteImageField = false;
+        bool foundFixed64 = false;
+        bool foundFixed32 = false;
+        bool foundFixed288 = false;
+        bool foundDrawTextureBox = false;
+        bool foundFixed16 = false;
+        bool foundSecretNoteImageTextureField = false;
+
+        for (int i = 0; i < instructions.Count; i++)
+        {
+            var inst = instructions[i];
+            if (inst.operand is FieldInfo fi)
+            {
+                if (fi.Name == "secretNoteImage")
+                    foundSecretNoteImageField = true;
+                if (fi.Name == "secretNoteImageTexture")
+                    foundSecretNoteImageTextureField = true;
+            }
+            if (inst.opcode == System.Reflection.Emit.OpCodes.Ldc_I4_S)
+            {
+                sbyte val = Convert.ToSByte(inst.operand);
+                if (val == 64) foundFixed64 = true;
+                if (val == 32) foundFixed32 = true;
+                if (val == 16) foundFixed16 = true;
+            }
+            if (inst.opcode == System.Reflection.Emit.OpCodes.Ldc_I4)
+            {
+                int val = Convert.ToInt32(inst.operand);
+                if (val == 288) foundFixed288 = true;
+            }
+            if (inst.operand is MethodInfo mi && mi.Name == "drawTextureBox")
+            {
+                foundDrawTextureBox = true;
+            }
+        }
+
+        Assert(foundSecretNoteImageField, "IL Regression: CollectionsPage.draw reads secretNoteImage");
+        Assert(foundFixed64 && foundFixed32, "IL Regression: CollectionsPage.draw contains fixed 64 + 32 offsets");
+        Assert(foundFixed288, "IL Regression: CollectionsPage.draw contains fixed 288 texture box size");
+        Assert(foundDrawTextureBox, "IL Regression: CollectionsPage.draw calls drawTextureBox");
+        Assert(foundFixed16, "IL Regression: CollectionsPage.draw contains fixed 16 image padding offset");
+        Assert(foundSecretNoteImageTextureField, "IL Regression: CollectionsPage.draw reads secretNoteImageTexture");
+
+        // 2. Pure geometry: Unchanged single-title geometry matches vanilla coordinates
+        int mouseX = 400;
+        int mouseY = 300;
+        var safeArea = new Microsoft.Xna.Framework.Rectangle(0, 0, 1920, 1080);
+        string singleTitle = "Mật thư #1";
+        Func<string, Microsoft.Xna.Framework.Vector2> singleMeasure = s => new Microsoft.Xna.Framework.Vector2(120, 28);
+
+        var singleLayout = CollectionsNoteImageLayoutHelper.CalculateLayout(mouseX, mouseY, singleTitle, singleMeasure, safeArea);
+
+        Assert(singleLayout.HeaderX == mouseX + 32, "Single-title: HeaderX matches vanilla mouseX+32 (432)");
+        Assert(singleLayout.HeaderY == mouseY + 32, "Single-title: HeaderY matches vanilla mouseY+32 (332)");
+        Assert(singleLayout.HeaderWidth == 120 + 36, "Single-title: HeaderWidth is 156 (120+36)");
+        Assert(singleLayout.BoxX == mouseX, "Single-title: BoxX matches vanilla mouseX (400)");
+        Assert(singleLayout.BoxY == mouseY + 96, "Single-title: BoxY matches vanilla mouseY+96 (396)");
+        Assert(singleLayout.ImageX == mouseX + 16, "Single-title: ImageX matches vanilla mouseX+16 (416)");
+        Assert(singleLayout.ImageY == mouseY + 112, "Single-title: ImageY matches vanilla mouseY+112 (412)");
+        Assert(singleLayout.TooltipHeight == 60, "Single-title: TooltipHeight is baseline 60px (Math.Max(60, 28+32))");
+        Assert(singleLayout.ExtraHeight == 0, "Single-title: ExtraHeight is 0px");
+        Assert(singleLayout.DeltaY == 0, "Single-title: DeltaY is 0px");
+        Assert(singleLayout.HeaderY + singleLayout.HeaderHeight <= singleLayout.BoxY, "Single-title: Header bottom <= Box top (disjoint)");
+
+        // 3. Pure geometry: Multiline bilingual title (Vietnamese + English) moves both box and image
+        string bilingualTitle = "Mảnh nhật ký vụn #4\nJournal Scrap #4";
+        Func<string, Microsoft.Xna.Framework.Vector2> bilingualMeasure = s => new Microsoft.Xna.Framework.Vector2(250, 64); // 2 lines at 32px each
+
+        var biLayout = CollectionsNoteImageLayoutHelper.CalculateLayout(mouseX, mouseY, bilingualTitle, bilingualMeasure, safeArea);
+
+        Assert(biLayout.TooltipHeight == 96, "Bilingual: TooltipHeight is 96px (64+32)");
+        Assert(biLayout.ExtraHeight == 32, "Bilingual: ExtraHeight is 32px (96 - 64 baseline)");
+        Assert(biLayout.DeltaY == 32, "Bilingual: DeltaY is 32px");
+        Assert(biLayout.BoxY == mouseY + 96 + 32, "Bilingual: BoxY moves down by 32px to 428 (below line 2)");
+        Assert(biLayout.ImageY == mouseY + 112 + 32, "Bilingual: ImageY moves down by 32px to 444 (below line 2)");
+        Assert(biLayout.BoxY - (mouseY + 96) == biLayout.ImageY - (mouseY + 112), "Bilingual: Both box and image move down by exact same delta (32px)");
+        Assert(biLayout.HeaderY + biLayout.HeaderHeight <= biLayout.BoxY, "Bilingual: Header bottom <= Box top (disjoint)");
+
+        // 4. Pure geometry: Enlarged font title
+        Func<string, Microsoft.Xna.Framework.Vector2> enlargedMeasure = s => new Microsoft.Xna.Framework.Vector2(300, 80);
+
+        var enlargedLayout = CollectionsNoteImageLayoutHelper.CalculateLayout(mouseX, mouseY, bilingualTitle, enlargedMeasure, safeArea);
+
+        Assert(enlargedLayout.TooltipHeight == 112, "Enlarged font: TooltipHeight is 112px (80+32)");
+        Assert(enlargedLayout.ExtraHeight == 48, "Enlarged font: ExtraHeight is 48px (112 - 64 baseline)");
+        Assert(enlargedLayout.BoxY == mouseY + 96 + 48, "Enlarged font: BoxY moves down by 48px to 444");
+        Assert(enlargedLayout.ImageY == mouseY + 112 + 48, "Enlarged font: ImageY moves down by 48px to 460");
+        Assert(enlargedLayout.ImageY - enlargedLayout.BoxY == 16, "Enlarged font: Image-to-Box padding strictly 16px");
+        Assert(enlargedLayout.HeaderY + enlargedLayout.HeaderHeight <= enlargedLayout.BoxY, "Enlarged font: Header bottom <= Box top (disjoint)");
+
+        // 5. Pure geometry: Image padding is strictly 16px in all directions across all test cases
+        Assert(singleLayout.ImageX - singleLayout.BoxX == CollectionsNoteImageLayoutHelper.ImagePadding, "Geometry invariant: ImageX - BoxX == 16 (single)");
+        Assert(singleLayout.ImageY - singleLayout.BoxY == CollectionsNoteImageLayoutHelper.ImagePadding, "Geometry invariant: ImageY - BoxY == 16 (single)");
+        Assert(biLayout.ImageX - biLayout.BoxX == CollectionsNoteImageLayoutHelper.ImagePadding, "Geometry invariant: ImageX - BoxX == 16 (bilingual)");
+        Assert(biLayout.ImageY - biLayout.BoxY == CollectionsNoteImageLayoutHelper.ImagePadding, "Geometry invariant: ImageY - BoxY == 16 (bilingual)");
+
+        // 6. End-to-end geometry: Coordinated group at lower-right corner with disjointness assertion
+        int mouseLRX = 1800; // 1800 + 288 = 2088 > 1920
+        int mouseLRY = 950;  // 950 + 96 + 288 = 1334 > 1080
+        var lrClampLayout = CollectionsNoteImageLayoutHelper.CalculateLayout(mouseLRX, mouseLRY, bilingualTitle, bilingualMeasure, safeArea);
+
+        Assert(lrClampLayout.HeaderX + lrClampLayout.HeaderWidth <= safeArea.Right, "Lower-Right: Header strictly inside safeArea.Right");
+        Assert(lrClampLayout.BoxX + lrClampLayout.BoxWidth <= safeArea.Right, "Lower-Right: Box strictly inside safeArea.Right");
+        Assert(lrClampLayout.HeaderY >= safeArea.Top, "Lower-Right: Header >= safeArea.Top");
+        Assert(lrClampLayout.BoxY + lrClampLayout.BoxHeight <= safeArea.Bottom, "Lower-Right: Box strictly inside safeArea.Bottom");
+        Assert(lrClampLayout.HeaderY + lrClampLayout.HeaderHeight <= lrClampLayout.BoxY, "Lower-Right: Header and Image Box strictly disjoint (header bottom <= box top)");
+        Assert(lrClampLayout.ImageY - lrClampLayout.BoxY == CollectionsNoteImageLayoutHelper.ImagePadding, "Lower-Right: Image-to-box padding invariant preserved");
+
+        // 7. End-to-end geometry: Enlarged font at lower-right corner remains strictly disjoint
+        var lrEnlargedLayout = CollectionsNoteImageLayoutHelper.CalculateLayout(mouseLRX, mouseLRY, bilingualTitle, enlargedMeasure, safeArea);
+        Assert(lrEnlargedLayout.HeaderX + lrEnlargedLayout.HeaderWidth <= safeArea.Right, "Lower-Right Enlarged: Header inside safeArea.Right");
+        Assert(lrEnlargedLayout.BoxX + lrEnlargedLayout.BoxWidth <= safeArea.Right, "Lower-Right Enlarged: Box inside safeArea.Right");
+        Assert(lrEnlargedLayout.BoxY + lrEnlargedLayout.BoxHeight <= safeArea.Bottom, "Lower-Right Enlarged: Box inside safeArea.Bottom");
+        Assert(lrEnlargedLayout.HeaderY + lrEnlargedLayout.HeaderHeight <= lrEnlargedLayout.BoxY, "Lower-Right Enlarged: Header and Image Box strictly disjoint");
+
+        // 8. End-to-end geometry: Reduced available height fallback (side-by-side or proportional image shrink)
+        var smallSafeArea = new Microsoft.Xna.Framework.Rectangle(0, 0, 1920, 360); // 360px < 384px (header 96 + box 288)
+        var reducedHeightLayout = CollectionsNoteImageLayoutHelper.CalculateLayout(mouseX, mouseY, bilingualTitle, bilingualMeasure, smallSafeArea);
+        Assert(reducedHeightLayout.IsSideBySide || reducedHeightLayout.ImageScale < 4f, "Reduced Height: Activates side-by-side or proportional scale fallback");
+        Assert(reducedHeightLayout.BoxY + reducedHeightLayout.BoxHeight <= smallSafeArea.Bottom, "Reduced Height: Box inside safeArea.Bottom");
+        Assert(reducedHeightLayout.HeaderY + reducedHeightLayout.HeaderHeight <= smallSafeArea.Bottom, "Reduced Height: Header inside safeArea.Bottom");
+        if (reducedHeightLayout.IsSideBySide)
+        {
+            bool horizontallyDisjoint = (reducedHeightLayout.HeaderX + reducedHeightLayout.HeaderWidth <= reducedHeightLayout.BoxX)
+                || (reducedHeightLayout.BoxX + reducedHeightLayout.BoxWidth <= reducedHeightLayout.HeaderX);
+            Assert(horizontallyDisjoint, "Reduced Height Side-By-Side: Header and Box are horizontally disjoint");
+        }
+        else
+        {
+            Assert(reducedHeightLayout.HeaderY + reducedHeightLayout.HeaderHeight <= reducedHeightLayout.BoxY, "Reduced Height Stacked: Header and Box are vertically disjoint");
+        }
+
+        // 9. Safe Area Top & Left Clamp
+        int mouseTopEdge = -200;
+        var topClampLayout = CollectionsNoteImageLayoutHelper.CalculateLayout(mouseX, mouseTopEdge, singleTitle, singleMeasure, safeArea);
+        Assert(topClampLayout.BoxY >= safeArea.Top, "Safe Area Top: BoxY >= safeArea.Top");
+        Assert(topClampLayout.HeaderY >= safeArea.Top, "Safe Area Top: HeaderY >= safeArea.Top");
+        Assert(topClampLayout.HeaderY + topClampLayout.HeaderHeight <= topClampLayout.BoxY, "Safe Area Top: Header and Box strictly disjoint");
+
+        int mouseLeftEdge = -100;
+        var leftClampLayout = CollectionsNoteImageLayoutHelper.CalculateLayout(mouseLeftEdge, mouseY, singleTitle, singleMeasure, safeArea);
+        Assert(leftClampLayout.BoxX >= safeArea.Left, "Safe Area Left: BoxX >= safeArea.Left");
+        Assert(leftClampLayout.HeaderX >= safeArea.Left, "Safe Area Left: HeaderX >= safeArea.Left");
+
+        // 10. Hidden "???", non-secret-notes tab, open submenu, and no-image guards
+        var dummyPage = (StardewValley.Menus.CollectionsPage)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(StardewValley.Menus.CollectionsPage));
+        dummyPage.currentTab = StardewValley.Menus.CollectionsPage.secretNotesTab;
+        dummyPage.letterviewerSubMenu = null;
+        dummyPage.secretNoteImage = 4;
+
+        string hoverHidden = "???";
+        CollectionsPageDrawPatch.Prefix(dummyPage, ref hoverHidden, out var stateHidden);
+        Assert(stateHidden == null, "Hidden '???': Prefix produces null state");
+        Assert(dummyPage.secretNoteImage == 4, "Hidden '???': secretNoteImage remains 4 untouched");
+        Assert(hoverHidden == "???", "Hidden '???': hoverText untouched");
+
+        dummyPage.secretNoteImage = -1;
+        string hoverNoImg = "Some Note Title";
+        CollectionsPageDrawPatch.Prefix(dummyPage, ref hoverNoImg, out var stateNoImage);
+        Assert(stateNoImage == null, "No image (-1): Prefix produces null state");
+        Assert(dummyPage.secretNoteImage == -1, "No image (-1): secretNoteImage remains -1 untouched");
+
+        dummyPage.secretNoteImage = 4;
+        string hoverEmpty = "";
+        CollectionsPageDrawPatch.Prefix(dummyPage, ref hoverEmpty, out var stateEmpty);
+        Assert(stateEmpty == null, "Empty hoverText: Prefix produces null state");
+        Assert(dummyPage.secretNoteImage == 4, "Empty hoverText: secretNoteImage remains 4 untouched");
+
+        // Non-secret-notes tab guard
+        dummyPage.currentTab = 0; // Items tab
+        string hoverOtherTab = "Mảnh nhật ký vụn #4";
+        CollectionsPageDrawPatch.Prefix(dummyPage, ref hoverOtherTab, out var stateOtherTab);
+        Assert(stateOtherTab == null, "Other tab: Prefix produces null state");
+        Assert(dummyPage.secretNoteImage == 4, "Other tab: secretNoteImage remains 4 untouched");
+        dummyPage.currentTab = StardewValley.Menus.CollectionsPage.secretNotesTab;
+
+        // Open letter submenu guard
+        dummyPage.letterviewerSubMenu = (StardewValley.Menus.LetterViewerMenu)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(StardewValley.Menus.LetterViewerMenu));
+        string hoverSubMenu = "Mảnh nhật ký vụn #4";
+        CollectionsPageDrawPatch.Prefix(dummyPage, ref hoverSubMenu, out var stateSubMenu);
+        Assert(stateSubMenu == null, "Open submenu: Prefix produces null state");
+        Assert(dummyPage.secretNoteImage == 4, "Open submenu: secretNoteImage remains 4 untouched");
+        dummyPage.letterviewerSubMenu = null;
+
+        // 11. Scoped state & Finalizer exception recovery
+        dummyPage.secretNoteImage = 4;
+        string activeHoverText = "Mảnh nhật ký vụn #4\nJournal Scrap #4";
+        CollectionsPageDrawPatch.Prefix(dummyPage, ref activeHoverText, out var stateActive);
+        Assert(stateActive != null, "Active note: Prefix creates CollectionsNoteImageState");
+        Assert(dummyPage.secretNoteImage == -1, "Active note: Prefix suppresses vanilla secretNoteImage = -1");
+        Assert(activeHoverText == "", "Active note: Prefix suppresses vanilla hoverText to empty string");
+        Assert(stateActive!.SecretNoteImage == 4, "Active note: State captures original secretNoteImage == 4");
+        Assert(stateActive.HoverText == "Mảnh nhật ký vụn #4\nJournal Scrap #4", "Active note: State captures original HoverText");
+
+        // Test Restore idempotency
+        stateActive.Restore();
+        Assert(dummyPage.secretNoteImage == 4, "State Restore: restores secretNoteImage back to 4");
+        stateActive.Restore();
+        Assert(dummyPage.secretNoteImage == 4, "State Restore: idempotent on multiple calls");
+
+        // Test Postfix finally restores hoverText ref parameter
+        string postHover = "";
+        CollectionsPageDrawPatch.Postfix(dummyPage, null!, ref postHover, stateActive);
+        Assert(postHover == "Mảnh nhật ký vụn #4\nJournal Scrap #4", "Postfix: restores hoverText ref parameter");
+
+        // Test Finalizer preserves exception and restores state with a fresh draw invocation
+        dummyPage.secretNoteImage = 4;
+        string excHover = "Mảnh nhật ký vụn #4\nJournal Scrap #4";
+        CollectionsPageDrawPatch.Prefix(dummyPage, ref excHover, out var stateForException);
+        Assert(dummyPage.secretNoteImage == -1, "Prefix sets secretNoteImage = -1 before draw exception");
+        Assert(excHover == "", "Prefix sets hoverText = '' before draw exception");
+        var simulatedException = new InvalidOperationException("Simulated mid-draw render fault");
+        var finalizerResult = CollectionsPageDrawPatch.Finalizer(dummyPage, stateForException, simulatedException);
+        Assert(finalizerResult == simulatedException, "Finalizer: preserves and passes through original exception");
+        Assert(dummyPage.secretNoteImage == 4, "Finalizer: restores secretNoteImage back to 4 on exception");
+
+        // 12. Dynamic font layout in LevelUpLayoutHelper
+        int screenX = 100;
+        int screenY = 50;
+        int menuWidth = 960;
+        int sideBorder = 16;
+        int topBorder = 16;
+
+        // Baseline: default 5-param overload matches vanilla constants
+        var baselineLayout = LevelUpLayoutHelper.CalculateLayout(screenX, screenY, menuWidth, sideBorder, topBorder);
+        Assert(baselineLayout.TitleY == screenY + topBorder + 160, "DynamicFont baseline: TitleY == top + 160");
+        Assert(baselineLayout.SubtitleY == screenY + topBorder + 208, "DynamicFont baseline: SubtitleY == top + 208");
+        Assert(baselineLayout.Bullet1Y == screenY + topBorder + 264, "DynamicFont baseline: Bullet1Y == top + 264");
+        Assert(baselineLayout.LeftScale == 1.0f, "DynamicFont baseline: LeftScale == 1.0f");
+        Assert(baselineLayout.RightScale == 1.0f, "DynamicFont baseline: RightScale == 1.0f");
+        Assert(baselineLayout.LeftVisible && baselineLayout.RightVisible, "DynamicFont baseline: Columns visible");
+
+        // Dynamic font: standard heights (title=44, subtitle=24)
+        var stdFontLayout = LevelUpLayoutHelper.CalculateLayout(screenX, screenY, menuWidth, sideBorder, topBorder, 44f, 24f);
+        Assert(stdFontLayout.LeftSubtitleY == screenY + topBorder + 208, "DynamicFont standard: LeftSubtitleY == top + 208");
+        Assert(stdFontLayout.LeftScale == 1.0f, "DynamicFont standard: LeftScale == 1.0f");
+        Assert(stdFontLayout.LeftVisible, "DynamicFont standard: LeftVisible == true");
+
+        // Dynamic font: enlarged title height (title=56 > 48, subtitle=24)
+        // Subtitle must move down to top + 160 + 56 = top + 216 to clear title
+        var largeTitleLayout = LevelUpLayoutHelper.CalculateLayout(screenX, screenY, menuWidth, sideBorder, topBorder, 56f, 24f);
+        Assert(largeTitleLayout.LeftSubtitleY == screenY + topBorder + 216, "DynamicFont enlarged title: LeftSubtitleY moves to top + 216 (clears title bottom)");
+        Assert(largeTitleLayout.LeftSubtitleY >= largeTitleLayout.TitleY + 56, "DynamicFont enlarged title: Zero overlap with main title (>= titleY + 56)");
+        Assert(largeTitleLayout.LeftScale == 1.0f, "DynamicFont enlarged title: LeftScale == 1.0f (fits in 48px remaining gap)");
+        Assert(largeTitleLayout.LeftSubtitleY + 24 <= largeTitleLayout.Bullet1Y, "DynamicFont enlarged title: Zero overlap with bullet 1");
+        Assert(largeTitleLayout.LeftVisible, "DynamicFont enlarged title: LeftVisible == true");
+
+        // Dynamic font: tight font (title=60px, subtitle=48px)
+        // Title bottom is at top + 160 + 60 = top + 220. Remaining gap to bullet 1 (264) is 44px.
+        // Subtitle height (48px) > 44px -> scale = 44 / 48 = 0.9167f
+        var tightFontLayout = LevelUpLayoutHelper.CalculateLayout(screenX, screenY, menuWidth, sideBorder, topBorder, 60f, 48f);
+        Assert(tightFontLayout.LeftSubtitleY == screenY + topBorder + 220, "DynamicFont tight: LeftSubtitleY starts at top + 220");
+        Assert(tightFontLayout.LeftScale < 1.0f && tightFontLayout.LeftScale >= 0.5f, "DynamicFont tight: LeftScale scales down between 0.5f and 1.0f");
+        float tightScaledHeight = 48f * tightFontLayout.LeftScale;
+        Assert(tightFontLayout.LeftSubtitleY + (int)Math.Ceiling(tightScaledHeight) <= tightFontLayout.Bullet1Y, "DynamicFont tight: Scaled subtitle fits strictly before bullet 1");
+        Assert(tightFontLayout.LeftVisible, "DynamicFont tight: LeftVisible == true");
+
+        // Dynamic font: impossible space / below minimum readability limit (min readable scale 0.5f, min gap 12px)
+        // If title fills gap down to bullet 1 (e.g. titleHeight=100px), gap is 4px < 12px -> skip overlay
+        var impossibleLayout = LevelUpLayoutHelper.CalculateLayout(screenX, screenY, menuWidth, sideBorder, topBorder, 100f, 24f);
+        Assert(!impossibleLayout.LeftVisible, "DynamicFont impossible space: LeftVisible == false (overlay safely omitted)");
+        Assert(impossibleLayout.LeftScale == 0f, "DynamicFont impossible space: LeftScale == 0f");
+
+        // Dynamic font: scale would fall below min 0.5f (e.g. titleHeight=80px, subtitleHeight=60px -> gap 24px, scale 0.40f)
+        var unreadableScaleLayout = LevelUpLayoutHelper.CalculateLayout(screenX, screenY, menuWidth, sideBorder, topBorder, 80f, 60f);
+        Assert(!unreadableScaleLayout.LeftVisible, "DynamicFont unreadable scale: LeftVisible == false (overlay safely omitted)");
+        Assert(unreadableScaleLayout.LeftScale == 0f, "DynamicFont unreadable scale: LeftScale == 0f");
+
+        // Dynamic font: per-column independence
+        var independentLayout = LevelUpLayoutHelper.CalculateLayout(screenX, screenY, menuWidth, sideBorder, topBorder,
+            leftTitleHeight: 44f, leftSubtitleHeight: 24f,
+            rightTitleHeight: 100f, rightSubtitleHeight: 24f);
+        Assert(independentLayout.LeftSubtitleY == screenY + topBorder + 208, "DynamicFont columns: Left column stays at top + 208");
+        Assert(independentLayout.LeftVisible, "DynamicFont columns: Left column visible");
+        Assert(!independentLayout.RightVisible, "DynamicFont columns: Right column omitted in impossible space");
     }
 
     private class DummyServiceProvider : IServiceProvider

@@ -418,7 +418,8 @@ public sealed class ModEntry : Mod
             (typeof(StardewValley.Menus.LevelUpMenu), nameof(StardewValley.Menus.LevelUpMenu.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) }),
             (typeof(StardewValley.Menus.PowersTab), nameof(StardewValley.Menus.PowersTab.performHoverAction), null),
             (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.createDescription), new[] { typeof(string) }),
-            (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.performHoverAction), new[] { typeof(int), typeof(int) })
+            (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.performHoverAction), new[] { typeof(int), typeof(int) }),
+            (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) })
         };
 
         foreach (var (type, method, paramTypes) in targets)
@@ -442,7 +443,9 @@ public sealed class ModEntry : Mod
             (typeof(StardewValley.Menus.PowersTab), "hoverText", typeof(string)),
             (typeof(StardewValley.Menus.PowersTab), "descriptionText", typeof(string)),
             (typeof(StardewValley.Menus.PowersTab), "powers", typeof(System.Collections.Generic.List<System.Collections.Generic.List<StardewValley.Menus.ClickableTextureComponent>>)),
-            (typeof(StardewValley.Menus.CollectionsPage), "hoverText", typeof(string))
+            (typeof(StardewValley.Menus.CollectionsPage), "hoverText", typeof(string)),
+            (typeof(StardewValley.Menus.CollectionsPage), "secretNoteImage", typeof(int)),
+            (typeof(StardewValley.Menus.CollectionsPage), "secretNoteImageTexture", typeof(Microsoft.Xna.Framework.Graphics.Texture2D))
         };
 
         foreach (var (type, fieldName, expectedType) in fieldTargets)

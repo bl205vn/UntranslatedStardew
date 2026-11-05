@@ -1,7 +1,7 @@
 {
   "Name": "Untranslated Stardew",
   "Author": "Gia Hung",
-  "Version": "1.2.0",
+  "Version": "1.2.1",
   "Description": "Shows bilingual item names in tooltips and provides search matching for multi-language item lookups.",
   "UniqueID": "GiaHung.UntranslatedStardew",
   "EntryDll": "UntranslatedStardew.dll",

@@ -18,11 +18,17 @@ public readonly struct LevelUpLayoutResult
     public int SubtitleToBulletGap { get; init; }
     public float LeftMaxWidth { get; init; }
     public float RightMaxWidth { get; init; }
+    public float LeftScale { get; init; }
+    public float RightScale { get; init; }
+    public int LeftSubtitleY { get; init; }
+    public int RightSubtitleY { get; init; }
+    public bool LeftVisible { get; init; }
+    public bool RightVisible { get; init; }
 }
 
 /// <summary>
 /// Pure layout geometry calculations and text clipping helpers for LevelUpMenu profession chooser.
-/// Derived strictly from decompiled Stardew Valley 1.6.15 source coordinates.
+/// Derived strictly from decompiled Stardew Valley 1.6.15 source coordinates with dynamic-font-safe bounds.
 /// </summary>
 public static class LevelUpLayoutHelper
 {
@@ -35,7 +41,8 @@ public static class LevelUpLayoutHelper
     public const int Bullet1YOffset = 264;
 
     /// <summary>
-    /// Calculates the exact screen coordinates and bounded widths for profession titles and subtitles.
+    /// Calculates layout coordinates with default baseline vanilla font heights (dialogueFont: 48px, smallFont: 24px).
+    /// Preserves exact backward-compatible coordinates and gaps.
     /// </summary>
     public static LevelUpLayoutResult CalculateLayout(
         int xPositionOnScreen,
@@ -44,17 +51,70 @@ public static class LevelUpLayoutHelper
         int spaceToClearSideBorder,
         int spaceToClearTopBorder)
     {
+        return CalculateLayout(
+            xPositionOnScreen,
+            yPositionOnScreen,
+            width,
+            spaceToClearSideBorder,
+            spaceToClearTopBorder,
+            measuredTitleHeight: 48f,
+            measuredSubtitleHeight: 24f
+        );
+    }
+
+    /// <summary>
+    /// Calculates layout coordinates using measured font heights uniform across both columns.
+    /// </summary>
+    public static LevelUpLayoutResult CalculateLayout(
+        int xPositionOnScreen,
+        int yPositionOnScreen,
+        int width,
+        int spaceToClearSideBorder,
+        int spaceToClearTopBorder,
+        float measuredTitleHeight,
+        float measuredSubtitleHeight)
+    {
+        return CalculateLayout(
+            xPositionOnScreen,
+            yPositionOnScreen,
+            width,
+            spaceToClearSideBorder,
+            spaceToClearTopBorder,
+            leftTitleHeight: measuredTitleHeight,
+            leftSubtitleHeight: measuredSubtitleHeight,
+            rightTitleHeight: measuredTitleHeight,
+            rightSubtitleHeight: measuredSubtitleHeight
+        );
+    }
+
+    /// <summary>
+    /// Calculates layout coordinates with per-column dynamic font measurements,
+    /// avoiding subtitle overlap with main titles (dialogueFont) or first bullets (smallFont).
+    /// If available space is too narrow for legible text (&lt; 0.5f scale or &lt; 12px available height),
+    /// the overlay is safely omitted rather than causing guaranteed text collision.
+    /// </summary>
+    public static LevelUpLayoutResult CalculateLayout(
+        int xPositionOnScreen,
+        int yPositionOnScreen,
+        int width,
+        int spaceToClearSideBorder,
+        int spaceToClearTopBorder,
+        float leftTitleHeight,
+        float leftSubtitleHeight,
+        float rightTitleHeight,
+        float rightSubtitleHeight)
+    {
         int leftX = xPositionOnScreen + spaceToClearSideBorder + 32;
         int rightX = xPositionOnScreen + spaceToClearSideBorder + width / 2;
         int titleY = yPositionOnScreen + spaceToClearTopBorder + TitleYOffset;
-        int subtitleY = yPositionOnScreen + spaceToClearTopBorder + SubtitleYOffset;
+        int defaultSubtitleY = yPositionOnScreen + spaceToClearTopBorder + SubtitleYOffset;
         int bullet1Y = yPositionOnScreen + spaceToClearTopBorder + Bullet1YOffset;
 
-        // Bounded max width per column before icon / bullet boundaries
-        // Left column icon: width / 2 - 112 -> margin before icon is (width/2 - 112) - 32 = width/2 - 144
-        // Right column icon: width - 128 -> margin before icon is (width - 128) - (width/2) = width/2 - 128
         float leftMaxWidth = Math.Max(100f, width / 2f - 144f);
         float rightMaxWidth = Math.Max(100f, width / 2f - 128f);
+
+        var (leftSubY, leftScale, leftVis) = CalculateColumnSubtitle(titleY, bullet1Y, defaultSubtitleY, leftTitleHeight, leftSubtitleHeight);
+        var (rightSubY, rightScale, rightVis) = CalculateColumnSubtitle(titleY, bullet1Y, defaultSubtitleY, rightTitleHeight, rightSubtitleHeight);
 
         return new LevelUpLayoutResult
         {
@@ -63,13 +123,61 @@ public static class LevelUpLayoutHelper
             TitleY = titleY,
             LeftSubtitleX = leftX,
             RightSubtitleX = rightX,
-            SubtitleY = subtitleY,
+            SubtitleY = leftSubY,
+            LeftSubtitleY = leftSubY,
+            RightSubtitleY = rightSubY,
             Bullet1Y = bullet1Y,
             TotalTitleGap = bullet1Y - titleY,
-            SubtitleToBulletGap = bullet1Y - subtitleY,
+            SubtitleToBulletGap = bullet1Y - leftSubY,
             LeftMaxWidth = leftMaxWidth,
-            RightMaxWidth = rightMaxWidth
+            RightMaxWidth = rightMaxWidth,
+            LeftScale = leftScale,
+            RightScale = rightScale,
+            LeftVisible = leftVis,
+            RightVisible = rightVis
         };
+    }
+
+    private static (int SubtitleY, float Scale, bool IsVisible) CalculateColumnSubtitle(
+        int titleY,
+        int bullet1Y,
+        int defaultSubtitleY,
+        float titleHeight,
+        float subtitleHeight)
+    {
+        // Subtitle must never start above the measured bottom of the main title
+        int minSubtitleY = (int)Math.Ceiling(titleY + Math.Max(0f, titleHeight));
+        int subtitleY = Math.Max(defaultSubtitleY, minSubtitleY);
+
+        int availableGap = bullet1Y - subtitleY;
+
+        // Explicit readability limit: text scaled below 0.5f or gap < 12px cannot be displayed legibly
+        const float minReadableScale = 0.5f;
+        const int minReadableGap = 12;
+
+        if (availableGap < minReadableGap)
+        {
+            // Truly impossible space: main title fills the entire gap down to bullet 1.
+            // Omit subtitle overlay to avoid guaranteed bullet collision.
+            return (subtitleY, 0f, false);
+        }
+
+        float scale = 1f;
+        if (subtitleHeight > 0f)
+        {
+            if (subtitleHeight > availableGap)
+            {
+                float fitScale = (float)availableGap / subtitleHeight;
+                if (fitScale < minReadableScale)
+                {
+                    // Scale would be unreadable; skip overlay in impossible space
+                    return (subtitleY, 0f, false);
+                }
+                scale = fitScale;
+            }
+        }
+
+        return (subtitleY, scale, true);
     }
 
     /// <summary>
