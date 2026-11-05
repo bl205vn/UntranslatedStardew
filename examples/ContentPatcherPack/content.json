@@ -1,0 +1,19 @@
+{
+  "Format": "2.4.0",
+  "Changes": [
+    {
+      "Action": "EditData",
+      "Target": "Mods/GiaHung.UntranslatedStardew/Names",
+      "Entries": {
+        "Item/(W)Custom_DragonSword@en": "{{i18n:item.dragonsword.en}}",
+        "Item/(W)Custom_DragonSword@vi": "{{i18n:item.dragonsword.vi}}",
+        "Mail/Custom_WizardLetter@en": "{{i18n:mail.wizardletter.en}}",
+        "Mail/Custom_WizardLetter@vi": "{{i18n:mail.wizardletter.vi}}",
+        "Power/Custom_DragonBlessing@en": "{{i18n:power.dragonblessing.en}}",
+        "Power/Custom_DragonBlessing@vi": "{{i18n:power.dragonblessing.vi}}",
+        "SecretNote/1050@en": "{{i18n:note.scrap50.en}}",
+        "SecretNote/1050@vi": "{{i18n:note.scrap50.vi}}"
+      }
+    }
+  ]
+}

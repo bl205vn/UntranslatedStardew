@@ -18,11 +18,12 @@ namespace UntranslatedStardew.Core;
 /// big craftables, weapons, tools, boots, hats, rings, clothing, trinkets, furniture).
 /// Separated from UI hooks and search logic.
 /// </summary>
-public sealed class ItemNameResolver
+public sealed class ItemNameResolver : IDisposable
 {
     private readonly ISecondaryContentProvider _contentProvider;
     private readonly Func<string, TrinketData?>? _trinketDataResolver;
     private readonly Func<string, StardewValley.GameData.Powers.PowersData?>? _powerDataResolver;
+    private readonly ExternalTranslationRegistry _externalRegistry;
     private readonly ConcurrentDictionary<ItemCacheKey, string?> _cache = new();
 
     private static readonly Regex LocalizedTokenRegex = new(
@@ -30,24 +31,43 @@ public sealed class ItemNameResolver
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public ISecondaryContentProvider ContentProvider => _contentProvider;
+    public ExternalTranslationRegistry ExternalRegistry => _externalRegistry;
     public string EffectiveLanguage => _contentProvider.EffectiveLanguage;
 
     public ItemNameResolver(
         ISecondaryContentProvider contentProvider,
         Func<string, TrinketData?>? trinketDataResolver = null,
-        Func<string, StardewValley.GameData.Powers.PowersData?>? powerDataResolver = null)
+        Func<string, StardewValley.GameData.Powers.PowersData?>? powerDataResolver = null,
+        ExternalTranslationRegistry? externalRegistry = null)
     {
         _contentProvider = contentProvider ?? throw new ArgumentNullException(nameof(contentProvider));
         _trinketDataResolver = trinketDataResolver;
         _powerDataResolver = powerDataResolver;
+        _externalRegistry = externalRegistry ?? new ExternalTranslationRegistry();
+        _externalRegistry.OnChanged += InvalidateCache;
     }
 
     /// <summary>
-    /// Clears the resolved item name cache.
+    /// Clears only the resolved item name memory cache.
+    /// </summary>
+    public void Dispose()
+    {
+        _externalRegistry.OnChanged -= InvalidateCache;
+        _cache.Clear();
+    }
+
+    public void InvalidateCache()
+    {
+        _cache.Clear();
+    }
+
+    /// <summary>
+    /// Clears the resolved item name cache, external registry cache, and content provider cache.
     /// </summary>
     public void Invalidate()
     {
         _cache.Clear();
+        _externalRegistry.Invalidate();
         _contentProvider.Invalidate();
     }
 
@@ -63,6 +83,18 @@ public sealed class ItemNameResolver
         if (_cache.TryGetValue(key, out string? cachedName))
             return cachedName;
 
+        // 1. External registered translations (Content Patcher or C# mods) have highest priority
+        string? external = _externalRegistry.GetTranslation("Item", item.QualifiedItemId, EffectiveLanguage);
+        if (string.IsNullOrWhiteSpace(external) && !string.IsNullOrEmpty(item.ItemId))
+        {
+            external = _externalRegistry.GetTranslation("Item", item.ItemId, EffectiveLanguage);
+        }
+        if (!string.IsNullOrWhiteSpace(external))
+        {
+            _cache[key] = external;
+            return external;
+        }
+
         string? resolved = ResolveItem(item);
         _cache[key] = resolved;
         return resolved;
@@ -76,9 +108,24 @@ public sealed class ItemNameResolver
         if (string.IsNullOrWhiteSpace(itemId))
             return null;
 
+        // 0. External registered translations (Content Patcher or C# mods) have highest priority
+        string? external = _externalRegistry.GetTranslation("Item", itemId, EffectiveLanguage);
+        if (!string.IsNullOrWhiteSpace(external))
+            return external;
+
         string? qualifiedId = ItemRegistry.QualifyItemId(itemId);
+        if (!string.IsNullOrEmpty(qualifiedId) && qualifiedId != itemId)
+        {
+            external = _externalRegistry.GetTranslation("Item", qualifiedId, EffectiveLanguage);
+            if (!string.IsNullOrWhiteSpace(external))
+                return external;
+        }
+
         if (string.IsNullOrEmpty(qualifiedId))
-            return null;
+        {
+            // For custom/unregistered items without qualified ID from registry
+            qualifiedId = itemId.StartsWith("(", StringComparison.Ordinal) ? itemId : $"(O){itemId}";
+        }
 
         var key = new ItemCacheKey(qualifiedId, null, null, null, upgradeLevel);
         if (_cache.TryGetValue(key, out string? cachedName))
@@ -157,6 +204,11 @@ public sealed class ItemNameResolver
 
         string trimmed = powerKey.Trim();
 
+        // 0. External registered translations (Content Patcher or C# mods) have highest priority
+        string? external = _externalRegistry.GetTranslation("Power", trimmed, EffectiveLanguage);
+        if (!string.IsNullOrWhiteSpace(external))
+            return external;
+
         // 1. Check data resolver or IPowerDataProvider
         StardewValley.GameData.Powers.PowersData? powerData = _powerDataResolver != null
             ? _powerDataResolver(trimmed)
@@ -223,11 +275,130 @@ public sealed class ItemNameResolver
         if (string.IsNullOrWhiteSpace(achievementId) || achievementId == "???")
             return null;
 
-        if (_contentProvider.TryGetString("Data/Achievements", achievementId.Trim(), out string? raw) && !string.IsNullOrWhiteSpace(raw))
+        string trimmed = achievementId.Trim();
+
+        // 0. External registered translations (Content Patcher or C# mods) have highest priority
+        string? external = _externalRegistry.GetTranslation("Achievement", trimmed, EffectiveLanguage);
+        if (!string.IsNullOrWhiteSpace(external))
+            return external;
+
+        if (_contentProvider.TryGetString("Data/Achievements", trimmed, out string? raw) && !string.IsNullOrWhiteSpace(raw))
         {
             string[] parts = raw.Split('^');
             if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]))
                 return parts[0].Trim();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the secondary title for a letter by its mail ID.
+    /// Uses actual Data/mail dictionary title suffix ([#]) without guessing from body or replacing NPC names.
+    /// </summary>
+    public string? GetSecondaryMailTitle(string? mailId)
+    {
+        if (string.IsNullOrWhiteSpace(mailId) || mailId == "???")
+            return null;
+
+        string trimmed = mailId.Trim();
+
+        // 0. External registered translations (Content Patcher or C# mods) have highest priority
+        string? external = _externalRegistry.GetTranslation("Mail", trimmed, EffectiveLanguage);
+        if (!string.IsNullOrWhiteSpace(external))
+            return external;
+
+        // 1. Live Data/mail from isolated secondary content provider
+        if (_contentProvider.TryGetString("Data/mail", trimmed, out string? rawMail) && !string.IsNullOrEmpty(rawMail))
+        {
+            int delimIdx = rawMail.IndexOf("[#]", StringComparison.Ordinal);
+            if (delimIdx >= 0 && delimIdx + 3 < rawMail.Length)
+            {
+                string title = rawMail.Substring(delimIdx + 3).Trim();
+                if (!string.IsNullOrWhiteSpace(title) && title != "???")
+                    return title;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the secondary title for a secret note or journal scrap.
+    /// Handles note index and journal fragment indexing (>= 1000).
+    /// </summary>
+    public string? GetSecondarySecretNoteTitle(int noteIndex)
+    {
+        // 0. External registered translations (Content Patcher or C# mods) have highest priority
+        string? external = _externalRegistry.GetTranslation("SecretNote", noteIndex.ToString(), EffectiveLanguage);
+        if (!string.IsNullOrWhiteSpace(external))
+            return external;
+
+        const int journalIndex = 1000;
+        if (noteIndex >= journalIndex)
+        {
+            int journalNum = noteIndex - journalIndex;
+            if (_contentProvider.TryGetString("Strings/Locations", "Journal_Name", out string? journalPrefix) && !string.IsNullOrWhiteSpace(journalPrefix))
+                return $"{journalPrefix.Trim()} #{journalNum}";
+
+            if (LanguageHelper.IsBaseOrEnglish(EffectiveLanguage))
+                return $"Journal Scrap #{journalNum}";
+        }
+        else
+        {
+            if (_contentProvider.TryGetString("Strings/Locations", "Secret_Note_Name", out string? notePrefix) && !string.IsNullOrWhiteSpace(notePrefix))
+                return $"{notePrefix.Trim()} #{noteIndex}";
+
+            if (LanguageHelper.IsBaseOrEnglish(EffectiveLanguage))
+                return $"Secret Note #{noteIndex}";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the secondary hover title for a CollectionsPage side tab (0..7).
+    /// </summary>
+    public string? GetSecondarySideTabName(int tabId)
+    {
+        // 0. External registered translations (Content Patcher or C# mods) have highest priority
+        string? external = _externalRegistry.GetTranslation("SideTab", tabId.ToString(), EffectiveLanguage);
+        if (!string.IsNullOrWhiteSpace(external))
+            return external;
+
+        string? key = tabId switch
+        {
+            0 => "Collections_Shipped",
+            1 => "Collections_Fish",
+            2 => "Collections_Artifacts",
+            3 => "Collections_Minerals",
+            4 => "Collections_Cooking",
+            5 => "Collections_Achievements",
+            6 => "Collections_SecretNotes",
+            7 => "Collections_Letters",
+            _ => null
+        };
+
+        if (key != null)
+        {
+            if (_contentProvider.TryGetString("Strings/UI", key, out string? tabName) && !string.IsNullOrWhiteSpace(tabName))
+                return tabName.Trim();
+
+            if (LanguageHelper.IsBaseOrEnglish(EffectiveLanguage))
+            {
+                return tabId switch
+                {
+                    0 => "Items Shipped",
+                    1 => "Fish",
+                    2 => "Artifacts",
+                    3 => "Minerals",
+                    4 => "Cooking",
+                    5 => "Achievements",
+                    6 => "Secret Notes",
+                    7 => "Letters",
+                    _ => null
+                };
+            }
         }
 
         return null;

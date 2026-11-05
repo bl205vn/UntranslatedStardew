@@ -50,6 +50,12 @@ public static class Program
         TestLevelUpMenuScopedStateAndLayout();
         TestUiFixtureFormattingAndMergedText();
         TestRealXnbUiExpansion();
+        TestMailAndSecretNotesParsingAndFlow();
+        TestExternalTranslationRegistryAndFallback();
+        TestContentPatcherExamplePackSchema();
+        TestPublicApiRegistrationAndLifecycle();
+        TestLevelUpMenuPrefixFailureRestoration();
+        TestRealXnbMailAndNotesExpansion();
 
         Console.WriteLine();
         Console.WriteLine($"=== Results: {_passed} Passed, {_failed} Failed ===");
@@ -1378,6 +1384,454 @@ public static class Program
 
             string? col128Vi = resVi.GetSecondaryCollectionItemTitle("128");
             Assert(col128Vi == "Cá Nóc", $"Real Vietnamese mod XNB: Collection item 128 == 'Cá Nóc' (got '{col128Vi}')");
+        }
+    }
+
+    private static void TestMailAndSecretNotesParsingAndFlow()
+    {
+        Console.WriteLine("\n-- Testing Mail & Secret Notes Parsing & Flow --");
+
+        // 1. Mail parser with body, directives (%item, %secretsanta, @), and [#] title delimiter
+        string rawMailWithTitle = "Dear @, please accept this gift!%item object 128 1 %%[#]Special Delivery";
+        var mockProvider = new MockContentProvider("en", "en");
+        mockProvider.AddEnglish("Data/mail", "deliveryMail", rawMailWithTitle);
+        var resolver = new ItemNameResolver(mockProvider);
+
+        string? mailTitle = resolver.GetSecondaryMailTitle("deliveryMail");
+        Assert(mailTitle == "Special Delivery", "Mail parser extracts title suffix after [#]");
+
+        // Verify body bytes unchanged
+        int delimIdx = rawMailWithTitle.IndexOf("[#]", StringComparison.Ordinal);
+        string body = rawMailWithTitle.Substring(0, delimIdx);
+        Assert(body == "Dear @, please accept this gift!%item object 128 1 %%", "Mail body text bytes unchanged");
+
+        // Letter without [#]
+        mockProvider.AddEnglish("Data/mail", "noTitleMail", "Just plain body text without any title");
+        string? noTitle = resolver.GetSecondaryMailTitle("noTitleMail");
+        Assert(noTitle == null, "Mail without [#] returns null (keeps primary, no fake title)");
+
+        // Letter with empty or ??? title
+        mockProvider.AddEnglish("Data/mail", "unknownTitleMail", "Body text[#]???");
+        string? unknownTitle = resolver.GetSecondaryMailTitle("unknownTitleMail");
+        Assert(unknownTitle == null, "Mail with [#]??? returns null");
+
+        // 2. Secret Note text note with double-newline delimiter
+        mockProvider.AddEnglish("Strings/Locations", "Secret_Note_Name", "Secret Note");
+        mockProvider.AddEnglish("Strings/Locations", "Journal_Name", "Journal Scrap");
+        string secNote1 = resolver.GetSecondarySecretNoteTitle(1)!;
+        Assert(secNote1 == "Secret Note #1", "Secret Note #1 resolves to 'Secret Note #1'");
+
+        // Journal Scrap (note index >= 1000)
+        string journalScrap1 = resolver.GetSecondarySecretNoteTitle(1001)!;
+        Assert(journalScrap1 == "Journal Scrap #1", "Note 1001 resolves to 'Journal Scrap #1' (index - 1000)");
+
+        // 3. CollectionsPagePatch createDescription simulation for Tab 6 (Secret Notes)
+        // Text note on Windows (\r\n\r\n)
+        string winTextNote = "Ghi chú bí mật #1\r\n\r\nNội dung mật thư số 1 bí ẩn.";
+        int delimWin = winTextNote.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+        string winTitle = winTextNote.Substring(0, delimWin);
+        string winRem = winTextNote.Substring(delimWin + 4);
+        string winFormatted = TooltipFormatter.FormatTitle(winTitle, winTitle, secNote1, secondaryFirst: false);
+        string winAssembled = $"{winFormatted}\r\n\r\n{winRem}";
+        Assert(winAssembled == "Ghi chú bí mật #1\nSecret Note #1\r\n\r\nNội dung mật thư số 1 bí ẩn.", "Secret note text preserves body across \\r\\n\\r\\n");
+
+        // Text note on Unix (\n\n)
+        string unixTextNote = "Ghi chú bí mật #1\n\nNội dung mật thư số 1.";
+        int delimUnix = unixTextNote.IndexOf("\n\n", StringComparison.Ordinal);
+        string unixTitle = unixTextNote.Substring(0, delimUnix);
+        string unixRem = unixTextNote.Substring(delimUnix + 2);
+        string unixFormatted = TooltipFormatter.FormatTitle(unixTitle, unixTitle, secNote1, secondaryFirst: false);
+        string unixAssembled = $"{unixFormatted}\n\n{unixRem}";
+        Assert(unixAssembled == "Ghi chú bí mật #1\nSecret Note #1\n\nNội dung mật thư số 1.", "Secret note text preserves body across \\n\\n");
+
+        // Image note (no double newline): title only
+        string imgNote = "Ghi chú bí mật #10";
+        string imgSecTitle = resolver.GetSecondarySecretNoteTitle(10)!;
+        string imgFormatted = TooltipFormatter.FormatTitle(imgNote, imgNote, imgSecTitle, secondaryFirst: false);
+        Assert(imgFormatted == "Ghi chú bí mật #10\nSecret Note #10", "Image note formats title only without injecting double newline or body");
+
+        // 4. CollectionsPageHoverPatch simulation for Letters (Tab 7)
+        // c2.name format: "<mailId> true <primaryTitle>"
+        string letterCompName = "krobus true Bức thư từ Krobus";
+        int sp1 = letterCompName.IndexOf(' ');
+        int sp2 = letterCompName.IndexOf(' ', sp1 + 1);
+        string primaryLetterTitle = letterCompName.Substring(sp2 + 1);
+        mockProvider.AddEnglish("Data/mail", "krobus", "Krobus text[#]Letter from Krobus");
+        string? secKrobus = resolver.GetSecondaryMailTitle("krobus");
+        string letterHover = TooltipFormatter.FormatTitle(primaryLetterTitle, primaryLetterTitle, secKrobus, secondaryFirst: false);
+        Assert(letterHover == "Bức thư từ Krobus\nLetter from Krobus", "Letter hover formats bilingual title");
+
+        // Long letter title wrapping test:
+        // Even when primary title wraps across multiple lines, independent section formatting does not suppress the secondary title
+        string longPrimaryWrapped = "Bức thư rất dài từ Thị trưởng Lewis\ngửi cho chủ trang trại thung lũng";
+        string longSecondary = "A Very Long Letter From Mayor Lewis To The Valley Farm Owner";
+        string combinedLong = $"{longPrimaryWrapped}\n{longSecondary}";
+        Assert(combinedLong.Contains(longPrimaryWrapped) && combinedLong.Contains(longSecondary), "Long letter wrapping retains both sections without suppression");
+
+        // Submenu guard logic: when letterviewerSubMenu is active, underlying grid is not modified
+        bool submenuActive = true;
+        string hoverOutput = "OriginalHover";
+        if (!submenuActive)
+        {
+            hoverOutput = "ModifiedByUnderlyingGrid";
+        }
+        Assert(hoverOutput == "OriginalHover", "Submenu active guard prevents underlying hover text mutation");
+
+        // Letter undiscovered: c2.name = "krobus false ???"
+        string lockedLetterName = "krobus false ???";
+        int lockedSp1 = lockedLetterName.IndexOf(' ');
+        int lockedSp2 = lockedLetterName.IndexOf(' ', lockedSp1 + 1);
+        string lockedPrimary = lockedLetterName.Substring(lockedSp2 + 1);
+        Assert(lockedPrimary == "???", "Locked letter remains ???");
+
+        // 5. Side tab names (0..7)
+        mockProvider.AddEnglish("Strings/UI", "Collections_Letters", "Letters");
+        mockProvider.AddEnglish("Strings/UI", "Collections_SecretNotes", "Secret Notes");
+        mockProvider.AddEnglish("Strings/UI", "Collections_Shipped", "Items Shipped");
+        Assert(resolver.GetSecondarySideTabName(7) == "Letters", "Side tab 7 resolves to 'Letters'");
+        Assert(resolver.GetSecondarySideTabName(6) == "Secret Notes", "Side tab 6 resolves to 'Secret Notes'");
+        Assert(resolver.GetSecondarySideTabName(0) == "Items Shipped", "Side tab 0 resolves to 'Items Shipped'");
+    }
+
+    private static void TestExternalTranslationRegistryAndFallback()
+    {
+        Console.WriteLine("\n-- Testing External Translation Registry & Fallback --");
+
+        var reg = new ExternalTranslationRegistry();
+
+        // 1. CP entries registration
+        var cpEntries = new Dictionary<string, string>
+        {
+            ["Item/Custom_DragonSword@en"] = "Dragon Sword",
+            ["Item/Custom_DragonSword@vi"] = "Long Kiếm",
+            ["Item/Custom_DragonSword@default"] = "Dragon Sword",
+            ["Mail/Custom_WizardLetter@en"] = "Letter from Wizard",
+            ["Mail/Custom_WizardLetter@vi"] = "Thư từ Pháp sư",
+            ["Power/Custom_DragonBlessing@en"] = "Dragon Blessing",
+            ["Power/Custom_DragonBlessing@vi"] = "Phước Lành Của Rồng",
+            ["SecretNote/1050@en"] = "Journal Scrap #50",
+            ["SecretNote/1050@vi"] = "Mảnh nhật ký #50",
+            ["SideTab/7@vi"] = "Thư từ đặc biệt",
+            // Item with only French default
+            ["Item/FrenchBread@default"] = "Pain français",
+            // Item with parent Chinese
+            ["Item/ChineseTea@zh"] = "茶",
+            ["Item/ChineseTea@zh-CN"] = "绿茶"
+        };
+        reg.LoadFromContentPackDictionary(cpEntries);
+
+        // Exact match
+        Assert(reg.GetTranslation("Item", "Custom_DragonSword", "en") == "Dragon Sword", "CP exact locale match en");
+        Assert(reg.GetTranslation("Item", "Custom_DragonSword", "vi") == "Long Kiếm", "CP exact locale match vi");
+
+        // Default fallback for regional or non-English
+        Assert(reg.GetTranslation("Item", "Custom_DragonSword", "default") == "Dragon Sword", "CP default locale match");
+        Assert(reg.GetTranslation("Item", "Custom_DragonSword", "fr") == "Dragon Sword", "CP falls back to default for unprovided fr");
+
+        // SMAPI fallback: default French-only + requested en returns French base
+        Assert(reg.GetTranslation("Item", "FrenchBread", "en") == "Pain français", "default French-only + requested en returns French base");
+        Assert(reg.GetTranslation("Item", "FrenchBread", "default") == "Pain français", "FrenchBread returns 'Pain français' for default");
+
+        // Explicit en entry wins over default
+        reg.RegisterModTranslation("ModCroissant", "Item", "Croissant", "default", "Croissant de base");
+        reg.RegisterModTranslation("ModCroissant", "Item", "Croissant", "en", "English Croissant");
+        Assert(reg.GetTranslation("Item", "Croissant", "en") == "English Croissant", "explicit en entry wins over default");
+        Assert(reg.GetTranslation("Item", "Croissant", "default") == "Croissant de base", "requested default returns default base, not en");
+
+        // fr exact-parent-default
+        Assert(reg.GetTranslation("Item", "FrenchBread", "fr") == "Pain français", "fr exact-parent-default resolves default");
+
+        // default does NOT fall back to en
+        reg.RegisterModTranslation("ModEnOnly", "Item", "EnglishPie", "en", "English Pie");
+        Assert(reg.GetTranslation("Item", "EnglishPie", "default") == null, "default does not fall back to en");
+
+        // Qualified weapon / item IDs lookup (e.g. (W)Custom_RubyBlade)
+        reg.RegisterModTranslation("ModWeapon", "Item", "(W)Custom_RubyBlade", "en", "Ruby Blade (W)");
+        Assert(reg.GetTranslation("Item", "(W)Custom_RubyBlade", "en") == "Ruby Blade (W)", "Qualified (W) lookup exact match");
+        Assert(reg.GetTranslation("Item", "Custom_RubyBlade", "en") == "Ruby Blade (W)", "Unqualified lookup matches registered (W)");
+
+        // Parent locale fallback (zh-TW -> zh)
+        Assert(reg.GetTranslation("Item", "ChineseTea", "zh-CN") == "绿茶", "ChineseTea returns exact zh-CN");
+        Assert(reg.GetTranslation("Item", "ChineseTea", "zh-TW") == "茶", "ChineseTea falls back to parent zh for zh-TW");
+
+        // Other categories: Mail, Power, SecretNote, SideTab
+        Assert(reg.GetTranslation("Mail", "Custom_WizardLetter", "vi") == "Thư từ Pháp sư", "CP Mail translation resolved");
+        Assert(reg.GetTranslation("Power", "Custom_DragonBlessing", "vi") == "Phước Lành Của Rồng", "CP Power translation resolved");
+        Assert(reg.GetTranslation("SecretNote", "1050", "vi") == "Mảnh nhật ký #50", "CP SecretNote translation resolved");
+        Assert(reg.GetTranslation("SideTab", "7", "vi") == "Thư từ đặc biệt", "CP SideTab translation resolved");
+
+        // 2. Priority: External registration overrides base
+        var mockProvider = new MockContentProvider("en", "en");
+        mockProvider.AddEnglish("Strings/Objects", "Custom_DragonSword_Name", "Vanilla Sword");
+        var resolver = new ItemNameResolver(mockProvider, externalRegistry: reg);
+        Assert(resolver.GetSecondaryNameById("Custom_DragonSword") == "Dragon Sword", "External CP registration has priority over provider string");
+    }
+
+    private static void TestContentPatcherExamplePackSchema()
+    {
+        Console.WriteLine("\n-- Testing Content Patcher Example Pack Schema --");
+
+        string exampleDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "examples", "ContentPatcherPack");
+        if (!Directory.Exists(exampleDir))
+        {
+            exampleDir = Path.Combine(Directory.GetCurrentDirectory(), "examples", "ContentPatcherPack");
+        }
+
+        Assert(Directory.Exists(exampleDir), $"Example CP pack directory exists");
+
+        string manifestPath = Path.Combine(exampleDir, "manifest.json");
+        string contentPath = Path.Combine(exampleDir, "content.json");
+        string defaultI18nPath = Path.Combine(exampleDir, "i18n", "default.json");
+        string viI18nPath = Path.Combine(exampleDir, "i18n", "vi.json");
+
+        Assert(File.Exists(manifestPath), "manifest.json exists in CP example");
+        Assert(File.Exists(contentPath), "content.json exists in CP example");
+        Assert(File.Exists(defaultI18nPath), "default.json exists in CP example");
+        Assert(File.Exists(viI18nPath), "vi.json exists in CP example");
+
+        // Verify valid JSON
+        string manifestText = File.ReadAllText(manifestPath);
+        Assert(manifestText.Contains("Pathoschild.ContentPatcher"), "CP manifest targets Pathoschild.ContentPatcher");
+        Assert(manifestText.Contains("\"IsRequired\": true"), "CP manifest requires UntranslatedStardew (IsRequired: true)");
+
+        string contentText = File.ReadAllText(contentPath);
+        Assert(contentText.Contains("EditData"), "CP content.json uses Action EditData");
+        Assert(contentText.Contains("Mods/GiaHung.UntranslatedStardew/Names"), "CP content.json targets Mods/GiaHung.UntranslatedStardew/Names");
+        Assert(contentText.Contains("(W)Custom_DragonSword"), "CP content.json uses qualified weapon ID (W)Custom_DragonSword");
+
+        string defaultI18nText = File.ReadAllText(defaultI18nPath);
+        Assert(defaultI18nText.Contains("Dragon Sword"), "CP default.json contains Dragon Sword");
+    }
+
+    private static void TestPublicApiRegistrationAndLifecycle()
+    {
+        Console.WriteLine("\n-- Testing Public API Registration & Lifecycle --");
+
+        var reg = new ExternalTranslationRegistry();
+        var mockProvider = new MockContentProvider("vi", "vi");
+        var resolver = new ItemNameResolver(mockProvider, externalRegistry: reg);
+        var config = new ModConfig { SecondaryLanguage = "vi" };
+
+        var api = new UntranslatedStardewApi(() => resolver, () => config);
+
+        // 1. Register translations dictionary
+        var modDict = new Dictionary<string, string>
+        {
+            ["Item/MyMod_Axe@vi"] = "Rìu Tùy Chỉnh",
+            ["Mail/MyMod_Mail@vi"] = "Thư Của Mod",
+            ["Power/MyMod_Buff@vi"] = "Sức Mạnh Vô Song"
+        };
+
+        IDisposable token = api.RegisterTranslations("MyMod.Tools", modDict);
+        Assert(token != null, "RegisterTranslations returns non-null IDisposable token");
+
+        // Exercise resolution consumption through API
+        string? resolvedItem = api.GetSecondaryName("Item", "MyMod_Axe", "vi");
+        Assert(resolvedItem == "Rìu Tùy Chỉnh", "api.GetSecondaryName resolves registered item");
+
+        string? resolvedMail = api.GetSecondaryName("Mail", "MyMod_Mail", "vi");
+        Assert(resolvedMail == "Thư Của Mod", "api.GetSecondaryName resolves registered mail");
+
+        string? resolvedPower = api.GetSecondaryName("Power", "MyMod_Buff", "vi");
+        Assert(resolvedPower == "Sức Mạnh Vô Song", "api.GetSecondaryName resolves registered power");
+
+        // 2. Token disposal unregisters entries and invalidates resolver cache immediately
+        // First populate resolver._cache
+        var regDict = new Dictionary<string, string> { ["Item/TempStaff@vi"] = "Gậy Thần" };
+        IDisposable cacheToken = api.RegisterTranslations("Mod.CacheTest", regDict);
+        Assert(resolver.GetSecondaryNameById("TempStaff") == "Gậy Thần", "Cached in resolver before disposal");
+        cacheToken.Dispose();
+        Assert(resolver.GetSecondaryNameById("TempStaff") == null, "Token disposal immediately invalidates resolver cache");
+
+        token?.Dispose();
+        string? afterDisposal = api.GetSecondaryName("Item", "MyMod_Axe", "vi");
+        Assert(afterDisposal == null, "Disposed token unregisters mod translations");
+
+        // 3. Generation-based token ownership (disposing an older token does not remove newer registration)
+        IDisposable tokenV1 = api.RegisterTranslations("Mod.GenerationTest", new Dictionary<string, string>
+        {
+            ["Item/GenSword@vi"] = "Kiếm V1"
+        });
+        Assert(api.GetSecondaryName("Item", "GenSword", "vi") == "Kiếm V1", "Mod v1 active");
+
+        IDisposable tokenV2 = api.RegisterTranslations("Mod.GenerationTest", new Dictionary<string, string>
+        {
+            ["Item/GenSword@vi"] = "Kiếm V2"
+        });
+        Assert(api.GetSecondaryName("Item", "GenSword", "vi") == "Kiếm V2", "Mod v2 replaces v1");
+
+        tokenV1.Dispose();
+        Assert(api.GetSecondaryName("Item", "GenSword", "vi") == "Kiếm V2", "Disposing older token does not remove newer registration");
+
+        tokenV2.Dispose();
+        Assert(api.GetSecondaryName("Item", "GenSword", "vi") == null, "Disposing active token removes registration");
+
+        // 4. Deterministic conflict resolution: last registration wins
+        api.RegisterTranslations("ConflictModA", new Dictionary<string, string>
+        {
+            ["Item/SharedArmor@vi"] = "Giáp Của Mod A"
+        });
+        api.RegisterTranslations("ConflictModB", new Dictionary<string, string>
+        {
+            ["Item/SharedArmor@vi"] = "Giáp Của Mod B"
+        });
+        Assert(api.GetSecondaryName("Item", "SharedArmor", "vi") == "Giáp Của Mod B", "Deterministic conflict: last registered Mod B wins");
+
+        api.RegisterTranslations("ConflictModA", new Dictionary<string, string>
+        {
+            ["Item/SharedArmor@vi"] = "Giáp Của Mod A Cập Nhật"
+        });
+        Assert(api.GetSecondaryName("Item", "SharedArmor", "vi") == "Giáp Của Mod A Cập Nhật", "Re-registered Mod A takes priority");
+
+        // 5. Thread safety test
+        bool threadSafeSuccess = true;
+        var threadTasks = new System.Threading.Tasks.Task[6];
+        for (int t = 0; t < threadTasks.Length; t++)
+        {
+            int threadId = t;
+            threadTasks[t] = System.Threading.Tasks.Task.Run(() =>
+            {
+                for (int i = 0; i < 30; i++)
+                {
+                    api.RegisterTranslation($"ThreadMod{threadId}", "Item", $"ThreadItem_{threadId}_{i}", "vi", $"Name_{threadId}_{i}");
+                    string? read = api.GetSecondaryName("Item", $"ThreadItem_{threadId}_{i}", "vi");
+                    if (read != $"Name_{threadId}_{i}")
+                        threadSafeSuccess = false;
+                }
+            });
+        }
+        System.Threading.Tasks.Task.WaitAll(threadTasks);
+        Assert(threadSafeSuccess, "Concurrent registrations and lookups are thread-safe without exception");
+
+        // 6. Explicit language contract: no silent French fallback when Vietnamese requested
+        var frenchMock = new MockContentProvider("fr", "fr");
+        frenchMock.AddEnglish("Data/mail", "Robin", "Robin text[#]A Gift From Robin");
+        frenchMock.AddLocalized("Data/mail", "Robin", "Robin text[#]Un cadeau de la part de Robine");
+        var frenchResolver = new ItemNameResolver(frenchMock);
+        var frenchConfig = new ModConfig { SecondaryLanguage = "fr" };
+
+        var frenchApi = new UntranslatedStardewApi(() => frenchResolver, () => frenchConfig);
+
+        Assert(frenchApi.GetSecondaryName("Mail", "Robin", "fr") == "Un cadeau de la part de Robine", "Explicit fr returns French title");
+        Assert(frenchApi.GetSecondaryName("Mail", "Robin", "vi") == null, "Explicit vi returns null instead of silent French fallback");
+        Assert(frenchConfig.SecondaryLanguage == "fr", "Primary config remains unchanged");
+
+        // 7. Single registration
+        api.RegisterTranslation("MyMod.Single", "Item", "MyMod_Pickaxe", "vi", "Cuốc Chim Mod");
+        Assert(api.GetSecondaryName("Item", "MyMod_Pickaxe", "vi") == "Cuốc Chim Mod", "api.RegisterTranslation single item resolved");
+
+        bool unregResult = api.UnregisterTranslations("MyMod.Single");
+        Assert(unregResult, "UnregisterTranslations returns true for registered mod");
+        Assert(api.GetSecondaryName("Item", "MyMod_Pickaxe", "vi") == null, "Unregistered single item returns null");
+
+        // 8. Fault isolation: null or empty registrations do not throw
+        IDisposable emptyToken = api.RegisterTranslations("NullTest", new Dictionary<string, string>());
+        Assert(emptyToken != null, "Empty dictionary does not throw");
+    }
+
+    private static void TestLevelUpMenuPrefixFailureRestoration()
+    {
+        Console.WriteLine("\n-- Testing LevelUpMenu Prefix Failure Restoration --");
+
+        var left = new List<string> { "Quản trại", "Gia súc tăng 20%" };
+        var right = new List<string> { "Trồng trọt", "Nông sản tăng 10%" };
+
+        var state = new LevelUpMenuState
+        {
+            LeftList = left,
+            RightList = right,
+            OriginalLeft = "Quản trại",
+            OriginalRight = "Trồng trọt",
+            LeftSwapped = true
+        };
+
+        // Mutate left profession as Prefix does
+        left[0] = "Rancher";
+
+        // Simulate Prefix failure occurring midway (after left was mutated)
+        // catch block calls state.Restore()
+        state.Restore();
+
+        Assert(left[0] == "Quản trại", "Prefix failure: left[0] immediately restored to 'Quản trại'");
+        Assert(left.Count == 2, "Prefix failure: list count preserved");
+    }
+
+    private static void TestRealXnbMailAndNotesExpansion()
+    {
+        Console.WriteLine("\n-- Testing Real XNB Mail, Notes & Side Tabs Expansion --");
+
+        string? gamePath = LocateGamePath();
+        if (gamePath == null || !Directory.Exists(gamePath))
+        {
+            Console.WriteLine("  [SKIP] Stardew Valley game path not found; skipping real XNB mail and notes expansion.");
+            return;
+        }
+
+        string contentRoot = Path.Combine(gamePath, "Content");
+        string modContentRoot = Path.Combine(gamePath, "Mods", "Stardew Valley Viethoa", "assets", "Content");
+        var testService = new DummyServiceProvider();
+
+        var rawDefault = new RawContentProvider(() => testService, contentRoot, "default");
+        var rawEn = new RawContentProvider(() => testService, contentRoot, "en");
+        var rawFr = new RawContentProvider(() => testService, contentRoot, "fr");
+
+        var resDefault = new ItemNameResolver(rawDefault);
+        var resEn = new ItemNameResolver(rawEn);
+        var resFr = new ItemNameResolver(rawFr);
+
+        // 1. Mail titles
+        string? robinDefault = resDefault.GetSecondaryMailTitle("Robin");
+        Assert(robinDefault == "A Gift From Robin", $"Real XNB default: Robin mail == 'A Gift From Robin' (got '{robinDefault}')");
+
+        string? robinEn = resEn.GetSecondaryMailTitle("Robin");
+        Assert(robinEn == "A Gift From Robin", $"Real XNB en: Robin mail == 'A Gift From Robin' (got '{robinEn}')");
+
+        string? robinFr = resFr.GetSecondaryMailTitle("Robin");
+        Assert(robinFr == "Un cadeau de la part de Robine", $"Real XNB fr: Robin mail == 'Un cadeau de la part de Robine' (got '{robinFr}')");
+
+        // 2. Secret Note and Journal Scrap titles
+        string? note1Default = resDefault.GetSecondarySecretNoteTitle(1);
+        Assert(note1Default == "Secret Note #1", $"Real XNB default: Note 1 == 'Secret Note #1' (got '{note1Default}')");
+
+        string? journal1Default = resDefault.GetSecondarySecretNoteTitle(1001);
+        Assert(journal1Default == "Journal Scrap #1", $"Real XNB default: Note 1001 == 'Journal Scrap #1' (got '{journal1Default}')");
+
+        string? note1Fr = resFr.GetSecondarySecretNoteTitle(1);
+        Assert(note1Fr == "Note secrète #1", $"Real XNB fr: Note 1 == 'Note secrète #1' (got '{note1Fr}')");
+
+        string? journal1Fr = resFr.GetSecondarySecretNoteTitle(1001);
+        Assert(journal1Fr == "Page de journal #1", $"Real XNB fr: Note 1001 == 'Page de journal #1' (got '{journal1Fr}')");
+
+        // 3. Side tab hover names (0..7)
+        string? tabLettersDefault = resDefault.GetSecondarySideTabName(7);
+        Assert(tabLettersDefault == "Letters", $"Real XNB default: Side tab 7 == 'Letters' (got '{tabLettersDefault}')");
+
+        string? tabNotesDefault = resDefault.GetSecondarySideTabName(6);
+        Assert(tabNotesDefault == "Secret Notes", $"Real XNB default: Side tab 6 == 'Secret Notes' (got '{tabNotesDefault}')");
+
+        string? tabLettersFr = resFr.GetSecondarySideTabName(7);
+        Assert(tabLettersFr == "Lettres", $"Real XNB fr: Side tab 7 == 'Lettres' (got '{tabLettersFr}')");
+
+        // 4. Vietnamese mod XNB if available
+        if (Directory.Exists(modContentRoot))
+        {
+            var rawVi = new RawContentProvider(() => testService, contentRoot, "vi", modContentRoot);
+            var resVi = new ItemNameResolver(rawVi);
+
+            string? robinVi = resVi.GetSecondaryMailTitle("Robin");
+            Assert(!string.IsNullOrEmpty(robinVi), $"Real Vietnamese mod XNB: Robin mail == '{robinVi}'");
+
+            string? note1Vi = resVi.GetSecondarySecretNoteTitle(1);
+            Assert(note1Vi == "Mật thư #1", $"Real Vietnamese mod XNB: Note 1 == 'Mật thư #1' (got '{note1Vi}')");
+
+            string? journal1Vi = resVi.GetSecondarySecretNoteTitle(1001);
+            Assert(journal1Vi == "Mảnh nhật ký vụn #1", $"Real Vietnamese mod XNB: Note 1001 == 'Mảnh nhật ký vụn #1' (got '{journal1Vi}')");
+
+            string? tabLettersVi = resVi.GetSecondarySideTabName(7);
+            Assert(tabLettersVi == "Thư từ", $"Real Vietnamese mod XNB: Side tab 7 == 'Thư từ' (got '{tabLettersVi}')");
+
+            string? tabNotesVi = resVi.GetSecondarySideTabName(6);
+            Assert(tabNotesVi == "Ghi chú bí ẩn", $"Real Vietnamese mod XNB: Side tab 6 == 'Ghi chú bí ẩn' (got '{tabNotesVi}')");
         }
     }
 

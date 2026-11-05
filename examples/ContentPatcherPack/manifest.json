@@ -1,0 +1,17 @@
+{
+  "Name": "Untranslated Stardew - Content Patcher Example",
+  "Author": "Gia Hung",
+  "Version": "1.0.0",
+  "Description": "Demonstrates how Content Patcher authors provide bilingual names for modded items, mail, powers, and notes.",
+  "UniqueID": "GiaHung.UntranslatedStardew.CPExample",
+  "MinimumApiVersion": "4.0.0",
+  "ContentPackFor": {
+    "UniqueID": "Pathoschild.ContentPatcher"
+  },
+  "Dependencies": [
+    {
+      "UniqueID": "GiaHung.UntranslatedStardew",
+      "IsRequired": true
+    }
+  ]
+}

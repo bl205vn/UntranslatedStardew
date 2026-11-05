@@ -326,7 +326,8 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
 
     private Dictionary<string, string>? LoadDictionaryFromDisk(string assetSubpath, string langCode)
     {
-        if (assetSubpath.Equals("Data/Achievements", StringComparison.OrdinalIgnoreCase))
+        if (assetSubpath.Equals("Data/Achievements", StringComparison.OrdinalIgnoreCase) ||
+            assetSubpath.Equals("Data/SecretNotes", StringComparison.OrdinalIgnoreCase))
         {
             return LoadIntStringDictionaryAsStrings(assetSubpath, langCode);
         }
@@ -387,8 +388,9 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             {
                 return vanillaManager.Load<Dictionary<string, string>>(assetSubpath);
             }
-            catch (ContentLoadException)
+            catch (Exception ex)
             {
+                Console.WriteLine($"[LOAD ERROR] {assetSubpath}: {ex}");
                 // Ignore and return null
             }
         }

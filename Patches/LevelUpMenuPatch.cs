@@ -124,6 +124,8 @@ public static class LevelUpMenuPatch
                 LeftList = ___leftProfessionDescription,
                 RightList = ___rightProfessionDescription
             };
+            // Assign state immediately so Postfix/Finalizer or catch handler can restore if Prefix throws midway
+            __state = state;
 
             // 1. Process left profession
             if (___leftProfessionDescription != null && ___leftProfessionDescription.Count > 0)
@@ -172,11 +174,11 @@ public static class LevelUpMenuPatch
                     }
                 }
             }
-
-            __state = state;
         }
         catch (Exception ex)
         {
+            // If prefix failed after mutating profession lists, immediately restore unmutated state
+            __state?.Restore(__instance);
             if (!_errorLogged)
             {
                 _errorLogged = true;

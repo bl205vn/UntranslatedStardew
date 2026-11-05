@@ -1,6 +1,6 @@
 # Untranslated Stardew
 
-Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển thị tên vật phẩm và giao diện song ngữ trong bảng thông tin (tooltip), menu kỹ năng, menu thăng cấp nghề, tab quyền hạn và bộ sưu tập, đồng thời cung cấp API tra cứu tên đa ngôn ngữ và tìm kiếm không dấu (chuẩn hóa tiếng Việt `đ`/`Đ`).
+Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển thị tên vật phẩm và giao diện song ngữ trong bảng thông tin (tooltip), menu kỹ năng, menu thăng cấp nghề, tab quyền hạn, bộ sưu tập (bao gồm tiêu đề thư từ, ghi chú bí ẩn và tab bên lề), đồng thời hỗ trợ nạp tên song ngữ từ các mod Content Patcher / C# bên thứ ba, cung cấp API tra cứu tên đa ngôn ngữ và tìm kiếm không dấu (chuẩn hóa tiếng Việt `đ`/`Đ`).
 
 ---
 
@@ -10,7 +10,16 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
   - **Bảng Kỹ năng (`SkillsPage`)**: Hiển thị tên kỹ năng (Trồng trọt, Câu cá, Hái lượm, Khai khoáng, Chiến đấu, May mắn) và tên nghề nghiệp cấp 5 / 10 ở dạng song ngữ khi rà chuột (hover). Giữ nguyên mô tả tăng chỉ số theo ngôn ngữ chính.
   - **Menu Thăng cấp Nghề (`LevelUpMenu`)**: Hiển thị tiêu đề nghề nghiệp song ngữ trên hai thẻ lựa chọn khi người chơi đạt cấp 5 hoặc cấp 10 với bố cục đo đạc an toàn: tiêu đề chính vẽ bằng `dialogueFont` 1 dòng chuẩn vanilla tại `top+160`, tiêu đề phụ vẽ bằng `smallFont` tại khoảng trống đo đạc `top+208` (cách dòng đạn đầu tiên 32px), giới hạn chiều rộng cột trước icon (336px/352px) và tự động cắt ngắn thêm dấu `...` nếu vượt quá. Sử dụng trạng thái hiển thị scoped (`LevelUpMenuState`) khôi phục nguyên vẹn danh sách sau khi vẽ và bảo đảm khôi phục ngay cả khi có ngoại lệ (`Finalizer`), không làm rò rỉ chuỗi song ngữ sang logic click/hover hay lưu trạng thái cấu hình cũ.
   - **Vật phẩm & Quyền hạn (`PowersTab`)**: Hiển thị tên song ngữ cho các quyền hạn và vật phẩm đặc biệt đã mở khóa (Chìa khóa Đầu lâu, Bùa phép của Rừng, Tri thức của Gấu, v.v.). Giữ nguyên ẩn danh `???` và không làm lộ nội dung đối với các quyền hạn chưa đạt được.
-  - **Bảng Bộ sưu tập (`CollectionsPage`)**: Hiển thị tên song ngữ cho vật phẩm nông sản/thu thập, cá, cổ vật, khoáng sản, món ăn nấu nướng, và danh hiệu thành tựu (`Achievements`). Bảo toàn hoàn toàn phần mô tả chi tiết, số lượng đã vận chuyển, giá bán, trạng thái công thức và trạng thái chưa mở khóa (`???`). Phần thư từ và giấy ghi chú bí mật giữ nguyên văn bản gốc.
+  - **Bảng Bộ sưu tập (`CollectionsPage`)**:
+    - **Vật phẩm & Thành tựu**: Hiển thị tên song ngữ cho nông sản, cá, cổ vật, khoáng sản, món ăn và danh hiệu thành tựu (`Achievements`). Bảo toàn hoàn toàn phần mô tả chi tiết, số lượng đã vận chuyển, giá bán, trạng thái công thức và trạng thái chưa mở khóa (`???`).
+    - **Tiêu đề Thư từ (`Letters` - Tab 7)**: Hiển thị tiêu đề thư song ngữ khi rà chuột (hover) trên các bức thư đã đọc (ví dụ: `Bức thư từ Krobus (A Letter From Krobus)`). Trích xuất chính xác trường tiêu đề sau ký tự phân cách `[#]` từ từ điển `Data/mail` của ngôn ngữ phụ; hoàn toàn không can thiệp hay dịch nội dung thân thư. Các thư không có trường tiêu đề hoặc chưa mở khóa (`???`) giữ nguyên theo ngôn ngữ chính.
+    - **Tiêu đề Mật thư & Mảnh nhật ký vụn (`Secret Notes & Journal Scraps` - Tab 6)**: Hiển thị tiêu đề song ngữ trên đầu ghi chú (`Ghi chú bí ẩn #X (Secret Note #X)` hoặc `Mảnh nhật ký vụn #X (Journal Scrap #X)`) kết hợp với nội dung thân ghi chú. Đối với các ghi chú chỉ chứa ảnh (image-only notes như #10, #13, #15, #19, #20, #21), tiêu đề song ngữ hiển thị chuẩn xác mà không bị ghép nội dung văn bản thừa. Thân ghi chú được giữ nguyên 100%.
+    - **Nhãn Tab Bên lề (`Side Tabs`)**: Hiển thị tên song ngữ khi rà chuột lên các icon chuyển tab bên trái của bảng Bộ sưu tập (ví dụ: `Thư từ (Letters)`, `Ghi chú bí ẩn (Secret Notes)`), không làm lệch bố cục nhãn cố định của game.
+
+- **Hỗ trợ Nội dung Mod (Content Patcher & C# Modded Content):**
+  - **Asset Từ điển Tùy chỉnh (`Mods/GiaHung.UntranslatedStardew/Names`)**: Cung cấp asset từ điển SMAPI mở để các gói Content Patcher hoặc mod khác có thể đăng ký tên song ngữ cho vật phẩm, thư từ, quyền hạn, thành tựu, mật thư, và tab thông qua lệnh `EditData`.
+  - **Fallback Ngôn ngữ Chuẩn SMAPI**: Tự động thử nghiệm theo thứ tự ưu tiên chuẩn: mã locale chính xác (`zh-CN`) -> mã ngôn ngữ cha (`zh`) -> `default`. Ngôn ngữ `en` chỉ được trả về nếu nguồn mod có cung cấp trực tiếp, không tự tiện gán tiếng Anh bừa bãi.
+  - **Độ Ưu Tiên Phân Giải Minh Bạch**: Tên từ Content Patcher / C# API (`External`) > Nguồn dữ liệu có token `[LocalizedText]` > Tệp XNB vanilla gốc > Trả về `null` (giữ nguyên tên chính). Tuyệt đối không thay đổi locale toàn cục của game hay quét đoán chuỗi không căn cứ.
 
 - **Tooltip Song Ngữ (Bilingual Tooltip):**
   - Hiển thị tên vật phẩm ở ngôn ngữ hiện hành của game (ngôn ngữ chính, bao gồm cả bản dịch tiếng Việt từ mod `Kou.ViethoaSV`) và ngôn ngữ phụ được cấu hình (mặc định là `default` theo chuẩn SMAPI, `en`, hoặc bất kỳ ngôn ngữ nào được hỗ trợ).
@@ -58,13 +67,17 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
   - Cơ chế dự phòng theo từng khóa (per-key fallback): Khi từ điển ngôn ngữ phụ thiếu một khóa cụ thể, tự động lấy khóa tương ứng từ tệp gốc tiếng Anh.
   - Tự động dọn dẹp bộ nhớ (`Dispose`) và làm mới cache khi xảy ra sự kiện `LocaleChanged` hoặc `AssetsInvalidated`.
 
-- **API Tìm Kiếm Công Khai (Public Mod API):**
-  - Cung cấp interface `IUntranslatedStardewApi` cho các mod tìm kiếm/menu khác qua `helper.ModRegistry.GetApi<IUntranslatedStardewApi>("GiaHung.UntranslatedStardew")`.
+- **API Công Khai (Public Mod API):**
+  - Cung cấp interface `IUntranslatedStardewApi` cho các mod tìm kiếm/menu hoặc mod nội dung khác qua `helper.ModRegistry.GetApi<IUntranslatedStardewApi>("GiaHung.UntranslatedStardew")`.
   - Thực thể API ổn định (stable instance): Các mod bên thứ ba lưu tham chiếu API vẫn luôn nhận được cấu hình và resolver cập nhật mới nhất mà không bị giữ provider đã giải phóng.
   - Cung cấp các phương thức:
     - `Matches(item, query, bool? ignoreDiacritics = null)`: Khớp từ khóa tìm kiếm trên cả tên chính và tên phụ. Tùy chọn `ignoreDiacritics` cho phép ghi đè cấu hình mod khi người gọi cần tìm kiếm nhạy dấu.
     - `GetNames(item)`: Trả về cặp `(primaryName, secondaryName)`.
     - `GetSearchTerms(item)`: Trả về danh sách các từ khóa tìm kiếm (tên chính, tên phụ, các biến thể đã chuẩn hóa bỏ dấu).
+    - `GetSecondaryName(string category, string id, string? language = null)`: Tra cứu tên song ngữ theo danh mục (`Item`, `Mail`, `Power`, `Achievement`, `SecretNote`, `SideTab`), ID và mã ngôn ngữ tùy chọn (mặc định lấy ngôn ngữ phụ đang cấu hình).
+    - `RegisterTranslations(string sourceModId, IDictionary<string, string> translations)`: Đăng ký hàng loạt bản dịch từ mod C#, trả về token `IDisposable` để tự động hủy khi mod dừng hoạt động.
+    - `RegisterTranslation(string sourceModId, string category, string id, string language, string translatedName)`: Đăng ký một bản dịch đơn lẻ.
+    - `UnregisterTranslations(string sourceModId)`: Thu hồi toàn bộ bản dịch đã đăng ký của mod.
   - Chuẩn hóa bỏ dấu tiếng Việt chuẩn Unicode FormD kết hợp ánh xạ `đ`/`Đ` -> `d`/`D`.
 
 ---
@@ -78,7 +91,7 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
 
 ### Cài đặt:
 1. Tải bản build đóng gói tại:  
-   `bin/Release/net6.0/UntranslatedStardew 1.1.0.zip`
+   `bin/Release/net6.0/UntranslatedStardew 1.2.0.zip`
 2. Giải nén thư mục `UntranslatedStardew` vào thư mục `Mods/` của game:  
    `Stardew Valley/Mods/UntranslatedStardew/`
 3. Cấu trúc thư mục mod:
@@ -93,35 +106,108 @@ Untranslated Stardew là bản mod SMAPI cho Stardew Valley 1.6 giúp hiển th�
 
 ---
 
-## 3. Quy trình Kiểm thử với CJB Item Spawner & Lệnh Console (Testing & Validation Workflow)
+## 3. Hướng dẫn Tích hợp Nội dung Mod (Content Patcher & C# Integration Guide)
 
-### A. Kiểm tra nhanh với CJB Item Spawner:
-1. **Chuẩn bị:** Mở game và vào một file lưu tạm thời (test save).
-2. **Mở menu Spawn:** Bấm phím mở CJB Item Spawner (mặc định phím `i`).
-3. **Kiểm tra Tooltip Trực tiếp:**
-   - Rà chuột (hover) trực tiếp lên các ô vật phẩm trong bảng Spawner: tooltip hiển thị tên chính và tên phụ (ví dụ: `Trứng Ếch` / `Frog Egg`, `Mật ong rừng` / `Wild Honey`).
-   - Spawn thử một vài món vào túi đồ (inventory) và rà chuột trong túi đồ để xác nhận tính đồng nhất.
-4. **Kiểm tra Phụ kiện (Trinkets) & Biến thể Động:**
-   - Chọn tab Phụ kiện / gõ tìm kiếm phụ kiện.
-   - Thử các loại phụ kiện: `Basilisk Paw`, `Fairy Box`, `Ice Rod`, `Golden Spur`, `Frog Egg`, `Magic Quiver`, `Magic Hair Gel`, `Parrot Egg`.
-   - Với các biến thể có màu sắc hoặc cấp độ:
-     - `Trứng Ếch Xanh lục` (`Green Frog Egg`), `Trứng Ếch Đỏ` (`Red Frog Egg`), `Trứng Ếch Ngũ Sắc` (`Prismatic Frog Egg`).
-     - `Pháp trượng Băng Toàn năng` (`Perfect Ice Rod`).
-     - `Pháp tiễn Siêu thanh` (`Rapid Magic Quiver`), `Pháp tiễn Hạng nặng` (`Heavy Magic Quiver`).
-   - Xác nhận tên phụ hiển thị đúng từng biến thể, không bị đè nhầm tên mặc định.
-5. **Kiểm tra Tìm kiếm Không Dấu & Song Ngữ trong Spawner:**
-   - Gõ tìm kiếm tiếng Việt không dấu: ví dụ gõ `ca noc` -> xuất hiện `Cá nóc`; gõ `trung ech` -> xuất hiện `Trứng Ếch`; gõ `phap truong` -> xuất hiện các loại `Pháp trượng Băng`.
-   - Gõ tìm kiếm bằng tên tiếng Anh: ví dụ gõ `pufferfish` -> xuất hiện `Cá nóc`; gõ `frog egg` -> xuất hiện `Trứng Ếch`; gõ `ice rod` -> xuất hiện `Pháp trượng Băng`.
-   - Đổi các tab danh mục (`All`, `Tools`, `Weapons`, v.v.) và thứ tự sắp xếp (`Name`, `Price`, `Type`, `ID`): xác nhận các bộ lọc danh mục và sắp xếp của CJB hoạt động chính xác 100%.
+### A. Dành cho Tác giả Gói Content Patcher:
+Mod cung cấp một từ điển SMAPI tùy chỉnh `Mods/GiaHung.UntranslatedStardew/Names` được khởi tạo rỗng khi tải game. Bất kỳ gói Content Patcher nào cũng có thể dùng hành động `EditData` để đăng ký tên song ngữ cho các nội dung tùy biến của mình mà không cần phụ thuộc mã nguồn C#.
 
-### B. Lệnh Console Chẩn đoán Độ Phủ Danh Mục (`untranslated_audit`):
-Trong cửa sổ SMAPI console khi đang trong game, người dùng có thể gõ:
-- `untranslated_audit`: Hiển thị bảng tổng hợp thống kê số lượng vật phẩm song ngữ, trùng tên, và thiếu dữ liệu theo từng danh mục registry (`(O)`, `(BC)`, `(B)`, `(H)`, `(T)`, `(W)`, `(TR)`, `(P)`, `(S)`, `(F)`, `(M)`).
-- `untranslated_audit details`: Liệt kê chi tiết ID và tên của các vật phẩm khuyết bản dịch phụ để tiện kiểm tra gói ngôn ngữ.
+#### Cú pháp khóa từ điển (Key Schema):
+`{Category}/{Id}@{Language}` hoặc `{Category}/{Id}` (áp dụng cho ngôn ngữ `default`).
+
+- **Category được hỗ trợ:**
+  - `Item`: Vật phẩm thông thường, nguyên liệu, vũ khí, giày, mũ, phụ kiện, nội thất (ví dụ: `Item/MyMod_RubySword@vi`).
+  - `Mail`: Khóa thư từ trong `Data/mail` (ví dụ: `Mail/MyMod_WelcomeLetter@en`).
+  - `Power`: Quyền hạn trong `Data/Powers` (ví dụ: `Power/MyMod_ForestBlessing@vi`).
+  - `Achievement`: Tên thành tựu trong `Data/Achievements` (ví dụ: `Achievement/101@default`).
+  - `SecretNote`: Ghi chú bí ẩn hoặc Mảnh nhật ký vụn (ví dụ: `SecretNote/25@vi` hoặc `SecretNote/1005@en`).
+  - `SideTab`: Tên nhãn các tab bên lề bộ sưu tập (`0` đến `7`).
+- **Language:** Mã ngôn ngữ mục tiêu (`vi`, `en`, `fr`, `zh-CN`, v.v.) hoặc bỏ trống phần `@Language` để đặt cho `default`.
+
+#### Quy tắc Phân giải Locale (SMAPI Semantics):
+Khi người chơi chọn ngôn ngữ phụ (ví dụ: `zh-CN`), Untranslated Stardew sẽ tra cứu theo thứ tự:
+1. Locale chính xác (`zh-CN`)
+2. Locale cha (`zh`)
+3. Locale mặc định (`default`)
+*Lưu ý: Tên tiếng Anh `en` chỉ được hiển thị nếu gói mod có khai báo rõ ràng `@en`; mod không tự động coi `default` là tiếng Anh khi ngôn ngữ được yêu cầu khác.*
+
+#### Ví dụ `content.json` của Content Patcher:
+```json
+{
+  "Format": "2.0.0",
+  "Changes": [
+    {
+      "Action": "EditData",
+      "Target": "Mods/GiaHung.UntranslatedStardew/Names",
+      "Entries": {
+        "Item/MyMod_AncientFruit@vi": "{{i18n:fruit.name}}",
+        "Item/MyMod_AncientFruit@en": "Ancient Sunfruit",
+        "Mail/MyMod_QuestNotice@vi": "{{i18n:mail.title}}",
+        "Power/MyMod_MagicSight@vi": "{{i18n:power.title}}"
+      }
+    }
+  ]
+}
+```
+*(Gói mẫu hoàn chỉnh có thể tham khảo tại thư mục [examples/ContentPatcherPack](file:///examples/ContentPatcherPack/content.json)).*
+
+### B. Dành cho Lập trình viên Mod C#:
+Các mod C# khác có thể lấy API công khai thông qua cơ chế SMAPI Mod Registry:
+
+```csharp
+IUntranslatedStardewApi? api = helper.ModRegistry.GetApi<IUntranslatedStardewApi>("GiaHung.UntranslatedStardew");
+if (api != null)
+{
+    // Đăng ký hàng loạt bản dịch, trả về token IDisposable để tự động dọn dẹp khi mod unload
+    IDisposable token = api.RegisterTranslations("MyMod.UniqueId", new Dictionary<string, string>
+    {
+        ["Item/MyMod_Wand@en"] = "Star Wand",
+        ["Item/MyMod_Wand@vi"] = "Đũa Phép Ngôi Sao",
+        ["Mail/MyMod_Welcome@vi"] = "Thư Chào Mừng"
+    });
+
+    // Hoặc đăng ký đơn lẻ
+    api.RegisterTranslation("MyMod.UniqueId", "Item", "MyMod_Gem", "vi", "Đá Quý Bí Ẩn");
+
+    // Tra cứu tên song ngữ theo danh mục
+    string? secondary = api.GetSecondaryName("Item", "MyMod_Gem");
+}
+```
 
 ---
 
-## 4. Cấu hình (Configuration)
+## 4. Quy trình Kiểm thử & Danh sách Kiểm tra Chụp màn hình (Manual Verification Checklist)
+
+### A. Kiểm tra Nhanh với CJB Item Spawner & Lệnh Console:
+1. **Kiểm tra Tooltip & Phụ kiện:** Mở bảng CJB Spawner (phím `i`), rà chuột lên vật phẩm và phụ kiện (Trứng Ếch 8 màu, gậy băng Perfect Ice Rod, ống tên Quiver) để xác nhận tooltip song ngữ.
+2. **Tìm kiếm Không Dấu & Song Ngữ:** Gõ `ca noc` -> ra `Cá nóc`; gõ `pufferfish` -> ra `Cá nóc`.
+3. **Lệnh Console SMAPI:**
+   - `untranslated_audit`: Tổng hợp số lượng vật phẩm song ngữ, trùng tên, và thiếu dữ liệu theo từng danh mục registry.
+   - `untranslated_audit details`: Liệt kê chi tiết ID và tên của các vật phẩm khuyết bản dịch phụ.
+
+### B. Danh sách Kiểm tra Chụp Màn hình (Manual Screenshot Verification Checklist):
+Để xác nhận tính ổn định của giao diện trước khi xuất xưởng, hãy kiểm tra các màn hình sau:
+1. **Bảng Bộ sưu tập - Tab Thư từ (`Letters` - Tab 7):**
+   - Rà chuột lên một bức thư bất kỳ đã đọc (ví dụ: `Robin` hoặc thư từ `Krobus`).
+   - *Kết quả mong đợi:* Tooltip hiển thị tiêu đề song ngữ (ví dụ: `Bức thư từ Krobus (A Letter From Krobus)` hoặc theo định dạng `SecondaryFirst`), ngắt dòng chuẩn xác ở độ rộng 256px.
+2. **Bảng Bộ sưu tập - Tab Ghi chú bí ẩn (`Secret Notes` - Tab 6):**
+   - Mở Ghi chú bí ẩn có văn bản (ví dụ: Mật thư #23): tiêu đề hiển thị song ngữ (`Ghi chú bí ẩn #23 (Secret Note #23)`), thân ghi chú giữ nguyên văn bản gốc.
+   - Mở Ghi chú chỉ có ảnh (ví dụ: Mật thư #10, #13, #15, #19, #20, #21): tiêu đề hiển thị song ngữ, bên dưới hiển thị ảnh mà không có chữ thừa hay lỗi khoảng trống.
+3. **Bảng Bộ sưu tập - Mảnh nhật ký vụn (`Journal Scraps`):**
+   - Mở Mảnh nhật ký vụn (chỉ số index >= 1000): tiêu đề hiển thị `Mảnh nhật ký vụn #1 (Journal Scrap #1)`.
+4. **Bảng Bộ sưu tập - Tab Bên lề (`Side Tabs`):**
+   - Rà chuột lên tab 6: hiển thị `Ghi chú bí ẩn (Secret Notes)`.
+   - Rà chuột lên tab 7: hiển thị `Thư từ (Letters)`.
+   - *Kết quả mong đợi:* Nhãn cố định của game không bị biến dạng, chỉ có tooltip hoverText hiển thị tên song ngữ.
+5. **Bảo mật Mục Chưa Mở khóa (Locked State & Spoiler Protection):**
+   - Kiểm tra các ô thư từ hoặc mật thư chưa tìm thấy: hiển thị `???`, hoàn toàn không làm lộ tiêu đề hay nội dung.
+6. **Menu Thăng cấp Nghề (`LevelUpMenu`):**
+   - Màn hình chọn nghề cấp 5 hoặc cấp 10: tiêu đề chính `dialogueFont` 1 dòng tại `top+160`, tiêu đề phụ `smallFont` tại `top+208`, không bị chồng lấn lên dòng đạn đầu tiên và cắt ngắn an toàn nếu vượt quá 336px/352px.
+7. **Bảng Quyền hạn (`PowersTab`):**
+   - Rà chuột lên các quyền hạn đã mở khóa: tên song ngữ hiển thị chuẩn xác, không bị lỗi xuống dòng.
+
+---
+
+## 5. Cấu hình (Configuration)
 
 File cấu hình `config.json` sẽ được tự động tạo khi chạy mod lần đầu, hoặc chỉnh sửa trực tiếp qua menu **Generic Mod Config Menu (GMCM)**:
 
@@ -134,7 +220,7 @@ File cấu hình `config.json` sẽ được tự động tạo khi chạy mod l
 
 ---
 
-## 5. Ngôn ngữ hỗ trợ & Giới hạn (Supported Languages & Scope Limits)
+## 6. Ngôn ngữ hỗ trợ & Giới hạn (Supported Languages & Scope Limits)
 
 ### Ngôn ngữ có sẵn trong game (Vanilla Built-in):
 Các ngôn ngữ sau có sẵn tệp XNB trong thư mục `Content/` của game:
@@ -156,28 +242,29 @@ Các ngôn ngữ sau có sẵn tệp XNB trong thư mục `Content/` của game:
 - Khi chơi game bằng tiếng Việt (`Kou.ViethoaSV`), tên chính của vật phẩm hiển thị tiếng Việt đầy đủ.
 - Khi chơi game bằng ngôn ngữ khác và chọn `SecondaryLanguage: "vi"`, mod sẽ phát hiện thư mục mod `Kou.ViethoaSV` qua `helper.ModRegistry.Get("Kou.ViethoaSV")` hoặc đường dẫn quy ước và đọc các tệp `_vi.xnb`. Nếu không tìm thấy, mod sẽ ghi cảnh báo 1 lần qua mã hóa ngôn ngữ `I18n.Log_SecondaryFallback` và chuyển về `default` an toàn.
 
-### Phạm vi và Giới hạn (Boundaries):
-- Mod chỉ can thiệp vào tiêu đề tên hiển thị của vật phẩm, kỹ năng, nghề nghiệp, quyền hạn và bộ sưu tập; **không** thay đổi tên NPC, quái vật, hội thoại hay ghi đè logic game của thuộc tính `Item.Name`/`Item.DisplayName`.
-- Mô tả chi tiết, số lượng, giá bán, công thức, thư từ, ghi chú bí mật và các ô chưa khám phá (`???`) luôn được bảo toàn nguyên vẹn theo ngôn ngữ chính của game.
-- Không tự ý thêm ô tìm kiếm mới vào giao diện game (cung cấp API tiêu chuẩn để các mod giao diện/tìm kiếm khác tích hợp).
-- Chi tiết phân tích call chain và giới hạn hiển thị: xem thêm tại [`docs/UI-COVERAGE.md`](file:///docs/UI-COVERAGE.md).
+### Phạm vi và Giới hạn (Boundaries & Limits):
+- Mod chỉ can thiệp vào tiêu đề tên hiển thị của vật phẩm, kỹ năng, nghề nghiệp, quyền hạn, tiêu đề thư từ, tiêu đề mật thư/mảnh nhật ký và tên nhãn tab bên lề.
+- **Tuyệt đối không dịch:** Thân thư, nội dung mật thư, tên NPC, quái vật, hội thoại hay ghi đè logic game của thuộc tính `Item.Name`/`Item.DisplayName`.
+- **Không tự động đoán dịch cho các mod ảo:** Tệp XNB của game gốc không thể thấy các tài nguyên ảo của Content Patcher/C#. Để modded item/mail hiển thị song ngữ, tác giả mod cần khai báo qua `Mods/GiaHung.UntranslatedStardew/Names`, C# API hoặc sử dụng token `[LocalizedText ...]`. Nếu không có bản dịch phụ, mod sẽ hiển thị tên chính nguyên bản một cách sạch sẽ.
+- Tuyệt đối không thay đổi mã ngôn ngữ toàn cục `LocalizedContentManager.CurrentLanguageCode` của game.
+- Chi tiết báo cáo kiểm tra lỗi và ranh giới kỹ thuật: xem thêm tại [`docs/AUDIT-1.2.0.md`](file:///docs/AUDIT-1.2.0.md) và [`docs/UI-COVERAGE.md`](file:///docs/UI-COVERAGE.md).
 
 ---
 
-## 6. Hướng dẫn Lệnh Build & Kiểm thử (Build & Verification)
+## 7. Hướng dẫn Lệnh Build & Kiểm thử (Build & Verification)
 
 ### Build mod (Offline Release, tạo gói Zip):
 ```pwsh
 dotnet build -c Release /p:EnableModDeploy=false /p:EnableModZip=true
 ```
 - Kết quả thư mục mod: `bin/Release/net6.0/`
-- Tệp nén Release zip: `bin/Release/net6.0/UntranslatedStardew 1.1.0.zip`
+- Tệp nén Release zip: `bin/Release/net6.0/UntranslatedStardew 1.2.0.zip` (chỉ chứa `manifest.json`, `UntranslatedStardew.dll` và thư mục `i18n/`, loại trừ toàn bộ thư mục `examples/` và mã kiểm thử).
 
 ### Chạy bộ kiểm thử hồi quy (Regression Test Suite & Real XNB Smoke Check):
 ```pwsh
 dotnet run --project tests/UntranslatedStardew.Tests/UntranslatedStardew.Tests.csproj
 ```
-Bộ kiểm thử gồm **413 ca kiểm tra** đã qua, gồm kiểm tra biên Harmony CJB, UI Expansion, bố cục LevelUpMenu scoped, và dữ liệu XNB thật:
+Bộ kiểm thử gồm **497 ca kiểm tra** đã qua toàn diện, gồm kiểm tra biên Harmony CJB, UI Expansion, bố cục LevelUpMenu scoped, nạp XNB thật, và tích hợp modded content:
 1. `LanguageHelper`: Phân giải mã chuẩn ISO, hỗ trợ `default` và vanilla built-in vs Tiếng Việt, ánh xạ hậu tố tệp XNB.
 2. `SearchMatcher Accent & 'đ'`: Chuẩn hóa Unicode FormD, loại bỏ dấu thanh, ánh xạ `đ`/`Đ` -> `d`/`D`.
 3. `SearchMatcher Query Matching`: Khớp chuỗi không phân biệt hoa thường, chuỗi con, cờ phân biệt dấu, phát sinh từ khóa tìm kiếm.
@@ -191,14 +278,36 @@ Bộ kiểm thử gồm **413 ca kiểm tra** đã qua, gồm kiểm tra biên H
 11. `Systematic Item Name Coverage Audit`: Kiểm tra tự động độ phủ phân giải trên các danh mục phụ kiện, giày, mũ.
 12. `Real XNB Offline Smoke Check`: Nạp thực tế trực tiếp các tệp XNB từ đĩa (Strings/Objects English, French, Vietnamese; Data/Boots; Data/hats; Data/Trinkets; Strings/1_6_Strings) qua ContentManager độc lập mà không cần khởi chạy game hay SMAPI.
 13. `SMAPI 'default' Semantics`: Kiểm thử nạp `default` không bị cảnh báo unsupported, phân biệt rõ `default` và `en`.
-14. `UI Harmony Boundary Signatures & Field Binding`: Kiểm tra phản chiếu (reflection) chữ ký phương thức cho cả 5 điểm vá Harmony và các trường dữ liệu nội bộ (`leftProfessionDescription`, `rightProfessionDescription`, `professionsToChoose`, `leftProfessionColor`, `rightProfessionColor`, `hoverTitle`, `hoverText`, `descriptionText`, `powers`).
+14. `UI Harmony Boundary Signatures & Field Binding`: Kiểm tra phản chiếu (reflection) chữ ký phương thức cho cả 6 điểm vá Harmony và các trường dữ liệu nội bộ (`leftProfessionDescription`, `rightProfessionDescription`, `professionsToChoose`, `leftProfessionColor`, `rightProfessionColor`, `hoverTitle`, `hoverText`, `descriptionText`, `powers`).
 15. `LevelUpMenu Scoped State, Pure Layout & Truncation`: Kiểm tra hình học tọa độ chuẩn Stardew Valley 1.6.15 (khoảng cách 104px giữa tiêu đề và dòng đạn đầu tiên, phụ đề tại `top+208`, giới hạn chiều rộng cột 336px/352px trước icon, thuật toán cắt ngắn thêm `...`), lưu/khôi phục trạng thái scoped qua Postfix/Finalizer, bảo toàn nguyên vẹn chuỗi gốc sau 50 chu kỳ vẽ liên tiếp và khi xảy ra ngoại lệ.
 16. `UI Fixture Formatting & Merged Text`: Kiểm thử cấu trúc ghép chuỗi hai dấu xuống dòng của `CollectionsPage`, bảo toàn số liệu thống kê, chống ghép lặp hai lần, bảo vệ trạng thái `???` chưa mở khóa.
 17. `Real XNB UI Expansion Smoke Check`: Nạp thực tế các tên nghề (Professions 0, 1, 4), kỹ năng (Farming, Fishing, Foraging, Mining, Combat), quyền hạn (SkullKey, BearPaw, ForestMagic), thành tựu (Achievement 0) và bộ sưu tập (Item 128) qua các tệp XNB thật của English, French và tiếng Việt `Kou.ViethoaSV`.
+18. `Mail Title & Secret Note Tests`: Kiểm tra trích xuất tiêu đề thư chuẩn xác từ trường `[#]` trong `Data/mail`, phân định Mật thư vs Mảnh nhật ký vụn (`index >= 1000`), ghi chú ảnh không lỗi nội dung, bảo toàn ký tự xuống dòng chéo nền tảng, định dạng độc lập tránh ngắt dòng đè mất phụ đề, và bảo vệ submenu guard khi letter viewer mở.
+19. `External Translation Registry & Modded Fallbacks`: Kiểm tra cơ chế đăng ký từ điển `Mods/GiaHung.UntranslatedStardew/Names`, fallback chuẩn SMAPI (`exact -> parent -> default`), tra cứu ID định danh đầy đủ (`(W)Custom_DragonSword`), và độ ưu tiên so với dữ liệu gốc.
+20. `C# Public API, Lifecycle & Thread Safety`: Kiểm tra vòng đời đăng ký C#, tính năng hủy tự động `IDisposable` kèm đồng bộ xóa cache resolver tức thì, quyền sở hữu token theo thế hệ (generation) chống ghi đè nhầm, phân xử xung đột ưu tiên đăng ký sau cùng, an toàn đa luồng (thread-safe copy-on-write), hợp đồng ngôn ngữ rõ ràng không tự động trả về tiếng Pháp khi hỏi tiếng Việt, và cô lập lỗi an toàn.
+21. `Real XNB Mail & Secret Notes Smoke Check`: Nạp thực tế tiêu đề thư Robin và mật thư từ các tệp XNB thật của English, French và tiếng Việt.
 
 ---
 
-## 7. Nhật ký thay đổi (Changelog)
+## 8. Nhật ký thay đổi (Changelog)
+
+### v1.2.0
+- **Tiêu đề Thư từ Song ngữ (`Letters` - Tab 7):** Hiển thị tên song ngữ cho các bức thư đã đọc khi rà chuột trong Bảng Bộ sưu tập. Trích xuất chính xác trường tiêu đề sau ký tự phân cách `[#]` từ `Data/mail`; không dịch thân thư. Định dạng độc lập từng phần để tránh việc ngắt dòng của game làm ẩn tiêu đề phụ. Bổ sung guard bỏ qua khi menu xem thư (`letterviewerSubMenu`) đang mở.
+- **Tiêu đề Mật thư & Mảnh nhật ký vụn (`Secret Notes & Journal Scraps` - Tab 6):** Hiển thị tiêu đề song ngữ trên đầu ghi chú. Hỗ trợ đầy đủ ghi chú văn bản, ghi chú chỉ có ảnh (image-only notes), và các mảnh nhật ký vụn (`index >= 1000`). Giữ nguyên 100% nội dung thân ghi chú.
+- **Tab Bên lề Song ngữ (`Side Tabs`):** Hiển thị tên ngôn ngữ phụ trên tooltip khi rà chuột lên các biểu tượng tab bên trái bảng Bộ sưu tập, không ảnh hưởng đến nhãn cố định của game.
+- **Hỗ trợ Nội dung Mod từ Content Patcher:** Cung cấp asset từ điển SMAPI `Mods/GiaHung.UntranslatedStardew/Names` cho phép các mod Content Patcher đăng ký tên song ngữ cho vật phẩm (hỗ trợ ID định danh như `(W)`), thư từ, quyền hạn, thành tựu, mật thư qua hành động `EditData`. Gói ví dụ mẫu yêu cầu phụ thuộc bắt buộc (`IsRequired: true`).
+- **Hỗ trợ Nội dung Mod từ C#:** Bổ sung phương thức `RegisterTranslations` (trả về `IDisposable`), `RegisterTranslation`, `UnregisterTranslations`, và `GetSecondaryName` vào interface `IUntranslatedStardewApi`.
+- **Dự phòng Ngôn ngữ Chuẩn SMAPI:** Triển khai cơ chế phân giải `exact -> parent -> default` cho nội dung modded. Tiếng Anh `en` cũng dự phòng về `default` theo chuẩn SMAPI, trong khi chọn `default` chỉ tra cứu `default`. Bản dịch gốc `default` có thể là ngôn ngữ khác ngoài tiếng Anh.
+- **Sửa lỗi Vòng đời & An toàn Đa luồng (Audit Fixes):**
+  - Xóa cache resolver ngay khi token đăng ký bị dispose.
+  - Quản lý token theo thế hệ (generation-based ownership), ngăn token cũ vô tình hủy đăng ký mới hơn.
+  - Phân xử xung đột có thứ tự xác định (đăng ký sau cùng thắng).
+  - Triển khai snapshot bất biến (copy-on-write) đảm bảo an toàn tuyệt đối khi đọc/ghi đồng thời trên nhiều luồng.
+  - API `GetSecondaryName` với ngôn ngữ chỉ định tuân thủ nghiêm ngặt ngôn ngữ yêu cầu, không tự ý trả về tiếng Pháp khi người dùng yêu cầu tiếng Việt.
+  - Khắc phục lỗi khôi phục trạng thái `LevelUpMenu`: lưu tham chiếu `__state` trước khi sửa đổi mô tả để luôn khôi phục được ngay cả khi gặp ngoại lệ lúc bắt đầu vẽ.
+  - Hỗ trợ ký tự xuống dòng chéo nền tảng (`\r\n\r\n` và `\n\n`) khi phân tách tiêu đề mật thư.
+  - Bổ sung theo dõi vô hiệu hóa asset cho `Data/mail`, `Data/SecretNotes`, `Strings/Locations`, và `Mods/GiaHung.UntranslatedStardew/Names`.
+- **Bộ Kiểm thử Tự động:** Mở rộng lên 497 ca kiểm tra toàn diện, xác thực toàn bộ tính năng mới, an toàn luồng và dữ liệu XNB thật.
 
 ### v1.1.0
 - **Hỗ trợ Ngôn ngữ `default` Chuẩn SMAPI:** Bổ sung `default` làm lựa chọn ngôn ngữ phụ chính thức song song với `en`. `default` nạp trực tiếp tài nguyên gốc không hậu tố của game/mod mà không phát cảnh báo unsupported fallback. Cấu hình mặc định cho người dùng mới được cập nhật thành `default`.

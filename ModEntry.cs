@@ -24,6 +24,7 @@ public sealed class ModEntry : Mod
     private RawContentProvider? _contentProvider;
     private ItemNameResolver? _nameResolver;
     private UntranslatedStardewApi? _api;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (RawContentProvider Provider, ItemNameResolver Resolver)> _languageResolvers = new(StringComparer.OrdinalIgnoreCase);
 
     public override void Entry(IModHelper helper)
     {
@@ -40,7 +41,7 @@ public sealed class ModEntry : Mod
         }
 
         // Initialize stable API referencing resolver dynamically
-        _api = new UntranslatedStardewApi(() => _nameResolver, () => Config);
+        _api = new UntranslatedStardewApi(() => _nameResolver, () => Config, GetResolverForLanguage);
 
         // Build initial resolver with lazy service provider
         InitializeResolver();
@@ -61,6 +62,7 @@ public sealed class ModEntry : Mod
         helper.Events.GameLoop.GameLaunched += OnGameLaunched;
         helper.Events.Content.LocaleChanged += OnLocaleChanged;
         helper.Events.Content.AssetsInvalidated += OnAssetsInvalidated;
+        helper.Events.Content.AssetRequested += OnAssetRequested;
 
         // Register diagnostic console command
         helper.ConsoleCommands.Add(
@@ -97,6 +99,7 @@ public sealed class ModEntry : Mod
     {
         // Re-initialize to ensure ServiceProvider is bound once game content pipeline is live
         InitializeResolver();
+        ReloadCpTranslations();
 
         RegisterGenericModConfigMenu();
 
@@ -112,8 +115,24 @@ public sealed class ModEntry : Mod
         _nameResolver?.Invalidate();
     }
 
+    private void OnAssetRequested(object? sender, AssetRequestedEventArgs e)
+    {
+        if (e.NameWithoutLocale.IsEquivalentTo("Mods/GiaHung.UntranslatedStardew/Names"))
+        {
+            e.LoadFrom(() => new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), AssetLoadPriority.Exclusive);
+        }
+    }
+
     private void OnAssetsInvalidated(object? sender, AssetsInvalidatedEventArgs e)
     {
+        if (e.NamesWithoutLocale.Any(name => name.IsEquivalentTo("Mods/GiaHung.UntranslatedStardew/Names")))
+        {
+            ReloadCpTranslations();
+            _nameResolver?.Invalidate();
+            ClearLanguageResolvers();
+            return;
+        }
+
         if (e.NamesWithoutLocale.Any(name =>
             name.IsEquivalentTo("Strings/Objects") ||
             name.IsEquivalentTo("Strings/Weapons") ||
@@ -122,6 +141,7 @@ public sealed class ModEntry : Mod
             name.IsEquivalentTo("Strings/1_6_Strings") ||
             name.IsEquivalentTo("Strings/UI") ||
             name.IsEquivalentTo("Strings/StringsFromCSFiles") ||
+            name.IsEquivalentTo("Strings/Locations") ||
             name.IsEquivalentTo("Strings/Furniture") ||
             name.IsEquivalentTo("Strings/Pants") ||
             name.IsEquivalentTo("Strings/Shirts") ||
@@ -133,6 +153,8 @@ public sealed class ModEntry : Mod
             name.IsEquivalentTo("Data/hats") ||
             name.IsEquivalentTo("Data/Furniture") ||
             name.IsEquivalentTo("Data/Trinkets") ||
+            name.IsEquivalentTo("Data/mail") ||
+            name.IsEquivalentTo("Data/SecretNotes") ||
             name.IsEquivalentTo("Data/Powers") ||
             name.IsEquivalentTo("Data/Achievements") ||
             name.IsEquivalentTo("Data/Pants") ||
@@ -140,6 +162,26 @@ public sealed class ModEntry : Mod
             name.IsEquivalentTo("Data/Mannequins")))
         {
             _nameResolver?.Invalidate();
+            ClearLanguageResolvers();
+        }
+    }
+
+    private void ReloadCpTranslations()
+    {
+        if (Game1.content != null && _nameResolver != null)
+        {
+            try
+            {
+                var cpDict = Game1.content.Load<System.Collections.Generic.Dictionary<string, string>>("Mods/GiaHung.UntranslatedStardew/Names");
+                if (cpDict != null)
+                {
+                    _nameResolver.ExternalRegistry.LoadFromContentPackDictionary(cpDict);
+                }
+            }
+            catch (Exception)
+            {
+                // Asset might not be ready yet
+            }
         }
     }
 
@@ -285,6 +327,8 @@ public sealed class ModEntry : Mod
 
     private void InitializeResolver()
     {
+        ClearLanguageResolvers();
+        _nameResolver?.Dispose();
         _contentProvider?.Dispose();
 
         string gameContentRoot = Path.Combine(Constants.GamePath, "Content");
@@ -298,7 +342,48 @@ public sealed class ModEntry : Mod
             (requested, fallback) => Monitor.Log(I18n.Log_SecondaryFallback(requested, fallback), LogLevel.Warn)
         );
 
-        _nameResolver = new ItemNameResolver(_contentProvider);
+        ExternalTranslationRegistry externalRegistry = _nameResolver?.ExternalRegistry ?? new ExternalTranslationRegistry();
+        _nameResolver = new ItemNameResolver(_contentProvider, externalRegistry: externalRegistry);
+        ReloadCpTranslations();
+    }
+
+    private ItemNameResolver? GetResolverForLanguage(string language)
+    {
+        if (string.IsNullOrWhiteSpace(language))
+            return _nameResolver;
+
+        string canonical = LanguageHelper.CanonicalizeLanguageCode(language);
+        if (_nameResolver != null && LanguageHelper.CanonicalizeLanguageCode(_nameResolver.EffectiveLanguage).Equals(canonical, StringComparison.OrdinalIgnoreCase))
+            return _nameResolver;
+
+        var pair = _languageResolvers.GetOrAdd(canonical, code =>
+        {
+            string gameContentRoot = Path.Combine(Constants.GamePath, "Content");
+            string? modContentRoot = DiscoverVietnamesePackContentPath();
+
+            var provider = new RawContentProvider(
+                () => Game1.content?.ServiceProvider,
+                gameContentRoot,
+                code,
+                modContentRoot
+            );
+
+            ExternalTranslationRegistry externalRegistry = _nameResolver?.ExternalRegistry ?? new ExternalTranslationRegistry();
+            var resolver = new ItemNameResolver(provider, externalRegistry: externalRegistry);
+            return (provider, resolver);
+        });
+
+        return pair.Resolver;
+    }
+
+    private void ClearLanguageResolvers()
+    {
+        foreach (var pair in _languageResolvers.Values)
+        {
+            pair.Resolver.Dispose();
+            pair.Provider.Dispose();
+        }
+        _languageResolvers.Clear();
     }
 
     private string? DiscoverVietnamesePackContentPath()
@@ -332,7 +417,8 @@ public sealed class ModEntry : Mod
             (typeof(StardewValley.Menus.SkillsPage), nameof(StardewValley.Menus.SkillsPage.performHoverAction), null),
             (typeof(StardewValley.Menus.LevelUpMenu), nameof(StardewValley.Menus.LevelUpMenu.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) }),
             (typeof(StardewValley.Menus.PowersTab), nameof(StardewValley.Menus.PowersTab.performHoverAction), null),
-            (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.createDescription), new[] { typeof(string) })
+            (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.createDescription), new[] { typeof(string) }),
+            (typeof(StardewValley.Menus.CollectionsPage), nameof(StardewValley.Menus.CollectionsPage.performHoverAction), new[] { typeof(int), typeof(int) })
         };
 
         foreach (var (type, method, paramTypes) in targets)
@@ -355,7 +441,8 @@ public sealed class ModEntry : Mod
             (typeof(StardewValley.Menus.SkillsPage), "hoverTitle", typeof(string)),
             (typeof(StardewValley.Menus.PowersTab), "hoverText", typeof(string)),
             (typeof(StardewValley.Menus.PowersTab), "descriptionText", typeof(string)),
-            (typeof(StardewValley.Menus.PowersTab), "powers", typeof(System.Collections.Generic.List<System.Collections.Generic.List<StardewValley.Menus.ClickableTextureComponent>>))
+            (typeof(StardewValley.Menus.PowersTab), "powers", typeof(System.Collections.Generic.List<System.Collections.Generic.List<StardewValley.Menus.ClickableTextureComponent>>)),
+            (typeof(StardewValley.Menus.CollectionsPage), "hoverText", typeof(string))
         };
 
         foreach (var (type, fieldName, expectedType) in fieldTargets)
@@ -375,8 +462,11 @@ public sealed class ModEntry : Mod
             Helper.Events.GameLoop.GameLaunched -= OnGameLaunched;
             Helper.Events.Content.LocaleChanged -= OnLocaleChanged;
             Helper.Events.Content.AssetsInvalidated -= OnAssetsInvalidated;
+            Helper.Events.Content.AssetRequested -= OnAssetRequested;
 
-            _contentProvider?.Dispose();
+            ClearLanguageResolvers();
+            _nameResolver?.Dispose();
+        _contentProvider?.Dispose();
             _contentProvider = null;
             _nameResolver = null;
 
