@@ -140,6 +140,15 @@ public static partial class Program
             && primaryProperty.GetValue(pairs.GetValue(0)) is "First",
             "Portraitless dialogue adds the vanilla speaker prefix once without changing the aligned data");
 
+        var runChecks = mod.GetType("UntranslatedStardew.Core.DialogueChecks", true)!
+            .GetMethod("Run", BindingFlags.Static | BindingFlags.NonPublic)!;
+        (string Name, bool Passed)[]? Run(string group)
+            => ((string, bool)[]?)runChecks.Invoke(null, new object[] { group });
+        var groups = new[] { "branch", "pairs", "fallback", "layout" }.Select(group => Run(group)!).ToArray();
+        Assert(groups.All(group => group.Length > 0 && group.All(check => check.Passed))
+            && Run("all")!.SequenceEqual(groups.SelectMany(group => group)) && Run("invalid") == null,
+            "Console dialogue checks run individually and aggregate the same passing results");
+
         var original = AccessTools.Method(typeof(DialogueBox), nameof(DialogueBox.draw), new[] { typeof(SpriteBatch) });
         var patch = mod.GetType("UntranslatedStardew.Patches.DialogueBoxPatch", true)!;
         var harmony = new Harmony("UntranslatedStardew.Tests.DialoguePrototype");

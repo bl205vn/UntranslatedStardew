@@ -102,8 +102,32 @@ public sealed class ModEntry : Mod
             OnDialoguePreviewCommand
         );
 
+        helper.ConsoleCommands.Add(
+            "untranslated_dialogue_check",
+            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|pairs|fallback|layout|all]",
+            OnDialogueCheckCommand
+        );
+
         string effectiveLang = _contentProvider?.EffectiveLanguage ?? Config.SecondaryLanguage;
         Monitor.Log(I18n.Log_ModLoaded(effectiveLang), LogLevel.Info);
+    }
+
+    private void OnDialogueCheckCommand(string command, string[] args)
+    {
+        string group = args.FirstOrDefault()?.ToLowerInvariant() ?? "all";
+        var checks = args.Length <= 1 ? DialogueChecks.Run(group) : null;
+        if (checks == null)
+        {
+            Monitor.Log("Usage: untranslated_dialogue_check [branch|pairs|fallback|layout|all]", LogLevel.Info);
+            return;
+        }
+
+        foreach (var check in checks)
+            Monitor.Log($"[{(check.Passed ? "PASS" : "FAIL")}] {check.Name}", check.Passed ? LogLevel.Info : LogLevel.Error);
+
+        int passed = checks.Count(check => check.Passed);
+        Monitor.Log($"Dialogue checks ({group}): {passed}/{checks.Length} passed.",
+            passed == checks.Length ? LogLevel.Info : LogLevel.Error);
     }
 
     private void OnDialoguePreviewCommand(string command, string[] args)
