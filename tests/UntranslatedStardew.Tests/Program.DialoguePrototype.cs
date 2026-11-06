@@ -15,8 +15,8 @@ public static partial class Program
         MethodInfo pair = mod.GetType("UntranslatedStardew.Core.DialogueTranslation", true)!
             .GetMethod("GetSecondaryLine", BindingFlags.Static | BindingFlags.NonPublic)!;
 
-        string? Pair(string primary, string secondary, int index, string visible, Gender gender = Gender.Male)
-            => (string?)pair.Invoke(null, new object[] { primary, secondary, index, visible, "Alex", gender });
+        string? Pair(string primary, string secondary, int index, string visible, Gender gender = Gender.Male, uint daysPlayed = 0)
+            => (string?)pair.Invoke(null, new object[] { primary, secondary, index, visible, "Alex", gender, daysPlayed });
 
         Assert(Pair("Hello, @$h#$b#Goodbye.", "Chào @.$1#$b#Tạm biệt.", 0, "Hello, Alex") == "Chào Alex.",
             "Dialogue pairs a player-name token and portrait suffix without executing commands");
@@ -48,6 +48,17 @@ public static partial class Program
         Assert(Pair("Hello.#$b#Goodbye.", "${^}$#$b#Tạm biệt.", 0, "Hello.") == null
             && Pair("Hello.#$b#Goodbye.", "${^}$#$b#Tạm biệt.", 1, "Goodbye.") == "Tạm biệt.",
             "A blank translation is suppressed without shifting or suppressing the next authored page");
+
+        const string weeklyMain = "First week.||Second week.#$b#Another line.";
+        const string weeklySecondary = "Tuần đầu.||Tuần hai.#$b#Dòng tiếp.";
+        Assert(Pair(weeklyMain, weeklySecondary, 0, "First week.", daysPlayed: 6) == "Tuần đầu."
+            && Pair(weeklyMain, weeklySecondary, 0, "Second week.", daysPlayed: 7) == "Tuần hai."
+            && Pair(weeklyMain, weeklySecondary, 1, "Another line.", daysPlayed: 13) == "Dòng tiếp."
+            && Pair(weeklyMain, weeklySecondary, 0, "First week.", daysPlayed: 14) == "Tuần đầu.",
+            "Weekly dialogue matches vanilla week boundaries and selects authored pages within the active variant");
+        Assert(Pair(weeklyMain, "Tuần đầu.", 0, "First week.") == null
+            && Pair(weeklyMain, weeklySecondary, 0, "First week.", daysPlayed: 7) == null,
+            "Weekly dialogue rejects unequal variant counts and mismatched live text");
 
         MethodInfo match = pair.DeclaringType!.GetMethod("MatchBlocks", BindingFlags.Static | BindingFlags.NonPublic)!;
         string[][] variants = { new[] { "Oh my!", "What a lovely day." }, new[] { "Ôi chao!", "Một ngày đẹp trời." } };
@@ -112,7 +123,8 @@ public static partial class Program
         var safePreview = pair.DeclaringType!.GetMethod("IsSafePreview", BindingFlags.Static | BindingFlags.NonPublic)!;
         Assert(safePreview.Invoke(null, new object[] { "Hello.$h#$b#Goodbye." }) is true
             && safePreview.Invoke(null, new object[] { "Hello.#$b#$action AddMoney 1" }) is false
-            && safePreview.Invoke(null, new object[] { "Hello.#$b#Here is [74]." }) is false,
+            && safePreview.Invoke(null, new object[] { "Hello.#$b#Here is [74]." }) is false
+            && safePreview.Invoke(null, new object[] { "Hello.||$action AddMoney 1" }) is false,
             "Console preview validates all authored pages before constructing dialogue");
 
         var visiblePosition = layoutType.GetMethod("GetVisiblePosition", BindingFlags.Static | BindingFlags.NonPublic)!;

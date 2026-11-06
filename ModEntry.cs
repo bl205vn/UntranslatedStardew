@@ -98,7 +98,7 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_test",
-            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|key <NPC> <key>]",
+            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|key <NPC> <key>]",
             OnDialoguePreviewCommand
         );
 
@@ -111,10 +111,10 @@ public sealed class ModEntry : Mod
         int offset = args.FirstOrDefault() is "above" or "below" ? 1 : 0;
         string? sample = args.ElementAtOrDefault(offset);
         bool fromKey = sample == "key" && args.Length == offset + 3;
-        bool builtInSample = args.Length - offset <= 1 && sample is null or "wrap" or "pairs" or "authored" or "gender";
+        bool builtInSample = args.Length - offset <= 1 && sample is null or "wrap" or "pairs" or "authored" or "gender" or "weekly";
         if (!fromKey && !builtInSample)
         {
-            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|key <NPC> <key>]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|key <NPC> <key>]", LogLevel.Info);
             return;
         }
 
@@ -158,6 +158,14 @@ public sealed class ModEntry : Mod
             return;
         }
 
+        string plainSample = "";
+        if (sample is "wrap" or "pairs" or "gender" or "weekly"
+            && !DialogueTranslation.TryGetPlainText(primary, out plainSample))
+        {
+            Monitor.Log("This preview needs the plain Evelyn Monday line as its sample.", LogLevel.Warn);
+            return;
+        }
+
         // Closing the preview must not consume the real NPC's queued dialogue.
         var speaker = new NPC { Name = npc.Name, displayName = npc.displayName, Portrait = portrait, EventActor = true };
         var box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", primary));
@@ -175,32 +183,43 @@ public sealed class ModEntry : Mod
             : new[] { new[] { new DialogueTextPair(visibleText, secondary) } };
         if (sample is "wrap" or "pairs")
         {
-            DialogueTranslation.TryResolveSegment(primary, Game1.player.Gender, out string plainPrimary);
-            string longPrimary = string.Join(" ", Enumerable.Repeat(plainPrimary, 3));
+            string longPrimary = string.Join(" ", Enumerable.Repeat(plainSample, 3));
             string longVisible = string.Join(" ", Enumerable.Repeat(visibleText, 3));
             string longSecondary = string.Join(" ", Enumerable.Repeat(secondary, 3));
             var shortPair = new DialogueTextPair(visibleText, secondary);
             var longPair = new DialogueTextPair(longVisible, longSecondary);
             bool samePage = sample == "pairs";
-            string authored = samePage ? $"{plainPrimary} {longPrimary}" : $"{longPrimary}#$b#{primary}";
+            string authored = samePage ? $"{plainSample} {longPrimary}" : $"{longPrimary}#$b#{primary}";
             box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", authored));
             pages = samePage
                 ? new[] { new[] { shortPair, longPair } }
                 : new[] { new[] { longPair }, new[] { shortPair } };
         }
 
-        if (sample == "gender" && DialogueTranslation.TryGetPlainText(primary, out string plain))
+        if (sample is "gender" or "weekly")
         {
-            string[] sourcePages =
+            string authored;
+            string translated;
+            uint daysPlayed = Game1.stats.DaysPlayed;
+            if (sample == "weekly")
             {
-                "${" + plain + "^" + plain + " " + plain + "}$",
-                plain + " " + plain + "^" + plain,
-                "${^}$" + plain + "${^ " + plain + "}$"
-            };
-            string authored = string.Join("#$b#", sourcePages);
-            string translated = "${" + secondary + "^" + secondary + " " + secondary + "}$#$b#"
-                + secondary + " " + secondary + "^" + secondary + "#$b#"
-                + "${^}$" + secondary + "${^ " + secondary + "}$";
+                authored = $"{plainSample}||{plainSample} {plainSample}";
+                translated = $"{secondary}||{secondary} {secondary}";
+                int selected = DialogueTranslation.GetWeeklyVariantIndex(daysPlayed, 2) + 1;
+                Monitor.Log($"Weekly preview: DaysPlayed={daysPlayed}, variant {selected}/2 (short, then long).", LogLevel.Info);
+            }
+            else
+            {
+                authored = "${" + plainSample + "^" + plainSample + " " + plainSample + "}$#$b#"
+                    + plainSample + " " + plainSample + "^" + plainSample + "#$b#"
+                    + "${^}$" + plainSample + "${^ " + plainSample + "}$";
+                translated = "${" + secondary + "^" + secondary + " " + secondary + "}$#$b#"
+                    + secondary + " " + secondary + "^" + secondary + "#$b#"
+                    + "${^}$" + secondary + "${^ " + secondary + "}$";
+            }
+
+            string[] weeks = authored.Split("||");
+            string[] sourcePages = weeks[DialogueTranslation.GetWeeklyVariantIndex(daysPlayed, weeks.Length)].Split("#$b#");
             Gender gender = Game1.player.Gender;
             string playerName = Utility.FilterUserName(Game1.player.Name);
             pages = new DialogueTextPair[sourcePages.Length][];
@@ -208,10 +227,10 @@ public sealed class ModEntry : Mod
             {
                 DialogueTranslation.TryResolveSegment(sourcePages[i], gender, out string resolved);
                 string shown = resolved.Replace("@", playerName);
-                string? paired = DialogueTranslation.GetSecondaryLine(authored, translated, i, shown, playerName, gender);
+                string? paired = DialogueTranslation.GetSecondaryLine(authored, translated, i, shown, playerName, gender, daysPlayed);
                 if (paired == null)
                 {
-                    Monitor.Log("This language pair cannot use the gender preview sample.", LogLevel.Warn);
+                    Monitor.Log($"This language pair cannot use the {sample} preview sample.", LogLevel.Warn);
                     return;
                 }
 
@@ -289,7 +308,7 @@ public sealed class ModEntry : Mod
                 return null;
 
             return DialogueTranslation.GetSecondaryLine(primary, secondary!, dialogue.currentDialogueIndex,
-                visibleText, Utility.FilterUserName(Game1.player.Name), Game1.player.Gender);
+                visibleText, Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed);
         }
         catch (Microsoft.Xna.Framework.Content.ContentLoadException)
         {

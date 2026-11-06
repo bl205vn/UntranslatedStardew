@@ -7,10 +7,16 @@ namespace UntranslatedStardew.Core;
 internal static class DialogueTranslation
 {
     internal static string? GetSecondaryLine(
-        string primary, string secondary, int index, string visibleText, string playerName, Gender gender)
+        string primary, string secondary, int index, string visibleText, string playerName, Gender gender, uint daysPlayed)
     {
-        string[] primaryLines = primary.Split("#$b#");
-        string[] secondaryLines = secondary.Split("#$b#");
+        string[] primaryWeeks = primary.Split("||");
+        string[] secondaryWeeks = secondary.Split("||");
+        if (primaryWeeks.Length != secondaryWeeks.Length)
+            return null;
+
+        int week = GetWeeklyVariantIndex(daysPlayed, primaryWeeks.Length);
+        string[] primaryLines = primaryWeeks[week].Split("#$b#");
+        string[] secondaryLines = secondaryWeeks[week].Split("#$b#");
         if (primaryLines.Length != secondaryLines.Length || index < 0 || index >= primaryLines.Length)
             return null;
 
@@ -90,8 +96,11 @@ internal static class DialogueTranslation
         return validBlocks && legacy.Length <= 2 && legacy.All(part => TryGetPlainText(part, out _));
     }
 
+    internal static int GetWeeklyVariantIndex(uint daysPlayed, int variantCount)
+        => (int)(daysPlayed / 7 % (uint)variantCount);
+
     internal static bool IsSafePreview(string text)
-        => text.Split("#$b#").All(IsSafeSegment);
+        => text.Split("||").All(variant => variant.Split("#$b#").All(IsSafeSegment));
 
     internal static bool TryResolveSegment(string segment, Gender gender, out string text)
     {
