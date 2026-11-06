@@ -23,7 +23,7 @@ public sealed class ModEntry : Mod
     public BilingualFontManager? FontManager => _fontManager;
     public LanguageSourceRegistry SourceRegistry { get; } = new();
 
-    private (WeakReference<DialogueBox> Box, bool SecondaryFirst, (string Primary, string Secondary)[]? Lines)? _dialoguePreview;
+    private (WeakReference<DialogueBox> Box, bool SecondaryFirst, DialogueTextPair[][]? Pages)? _dialoguePreview;
     private Harmony? _harmony;
     private RawContentProvider? _contentProvider;
     private ItemNameResolver? _nameResolver;
@@ -96,7 +96,7 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_test",
-            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap]",
+            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs]",
             OnDialoguePreviewCommand
         );
 
@@ -106,11 +106,11 @@ public sealed class ModEntry : Mod
 
     private void OnDialoguePreviewCommand(string command, string[] args)
     {
-        bool wrap = args.LastOrDefault() == "wrap";
-        int placementCount = args.Length - (wrap ? 1 : 0);
+        string? sample = args.LastOrDefault();
+        int placementCount = args.Length - (sample is "wrap" or "pairs" ? 1 : 0);
         if (placementCount > 1 || (placementCount == 1 && args[0] is not ("above" or "below")))
         {
-            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs]", LogLevel.Info);
             return;
         }
 
@@ -156,28 +156,34 @@ public sealed class ModEntry : Mod
             return;
         }
 
-        (string Primary, string Secondary)[]? previewLines = null;
-        if (wrap)
+        DialogueTextPair[][]? pages = null;
+        if (sample is "wrap" or "pairs")
         {
             string longPrimary = string.Join(" ", Enumerable.Repeat(plainPrimary, 3));
             string longVisible = string.Join(" ", Enumerable.Repeat(visibleText, 3));
             string longSecondary = string.Join(" ", Enumerable.Repeat(secondary, 3));
-            box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", $"{longPrimary}#$b#{primary}"));
-            previewLines = new[] { (longVisible, longSecondary), (visibleText, secondary) };
+            var shortPair = new DialogueTextPair(visibleText, secondary);
+            var longPair = new DialogueTextPair(longVisible, longSecondary);
+            bool samePage = sample == "pairs";
+            string authored = samePage ? $"{plainPrimary} {longPrimary}" : $"{longPrimary}#$b#{primary}";
+            box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", authored));
+            pages = samePage
+                ? new[] { new[] { shortPair, longPair } }
+                : new[] { new[] { longPair }, new[] { shortPair } };
         }
 
         bool secondaryFirst = placementCount == 0 ? Config.SecondaryFirst : args[0] == "above";
-        _dialoguePreview = (new WeakReference<DialogueBox>(box), secondaryFirst, previewLines);
+        _dialoguePreview = (new WeakReference<DialogueBox>(box), secondaryFirst, pages);
         Game1.activeClickableMenu = box;
         Game1.dialogueUp = true;
         Game1.player.Halt();
         Game1.player.CanMove = false;
     }
 
-    internal (bool SecondaryFirst, (string Primary, string Secondary)[]? Lines)? GetDialoguePreview(DialogueBox box)
+    internal (bool SecondaryFirst, DialogueTextPair[][]? Pages)? GetDialoguePreview(DialogueBox box)
         => _dialoguePreview is { } preview && preview.Box.TryGetTarget(out DialogueBox? target)
             && ReferenceEquals(target, box)
-            ? (preview.SecondaryFirst, preview.Lines)
+            ? (preview.SecondaryFirst, preview.Pages)
             : null;
 
     internal string? GetSecondaryDialogueText(Dialogue? dialogue, string visibleText)

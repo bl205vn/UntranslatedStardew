@@ -36,57 +36,60 @@ internal static class DialogueBoxPatch
         float alpha, float depth, bool junimo, int background, string placeholder, Color? color,
         SpriteText.ScrollTextAlignment alignment, DialogueBox box)
     {
-        int primaryY = y;
-        int secondaryY = y;
-        string? secondary = null;
-        SpriteFont? font = null;
         ModEntry? mod = ModEntry.Instance;
-
         var preview = mod?.GetDialoguePreview(box);
         if (mod != null && (preview.HasValue || mod.Config.ShowSecondaryInDialogue)
             && !Game1.eventUp && !box.isQuestion && box.isPortraitBox()
             && !mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
             && box.characterDialoguesBrokenUp.Count == 1
             && box.characterDialogue is { } dialogue
-            && ResolveSecondary(mod, dialogue, text, preview?.Lines) is { } candidate
-            && mod.FontManager?.GetSecondaryFont(Game1.dialogueFont) is { } secondaryFont)
+            && ResolvePairs(mod, dialogue, text, preview?.Pages) is { } pairs
+            && mod.FontManager?.GetSecondaryFont(Game1.dialogueFont) is { } font
+            && pairs.All(pair => pair.Secondary.All(font.Characters.Contains)))
         {
-            candidate = candidate.Normalize();
-            if (candidate.All(secondaryFont.Characters.Contains))
+            var layout = DialoguePairLayout.FitPage(pairs, width, box.height - 16,
+                preview?.SecondaryFirst ?? mod.Config.SecondaryFirst,
+                primary => SpriteText.getHeightOfString(primary, width - 4),
+                line => font.MeasureString(line).X * DialoguePairLayout.SecondaryScale,
+                lines => Math.Max(font.MeasureString(lines).Y,
+                    (1 + lines.Count(c => c == '\n')) * font.LineSpacing) * DialoguePairLayout.SecondaryScale);
+            if (layout != null)
             {
-                int primaryHeight = SpriteText.getHeightOfString(text, width - 4);
-                var layout = DialoguePairLayout.Fit(candidate, width, box.height - 16, primaryHeight,
-                    preview?.SecondaryFirst ?? mod.Config.SecondaryFirst,
-                    line => secondaryFont.MeasureString(line).X * DialoguePairLayout.SecondaryScale,
-                    lines => Math.Max(secondaryFont.MeasureString(lines).Y,
-                        (1 + lines.Count(c => c == '\n')) * secondaryFont.LineSpacing) * DialoguePairLayout.SecondaryScale);
-                if (layout is { } fitted)
+                foreach (var pair in layout)
                 {
-                    secondary = fitted.Secondary;
-                    font = secondaryFont;
-                    primaryY += fitted.PrimaryOffset;
-                    secondaryY += fitted.SecondaryOffset;
+                    int revealed = pair.RevealedCharacters(position);
+                    if (revealed == 0)
+                        break;
+
+                    SpriteText.drawString(batch, pair.Primary, x, y + pair.PrimaryOffset, revealed, width, height,
+                        alpha, depth, junimo, background, placeholder, color, alignment);
+
+                    if (revealed == pair.Primary.Length)
+                    {
+                        batch.DrawString(font, pair.Secondary, new Vector2(x, y + pair.SecondaryOffset),
+                            Game1.textColor, 0f, Vector2.Zero, DialoguePairLayout.SecondaryScale, SpriteEffects.None, depth);
+                    }
                 }
+                return;
             }
         }
 
-        SpriteText.drawString(batch, text, x, primaryY, position, width, height, alpha, depth,
-            junimo, background, placeholder, color, alignment);
-
-        if (secondary != null && font != null && position >= text.Length)
-        {
-            batch.DrawString(font, secondary, new Vector2(x, secondaryY), Game1.textColor,
-                0f, Vector2.Zero, DialoguePairLayout.SecondaryScale, SpriteEffects.None, depth);
-        }
+        SpriteText.drawString(batch, text, x, y, position, width, height,
+            alpha, depth, junimo, background, placeholder, color, alignment);
     }
 
-    private static string? ResolveSecondary(
-        ModEntry mod, Dialogue dialogue, string text, (string Primary, string Secondary)[]? previewLines)
+    private static DialogueTextPair[]? ResolvePairs(
+        ModEntry mod, Dialogue dialogue, string text, DialogueTextPair[][]? previewPages)
     {
-        if (previewLines == null)
-            return mod.GetSecondaryDialogueText(dialogue, text);
+        if (previewPages != null)
+        {
+            var pairs = previewPages.ElementAtOrDefault(dialogue.currentDialogueIndex);
+            return pairs != null && string.Join(" ", pairs.Select(pair => pair.Primary)) == text
+                ? pairs.Select(pair => pair with { Secondary = pair.Secondary.Normalize() }).ToArray()
+                : null;
+        }
 
-        var line = previewLines.ElementAtOrDefault(dialogue.currentDialogueIndex);
-        return string.Equals(line.Primary, text, StringComparison.Ordinal) ? line.Secondary : null;
+        string? secondary = mod.GetSecondaryDialogueText(dialogue, text);
+        return secondary == null ? null : new[] { new DialogueTextPair(text, secondary.Normalize()) };
     }
 }

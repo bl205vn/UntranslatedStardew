@@ -1,12 +1,43 @@
 namespace UntranslatedStardew.Core;
 
-/// <summary>Fits both translations of one dialogue segment in its available space.</summary>
+internal readonly record struct DialogueTextPair(string Primary, string Secondary);
+
+/// <summary>Positions each matching pair within a dialogue page.</summary>
 internal static class DialoguePairLayout
 {
     internal const float SecondaryScale = 0.75f;
     private const int LineGap = 4;
 
-    internal static (string Secondary, int PrimaryOffset, int SecondaryOffset)? Fit(
+    internal readonly record struct PositionedPair(
+        string Primary, string Secondary, int Start, int PrimaryOffset, int SecondaryOffset)
+    {
+        internal int RevealedCharacters(int position) => Math.Clamp(position - Start, 0, Primary.Length);
+    }
+
+    internal static PositionedPair[]? FitPage(
+        IReadOnlyList<DialogueTextPair> pairs, int width, int height, bool secondaryFirst,
+        Func<string, int> measurePrimaryHeight, Func<string, float> measureWidth, Func<string, float> measureHeight)
+    {
+        var result = new PositionedPair[pairs.Count];
+        int top = 0;
+        int start = 0;
+        for (int i = 0; i < pairs.Count; i++)
+        {
+            DialogueTextPair pair = pairs[i];
+            var fit = Fit(pair.Secondary, width, height - top, measurePrimaryHeight(pair.Primary),
+                secondaryFirst, measureWidth, measureHeight);
+            if (fit is not { } fitted)
+                return null;
+
+            result[i] = new PositionedPair(pair.Primary, fitted.Secondary, start,
+                top + fitted.PrimaryOffset, top + fitted.SecondaryOffset);
+            top += fitted.Height + LineGap;
+            start += pair.Primary.Length + 1; // The source page joins primary blocks with one space.
+        }
+        return result;
+    }
+
+    private static (string Secondary, int PrimaryOffset, int SecondaryOffset, int Height)? Fit(
         string secondary, int width, int height, int primaryHeight, bool secondaryFirst,
         Func<string, float> measureWidth, Func<string, float> measureHeight)
     {
@@ -20,11 +51,12 @@ internal static class DialoguePairLayout
             return null;
 
         int secondaryHeight = (int)Math.Ceiling(measureHeight(wrapped));
-        if (primaryHeight + LineGap + secondaryHeight > height)
+        int pairHeight = primaryHeight + LineGap + secondaryHeight;
+        if (pairHeight > height)
             return null;
 
         return secondaryFirst
-            ? (wrapped, secondaryHeight + LineGap, 0)
-            : (wrapped, 0, primaryHeight + LineGap);
+            ? (wrapped, secondaryHeight + LineGap, 0, pairHeight)
+            : (wrapped, 0, primaryHeight + LineGap, pairHeight);
     }
 }
