@@ -191,10 +191,16 @@ public sealed class ModEntry : Mod
 
         if (sample == "gender" && DialogueTranslation.TryGetPlainText(primary, out string plain))
         {
-            string[] sourcePages = { "${" + plain + "^" + plain + " " + plain + "}$", plain + " " + plain + "^" + plain };
+            string[] sourcePages =
+            {
+                "${" + plain + "^" + plain + " " + plain + "}$",
+                plain + " " + plain + "^" + plain,
+                "${^}$" + plain + "${^ " + plain + "}$"
+            };
             string authored = string.Join("#$b#", sourcePages);
             string translated = "${" + secondary + "^" + secondary + " " + secondary + "}$#$b#"
-                + secondary + " " + secondary + "^" + secondary;
+                + secondary + " " + secondary + "^" + secondary + "#$b#"
+                + "${^}$" + secondary + "${^ " + secondary + "}$";
             Gender gender = Game1.player.Gender;
             string playerName = Utility.FilterUserName(Game1.player.Name);
             pages = new DialogueTextPair[sourcePages.Length][];

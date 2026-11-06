@@ -23,7 +23,8 @@ internal static class DialogueTranslation
 
         string primaryText = primaryLines[index].Replace("@", playerName);
         string secondaryText = secondaryLines[index].Replace("@", playerName);
-        if (!string.Equals(primaryText, visibleText, StringComparison.Ordinal)
+        if (string.IsNullOrWhiteSpace(primaryText) || string.IsNullOrWhiteSpace(secondaryText)
+            || !string.Equals(primaryText, visibleText, StringComparison.Ordinal)
             || string.Equals(primaryText, secondaryText, StringComparison.Ordinal)
             || secondaryText.Any(char.IsControl))
             return null;
@@ -100,7 +101,9 @@ internal static class DialogueTranslation
 
         // Vanilla resolves blocks and ¦ first, then the legacy ^ split.
         string selected = Dialogue.applyGenderSwitch(gender, segment, altTokenOnly: true);
-        return TryGetPlainText(Dialogue.applyGenderSwitch(gender, selected), out text);
+        selected = Dialogue.applyGenderSwitch(gender, selected);
+        // Empty alternatives still occupy the authored slot. They have nothing to render.
+        return string.IsNullOrWhiteSpace(selected) || TryGetPlainText(selected, out text);
     }
 
     internal static bool TryGetPlainText(string value, out string text)

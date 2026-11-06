@@ -41,6 +41,14 @@ public static partial class Program
             && Pair("Hello.", "Chào ${anh^chị.", 0, "Hello.") == null,
             "Unsafe or malformed gender blocks fall back even when the unsafe branch is inactive");
 
+        Assert(Pair("${^}$Hello.", "${^}$Xin chào.", 0, "Hello.") == "Xin chào."
+            && Pair("Hello${^ again}$.", "Chào${^ lần nữa}$.", 0, "Hello again.", Gender.Female) == "Chào lần nữa."
+            && Pair("Hello${^ again}$.", "Chào${^ lần nữa}$.", 0, "Hello.") == "Chào.",
+            "Empty gender alternatives disappear and optional text stays aligned");
+        Assert(Pair("Hello.#$b#Goodbye.", "${^}$#$b#Tạm biệt.", 0, "Hello.") == null
+            && Pair("Hello.#$b#Goodbye.", "${^}$#$b#Tạm biệt.", 1, "Goodbye.") == "Tạm biệt.",
+            "A blank translation is suppressed without shifting or suppressing the next authored page");
+
         MethodInfo match = pair.DeclaringType!.GetMethod("MatchBlocks", BindingFlags.Static | BindingFlags.NonPublic)!;
         string[][] variants = { new[] { "Oh my!", "What a lovely day." }, new[] { "Ôi chao!", "Một ngày đẹp trời." } };
         Array? Match(string primary, string secondary, string[][] data)
