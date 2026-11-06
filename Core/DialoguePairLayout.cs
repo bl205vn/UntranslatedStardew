@@ -18,6 +18,14 @@ internal static class DialoguePairLayout
     internal static int GetVisiblePosition(int position, int length)
         => position >= length - 1 ? length : position;
 
+    internal static DialogueTextPair[] PreparePairs(DialogueTextPair[] pairs, string speakerPrefix)
+    {
+        var prepared = pairs.Select(pair => pair with { Secondary = pair.Secondary.Normalize() }).ToArray();
+        if (prepared.Length > 0)
+            prepared[0] = prepared[0] with { Primary = speakerPrefix + prepared[0].Primary };
+        return prepared;
+    }
+
     internal static PositionedPair[]? FitPage(
         IReadOnlyList<DialogueTextPair> pairs, int width, int height, bool secondaryFirst,
         Func<string, int> measurePrimaryHeight, Func<string, float> measureWidth, Func<string, float> measureHeight)

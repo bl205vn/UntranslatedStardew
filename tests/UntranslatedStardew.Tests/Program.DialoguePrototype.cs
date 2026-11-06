@@ -99,15 +99,23 @@ public static partial class Program
             && visiblePosition.Invoke(null, new object[] { 9, 10 }) is 10,
             "Final translation is revealed at vanilla's click-to-advance threshold");
 
+        var prepare = layoutType.GetMethod("PreparePairs", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var prefixed = (Array)prepare.Invoke(null, new object[] { pairs, "Evelyn: " })!;
+        var primaryProperty = pairType.GetProperty("Primary")!;
+        Assert(primaryProperty.GetValue(prefixed.GetValue(0)) is "Evelyn: First"
+            && primaryProperty.GetValue(prefixed.GetValue(1)) is "Second"
+            && primaryProperty.GetValue(pairs.GetValue(0)) is "First",
+            "Portraitless dialogue adds the vanilla speaker prefix once without changing the aligned data");
+
         var original = AccessTools.Method(typeof(DialogueBox), nameof(DialogueBox.draw), new[] { typeof(SpriteBatch) });
         var patch = mod.GetType("UntranslatedStardew.Patches.DialogueBoxPatch", true)!;
         var harmony = new Harmony("UntranslatedStardew.Tests.DialoguePrototype");
         try
         {
             harmony.CreateClassProcessor(patch).Patch();
-            var wrapper = AccessTools.Method(patch, "DrawPortraitText");
-            Assert(PatchProcessor.GetCurrentInstructions(original).Count(instruction => instruction.Calls(wrapper)) == 1,
-                "Harmony installs the portrait dialogue draw wrapper in Stardew 1.6.15");
+            var wrapper = AccessTools.Method(patch, "DrawDialogueText");
+            Assert(PatchProcessor.GetCurrentInstructions(original).Count(instruction => instruction.Calls(wrapper)) == 2,
+                "Harmony installs both NPC body draw wrappers in Stardew 1.6.15");
         }
         finally
         {

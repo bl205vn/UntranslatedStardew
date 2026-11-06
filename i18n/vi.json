@@ -4,7 +4,7 @@
   "config.show-secondary.name": "Hiện tên phụ",
   "config.show-secondary.description": "Bật/tắt hiển thị tên ngôn ngữ phụ trong bảng thông tin vật phẩm và giao diện mở rộng.",
   "config.show-secondary-dialogue.name": "Hiện thoại song ngữ (Thử nghiệm)",
-  "config.show-secondary-dialogue.description": "Hiện bản dịch nhỏ cho đoạn thoại NPC có chân dung. Hai bản có thể xuống dòng nếu cả cặp vẫn vừa khung.",
+  "config.show-secondary-dialogue.description": "Hiện bản dịch nhỏ cho đoạn thoại NPC. Hai bản có thể xuống dòng nếu cả cặp vẫn vừa khung.",
   "config.secondary-first.name": "Dòng phụ hiển thị trước",
   "config.secondary-first.description": "Đặt tên phụ và dòng thoại phụ phía trên chữ chính.",
   "config.diacritic-insensitive.name": "Tìm kiếm không dấu",

@@ -125,9 +125,9 @@ public sealed class ModEntry : Mod
             return;
         }
 
-        if (!Game1.options.showPortraits || Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued"))
+        if (Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued"))
         {
-            Monitor.Log("The preview needs vanilla dialogue with portraits enabled.", LogLevel.Warn);
+            Monitor.Log("The preview needs vanilla dialogue rendering.", LogLevel.Warn);
             return;
         }
 
@@ -161,7 +161,7 @@ public sealed class ModEntry : Mod
         // Closing the preview must not consume the real NPC's queued dialogue.
         var speaker = new NPC { Name = npc.Name, displayName = npc.displayName, Portrait = portrait, EventActor = true };
         var box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", primary));
-        string visibleText = box.getCurrentString();
+        string visibleText = box.getCurrentString()[GetDialogueSpeakerPrefix(box.characterDialogue).Length..];
         string? secondary = GetSecondaryDialogueText(box.characterDialogue, visibleText);
         var font = _fontManager?.GetSecondaryFont(Game1.dialogueFont);
         if (secondary == null || font == null || !secondary.All(font.Characters.Contains))
@@ -202,6 +202,9 @@ public sealed class ModEntry : Mod
             && ReferenceEquals(target, box)
             ? (preview.SecondaryFirst, preview.Pages)
             : null;
+
+    internal static string GetDialogueSpeakerPrefix(Dialogue dialogue)
+        => !Game1.options.showPortraits && dialogue.speaker is { } speaker ? speaker.getName() + ": " : "";
 
     internal DialogueTextPair[]? GetDialoguePairs(Dialogue dialogue, string visibleText)
     {

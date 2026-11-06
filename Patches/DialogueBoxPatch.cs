@@ -22,16 +22,18 @@ internal static class DialogueBoxPatch
         if (calls.Length != 4)
             return code;
 
-        CodeInstruction portraitText = calls[^1];
-        var loadBox = new CodeInstruction(OpCodes.Ldarg_0);
-        loadBox.labels.AddRange(portraitText.labels);
-        portraitText.labels.Clear();
-        code.Insert(code.IndexOf(portraitText), loadBox);
-        portraitText.operand = AccessTools.Method(typeof(DialogueBoxPatch), nameof(DrawPortraitText));
+        foreach (CodeInstruction bodyCall in calls.Skip(2))
+        {
+            var loadBox = new CodeInstruction(OpCodes.Ldarg_0);
+            loadBox.labels.AddRange(bodyCall.labels);
+            bodyCall.labels.Clear();
+            code.Insert(code.IndexOf(bodyCall), loadBox);
+            bodyCall.operand = AccessTools.Method(typeof(DialogueBoxPatch), nameof(DrawDialogueText));
+        }
         return code;
     }
 
-    private static void DrawPortraitText(
+    private static void DrawDialogueText(
         SpriteBatch batch, string text, int x, int y, int position, int width, int height,
         float alpha, float depth, bool junimo, int background, string placeholder, Color? color,
         SpriteText.ScrollTextAlignment alignment, DialogueBox box)
@@ -39,7 +41,8 @@ internal static class DialogueBoxPatch
         ModEntry? mod = ModEntry.Instance;
         var preview = mod?.GetDialoguePreview(box);
         if (mod != null && (preview.HasValue || mod.Config.ShowSecondaryInDialogue)
-            && !Game1.eventUp && !box.isQuestion && box.isPortraitBox()
+            && !Game1.eventUp && !box.isQuestion
+            && (box.isPortraitBox() || !Game1.options.showPortraits)
             && !mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
             && box.characterDialoguesBrokenUp.Count == 1
             && box.characterDialogue is { } dialogue
@@ -47,10 +50,11 @@ internal static class DialogueBoxPatch
             && mod.FontManager?.GetSecondaryFont(Game1.dialogueFont) is { } font
             && pairs.All(pair => pair.Secondary.All(font.Characters.Contains)))
         {
+            int bodyWidth = box.isPortraitBox() ? width : width - 16;
             DialoguePairLayout.PositionedPair[]? Fit(IReadOnlyList<DialogueTextPair> page)
-                => DialoguePairLayout.FitPage(page, width, box.height - 16,
+                => DialoguePairLayout.FitPage(page, bodyWidth, box.height - 16,
                     preview?.SecondaryFirst ?? mod.Config.SecondaryFirst,
-                    primary => SpriteText.getHeightOfString(primary, width - 4),
+                    primary => SpriteText.getHeightOfString(primary, bodyWidth - 4),
                     line => font.MeasureString(line).X * DialoguePairLayout.SecondaryScale,
                     lines => Math.Max(font.MeasureString(lines).Y,
                         (1 + lines.Count(c => c == '\n')) * font.LineSpacing) * DialoguePairLayout.SecondaryScale);
@@ -68,7 +72,7 @@ internal static class DialogueBoxPatch
                     if (revealed == 0)
                         break;
 
-                    SpriteText.drawString(batch, pair.Primary, x, y + pair.PrimaryOffset, revealed, width, height,
+                    SpriteText.drawString(batch, pair.Primary, x, y + pair.PrimaryOffset, revealed, bodyWidth, height,
                         alpha, depth, junimo, background, placeholder, color, alignment);
 
                     if (revealed == pair.Primary.Length)
@@ -88,11 +92,17 @@ internal static class DialogueBoxPatch
     private static DialogueTextPair[]? ResolvePairs(
         ModEntry mod, Dialogue dialogue, string text, DialogueTextPair[][]? previewPages)
     {
+        string prefix = ModEntry.GetDialogueSpeakerPrefix(dialogue);
+        if (!text.StartsWith(prefix, StringComparison.Ordinal))
+            return null;
+
+        string body = text[prefix.Length..];
         var pairs = previewPages == null
-            ? mod.GetDialoguePairs(dialogue, text)
+            ? mod.GetDialoguePairs(dialogue, body)
             : previewPages.ElementAtOrDefault(dialogue.currentDialogueIndex);
-        return pairs != null && string.Equals(string.Join(" ", pairs.Select(pair => pair.Primary)), text, StringComparison.Ordinal)
-            ? pairs.Select(pair => pair with { Secondary = pair.Secondary.Normalize() }).ToArray()
-            : null;
+        if (pairs == null || !string.Equals(string.Join(" ", pairs.Select(pair => pair.Primary)), body, StringComparison.Ordinal))
+            return null;
+
+        return DialoguePairLayout.PreparePairs(pairs, prefix);
     }
 }
