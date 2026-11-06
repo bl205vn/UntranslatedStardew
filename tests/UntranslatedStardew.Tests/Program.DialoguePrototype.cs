@@ -88,6 +88,17 @@ public static partial class Program
             && reveal.Invoke(second, new object[] { 12 }) is 6,
             "Second pair reveal excludes the separating space and first pair text");
 
+        var safePreview = pair.DeclaringType!.GetMethod("IsSafePreview", BindingFlags.Static | BindingFlags.NonPublic)!;
+        Assert(safePreview.Invoke(null, new object[] { "Hello.$h#$b#Goodbye." }) is true
+            && safePreview.Invoke(null, new object[] { "Hello.#$b#$action AddMoney 1" }) is false
+            && safePreview.Invoke(null, new object[] { "Hello.#$b#Here is [74]." }) is false,
+            "Console preview validates all authored pages before constructing dialogue");
+
+        var visiblePosition = layoutType.GetMethod("GetVisiblePosition", BindingFlags.Static | BindingFlags.NonPublic)!;
+        Assert(visiblePosition.Invoke(null, new object[] { 8, 10 }) is 8
+            && visiblePosition.Invoke(null, new object[] { 9, 10 }) is 10,
+            "Final translation is revealed at vanilla's click-to-advance threshold");
+
         var original = AccessTools.Method(typeof(DialogueBox), nameof(DialogueBox.draw), new[] { typeof(SpriteBatch) });
         var patch = mod.GetType("UntranslatedStardew.Patches.DialogueBoxPatch", true)!;
         var harmony = new Harmony("UntranslatedStardew.Tests.DialoguePrototype");

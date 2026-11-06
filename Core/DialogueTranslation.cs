@@ -66,6 +66,9 @@ internal static class DialogueTranslation
         return primaryBlocks.Zip(secondaryBlocks, (main, sub) => new DialogueTextPair(main, sub)).ToArray();
     }
 
+    internal static bool IsSafePreview(string text)
+        => text.Split("#$b#").All(segment => TryGetPlainText(segment, out _));
+
     internal static bool TryGetPlainText(string value, out string text)
     {
         text = value.Trim();

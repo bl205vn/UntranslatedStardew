@@ -61,9 +61,10 @@ internal static class DialogueBoxPatch
 
             if (layout != null)
             {
+                int visiblePosition = DialoguePairLayout.GetVisiblePosition(position, text.Length);
                 foreach (var pair in layout)
                 {
-                    int revealed = pair.RevealedCharacters(position);
+                    int revealed = pair.RevealedCharacters(visiblePosition);
                     if (revealed == 0)
                         break;
 

@@ -98,7 +98,7 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_test",
-            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored]",
+            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|key <NPC> <key>]",
             OnDialoguePreviewCommand
         );
 
@@ -108,11 +108,13 @@ public sealed class ModEntry : Mod
 
     private void OnDialoguePreviewCommand(string command, string[] args)
     {
-        string? sample = args.LastOrDefault();
-        int placementCount = args.Length - (sample is "wrap" or "pairs" or "authored" ? 1 : 0);
-        if (placementCount > 1 || (placementCount == 1 && args[0] is not ("above" or "below")))
+        int offset = args.FirstOrDefault() is "above" or "below" ? 1 : 0;
+        string? sample = args.ElementAtOrDefault(offset);
+        bool fromKey = sample == "key" && args.Length == offset + 3;
+        bool builtInSample = args.Length - offset <= 1 && sample is null or "wrap" or "pairs" or "authored";
+        if (!fromKey && !builtInSample)
         {
-            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|key <NPC> <key>]", LogLevel.Info);
             return;
         }
 
@@ -129,25 +131,35 @@ public sealed class ModEntry : Mod
             return;
         }
 
-        const string asset = "Characters/Dialogue/Evelyn";
-        const string key = "Mon";
-        NPC? evelyn = Game1.getCharacterFromName("Evelyn");
-        if (evelyn?.Portrait is not { } portrait)
+        string npcName = fromKey ? args[offset + 1] : "Evelyn";
+        string key = fromKey ? args[offset + 2] : "Mon";
+        NPC? npc = Game1.getCharacterFromName(npcName);
+        if (npc?.Portrait is not { } portrait)
         {
-            Monitor.Log("Evelyn's portrait is unavailable in this save.", LogLevel.Warn);
+            Monitor.Log($"NPC '{npcName}' or their portrait is unavailable in this save.", LogLevel.Warn);
             return;
         }
 
-        var lines = Game1.content.Load<Dictionary<string, string>>(asset);
-        if (!lines.TryGetValue(key, out string? primary) || primary == null
-            || !DialogueTranslation.TryGetPlainText(primary, out string plainPrimary))
+        string asset = $"Characters/Dialogue/{npc.Name}";
+        string? primary;
+        try
         {
-            Monitor.Log("The current content packs changed Evelyn's sample to an unsupported dialogue.", LogLevel.Warn);
+            var lines = Game1.content.Load<Dictionary<string, string>>(asset);
+            lines.TryGetValue(key, out primary);
+        }
+        catch (Microsoft.Xna.Framework.Content.ContentLoadException)
+        {
+            primary = null;
+        }
+
+        if (primary == null || !DialogueTranslation.IsSafePreview(primary))
+        {
+            Monitor.Log($"'{asset}:{key}' was not found or uses unsupported dialogue commands.", LogLevel.Warn);
             return;
         }
 
-        // The preview NPC has its own dialogue stack, so closing the box cannot consume Evelyn's dialogue.
-        var speaker = new NPC { Name = evelyn.Name, displayName = evelyn.displayName, Portrait = portrait, EventActor = true };
+        // Closing the preview must not consume the real NPC's queued dialogue.
+        var speaker = new NPC { Name = npc.Name, displayName = npc.displayName, Portrait = portrait, EventActor = true };
         var box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", primary));
         string visibleText = box.getCurrentString();
         string? secondary = GetSecondaryDialogueText(box.characterDialogue, visibleText);
@@ -158,11 +170,12 @@ public sealed class ModEntry : Mod
             return;
         }
 
-        DialogueTextPair[][]? pages = sample == "authored"
+        DialogueTextPair[][]? pages = fromKey || sample == "authored"
             ? null
             : new[] { new[] { new DialogueTextPair(visibleText, secondary) } };
         if (sample is "wrap" or "pairs")
         {
+            DialogueTranslation.TryGetPlainText(primary, out string plainPrimary);
             string longPrimary = string.Join(" ", Enumerable.Repeat(plainPrimary, 3));
             string longVisible = string.Join(" ", Enumerable.Repeat(visibleText, 3));
             string longSecondary = string.Join(" ", Enumerable.Repeat(secondary, 3));
@@ -176,7 +189,7 @@ public sealed class ModEntry : Mod
                 : new[] { new[] { longPair }, new[] { shortPair } };
         }
 
-        bool secondaryFirst = placementCount == 0 ? Config.SecondaryFirst : args[0] == "above";
+        bool secondaryFirst = offset == 0 ? Config.SecondaryFirst : args[0] == "above";
         _dialoguePreview = (new WeakReference<DialogueBox>(box), secondaryFirst, pages);
         Game1.activeClickableMenu = box;
         Game1.dialogueUp = true;

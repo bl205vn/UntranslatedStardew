@@ -14,6 +14,10 @@ internal static class DialoguePairLayout
         internal int RevealedCharacters(int position) => Math.Clamp(position - Start, 0, Primary.Length);
     }
 
+    // Vanilla enables its advance action at Length - 1.
+    internal static int GetVisiblePosition(int position, int length)
+        => position >= length - 1 ? length : position;
+
     internal static PositionedPair[]? FitPage(
         IReadOnlyList<DialogueTextPair> pairs, int width, int height, bool secondaryFirst,
         Func<string, int> measurePrimaryHeight, Func<string, float> measureWidth, Func<string, float> measureHeight)
