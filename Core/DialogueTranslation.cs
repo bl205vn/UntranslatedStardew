@@ -1,10 +1,13 @@
+using System.Text.RegularExpressions;
+using StardewValley;
+
 namespace UntranslatedStardew.Core;
 
 /// <summary>Pairs simple authored segments without running the game's dialogue commands.</summary>
 internal static class DialogueTranslation
 {
     internal static string? GetSecondaryLine(
-        string primary, string secondary, int index, string visibleText, string playerName)
+        string primary, string secondary, int index, string visibleText, string playerName, Gender gender)
     {
         string[] primaryLines = primary.Split("#$b#");
         string[] secondaryLines = secondary.Split("#$b#");
@@ -13,8 +16,8 @@ internal static class DialogueTranslation
 
         for (int i = 0; i < primaryLines.Length; i++)
         {
-            if (!TryGetPlainText(primaryLines[i], out primaryLines[i])
-                || !TryGetPlainText(secondaryLines[i], out secondaryLines[i]))
+            if (!TryResolveSegment(primaryLines[i], gender, out primaryLines[i])
+                || !TryResolveSegment(secondaryLines[i], gender, out secondaryLines[i]))
                 return null;
         }
 
@@ -66,8 +69,39 @@ internal static class DialogueTranslation
         return primaryBlocks.Zip(secondaryBlocks, (main, sub) => new DialogueTextPair(main, sub)).ToArray();
     }
 
+    private static readonly Regex GenderBlock = new(@"\$\{([^{}$]*)\}\$");
+
+    private static bool IsSafeSegment(string segment)
+    {
+        bool validBlocks = true;
+        string plain = GenderBlock.Replace(segment, match =>
+        {
+            string contents = match.Groups[1].Value;
+            char separator = contents.Contains('¦') ? '¦' : '^';
+            string[] variants = contents.Split(separator);
+            validBlocks &= variants.Length is 2 or 3
+                && variants.All(variant => !variant.Any(char.IsControl)
+                    && variant.IndexOfAny(new[] { '#', '$', '%', '[', ']', '{', '}', '^', '¦', '|', '\\' }) < 0);
+            return "xx";
+        });
+
+        string[] legacy = plain.Split(new[] { '^', '¦' });
+        return validBlocks && legacy.Length <= 2 && legacy.All(part => TryGetPlainText(part, out _));
+    }
+
     internal static bool IsSafePreview(string text)
-        => text.Split("#$b#").All(segment => TryGetPlainText(segment, out _));
+        => text.Split("#$b#").All(IsSafeSegment);
+
+    internal static bool TryResolveSegment(string segment, Gender gender, out string text)
+    {
+        text = "";
+        if (!IsSafeSegment(segment))
+            return false;
+
+        // Vanilla resolves blocks and ¦ first, then the legacy ^ split.
+        string selected = Dialogue.applyGenderSwitch(gender, segment, altTokenOnly: true);
+        return TryGetPlainText(Dialogue.applyGenderSwitch(gender, selected), out text);
+    }
 
     internal static bool TryGetPlainText(string value, out string text)
     {

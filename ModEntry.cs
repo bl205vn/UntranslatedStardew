@@ -98,7 +98,7 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_test",
-            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|key <NPC> <key>]",
+            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|key <NPC> <key>]",
             OnDialoguePreviewCommand
         );
 
@@ -111,10 +111,10 @@ public sealed class ModEntry : Mod
         int offset = args.FirstOrDefault() is "above" or "below" ? 1 : 0;
         string? sample = args.ElementAtOrDefault(offset);
         bool fromKey = sample == "key" && args.Length == offset + 3;
-        bool builtInSample = args.Length - offset <= 1 && sample is null or "wrap" or "pairs" or "authored";
+        bool builtInSample = args.Length - offset <= 1 && sample is null or "wrap" or "pairs" or "authored" or "gender";
         if (!fromKey && !builtInSample)
         {
-            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|key <NPC> <key>]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|key <NPC> <key>]", LogLevel.Info);
             return;
         }
 
@@ -175,7 +175,7 @@ public sealed class ModEntry : Mod
             : new[] { new[] { new DialogueTextPair(visibleText, secondary) } };
         if (sample is "wrap" or "pairs")
         {
-            DialogueTranslation.TryGetPlainText(primary, out string plainPrimary);
+            DialogueTranslation.TryResolveSegment(primary, Game1.player.Gender, out string plainPrimary);
             string longPrimary = string.Join(" ", Enumerable.Repeat(plainPrimary, 3));
             string longVisible = string.Join(" ", Enumerable.Repeat(visibleText, 3));
             string longSecondary = string.Join(" ", Enumerable.Repeat(secondary, 3));
@@ -187,6 +187,31 @@ public sealed class ModEntry : Mod
             pages = samePage
                 ? new[] { new[] { shortPair, longPair } }
                 : new[] { new[] { longPair }, new[] { shortPair } };
+        }
+
+        if (sample == "gender" && DialogueTranslation.TryGetPlainText(primary, out string plain))
+        {
+            string[] sourcePages = { "${" + plain + "^" + plain + " " + plain + "}$", plain + " " + plain + "^" + plain };
+            string authored = string.Join("#$b#", sourcePages);
+            string translated = "${" + secondary + "^" + secondary + " " + secondary + "}$#$b#"
+                + secondary + " " + secondary + "^" + secondary;
+            Gender gender = Game1.player.Gender;
+            string playerName = Utility.FilterUserName(Game1.player.Name);
+            pages = new DialogueTextPair[sourcePages.Length][];
+            for (int i = 0; i < sourcePages.Length; i++)
+            {
+                DialogueTranslation.TryResolveSegment(sourcePages[i], gender, out string resolved);
+                string shown = resolved.Replace("@", playerName);
+                string? paired = DialogueTranslation.GetSecondaryLine(authored, translated, i, shown, playerName, gender);
+                if (paired == null)
+                {
+                    Monitor.Log("This language pair cannot use the gender preview sample.", LogLevel.Warn);
+                    return;
+                }
+
+                pages[i] = new[] { new DialogueTextPair(shown, paired) };
+            }
+            box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", authored));
         }
 
         bool secondaryFirst = offset == 0 ? Config.SecondaryFirst : args[0] == "above";
@@ -258,7 +283,7 @@ public sealed class ModEntry : Mod
                 return null;
 
             return DialogueTranslation.GetSecondaryLine(primary, secondary!, dialogue.currentDialogueIndex,
-                visibleText, Utility.FilterUserName(Game1.player.Name));
+                visibleText, Utility.FilterUserName(Game1.player.Name), Game1.player.Gender);
         }
         catch (Microsoft.Xna.Framework.Content.ContentLoadException)
         {

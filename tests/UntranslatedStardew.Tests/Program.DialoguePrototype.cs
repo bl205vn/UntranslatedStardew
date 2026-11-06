@@ -1,6 +1,7 @@
 using System.Reflection;
 using HarmonyLib;
 using Microsoft.Xna.Framework.Graphics;
+using StardewValley;
 using StardewValley.Menus;
 using UntranslatedStardew.Core;
 
@@ -14,8 +15,8 @@ public static partial class Program
         MethodInfo pair = mod.GetType("UntranslatedStardew.Core.DialogueTranslation", true)!
             .GetMethod("GetSecondaryLine", BindingFlags.Static | BindingFlags.NonPublic)!;
 
-        string? Pair(string primary, string secondary, int index, string visible)
-            => (string?)pair.Invoke(null, new object[] { primary, secondary, index, visible, "Alex" });
+        string? Pair(string primary, string secondary, int index, string visible, Gender gender = Gender.Male)
+            => (string?)pair.Invoke(null, new object[] { primary, secondary, index, visible, "Alex", gender });
 
         Assert(Pair("Hello, @$h#$b#Goodbye.", "Chào @.$1#$b#Tạm biệt.", 0, "Hello, Alex") == "Chào Alex.",
             "Dialogue pairs a player-name token and portrait suffix without executing commands");
@@ -25,8 +26,20 @@ public static partial class Program
             && Pair("Hello.", "Xin chào.", 0, "Different live text.") == null
             && Pair("Hello.", "Hello.", 0, "Hello.") == null,
             "Dialogue skips mismatched segments, changed live text and duplicates");
-        foreach (string unsafeText in new[] { "$c 1#Hello.#Bye.", "Hello.^Bye.", "Hello.||Bye.", "$action AddMoney 1", "Hello. [74]", "Hello.\\nBye." })
+        foreach (string unsafeText in new[] { "$c 1#Hello.#Bye.", "Hello.^Bye.^Extra.", "Hello.||Bye.", "$action AddMoney 1", "Hello. [74]", "Hello.\\nBye." })
             Assert(Pair("Hello.", unsafeText, 0, "Hello.") == null, "Dialogue skips unsupported syntax: " + unsafeText);
+
+        Assert(Pair("Hello ${sir^madam^friend}$ @.", "Chào ${anh¦chị¦bạn}$ @.", 0,
+                "Hello madam Alex.", Gender.Female) == "Chào chị Alex."
+            && Pair("Hello ${sir^madam^friend}$ @.", "Chào ${anh¦chị¦bạn}$ @.", 0,
+                "Hello friend Alex.", Gender.Undefined) == "Chào bạn Alex.",
+            "Dialogue resolves the same player gender for both translation blocks");
+        Assert(Pair("Hello, sir.$h^Hello, madam.$s", "Chào anh.¦Chào chị.", 0,
+                "Hello, madam.", Gender.Female) == "Chào chị.",
+            "Dialogue supports legacy gender delimiters and branch portrait suffixes");
+        Assert(Pair("Hello.", "Chào ${anh^[74]}$.", 0, "Hello.") == null
+            && Pair("Hello.", "Chào ${anh^chị.", 0, "Hello.") == null,
+            "Unsafe or malformed gender blocks fall back even when the unsafe branch is inactive");
 
         MethodInfo match = pair.DeclaringType!.GetMethod("MatchBlocks", BindingFlags.Static | BindingFlags.NonPublic)!;
         string[][] variants = { new[] { "Oh my!", "What a lovely day." }, new[] { "Ôi chao!", "Một ngày đẹp trời." } };
