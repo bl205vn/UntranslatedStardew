@@ -28,6 +28,25 @@ public static partial class Program
         foreach (string unsafeText in new[] { "$c 1#Hello.#Bye.", "Hello.^Bye.", "Hello.||Bye.", "$action AddMoney 1", "Hello. [74]", "Hello.\\nBye." })
             Assert(Pair("Hello.", unsafeText, 0, "Hello.") == null, "Dialogue skips unsupported syntax: " + unsafeText);
 
+        MethodInfo match = pair.DeclaringType!.GetMethod("MatchBlocks", BindingFlags.Static | BindingFlags.NonPublic)!;
+        string[][] variants = { new[] { "Oh my!", "What a lovely day." }, new[] { "Ôi chao!", "Một ngày đẹp trời." } };
+        Array? Match(string primary, string secondary, string[][] data)
+            => (Array?)match.Invoke(null, new object[] { primary, secondary, data, "Alex" });
+        var matched = Match("Ôi chao! Một ngày đẹp trời.", "Oh my! What a lovely day.", variants);
+        object? firstPair = matched?.GetValue(0);
+        Assert(matched?.Length == 2
+            && firstPair?.GetType().GetProperty("Secondary")?.GetValue(firstPair) is "Oh my!"
+            && Match("Oh my! What a lovely day.", "Ôi chao! Một ngày đẹp trời.", variants)?.Length == 2,
+            "Authored blocks match the exact live translations in either direction");
+        Assert(Match("Ôi chao! Một ngày đẹp trời.", "Oh my! A lovely day.", variants) == null
+            && Match("Ôi chao! Một ngày đẹp trời.", "Oh my! What a lovely day.", variants.Append(variants[0]).ToArray()) == null
+            && Match("Hello Alex! See you.", "Chào Alex! Hẹn gặp lại.",
+                new[] { new[] { "Hello @!", "See you." }, new[] { "Chào @!", "Hẹn gặp", "lại." } }) == null,
+            "Stale, ambiguous or uneven authored block data cannot mispair dialogue");
+        Assert(Match("Hello Alex! See you.", "Chào Alex! Hẹn gặp lại.",
+            new[] { new[] { "Hello @!", "See you." }, new[] { "Chào @!", "Hẹn gặp lại." } })?.Length == 2,
+            "Authored blocks resolve player-name placeholders before matching");
+
         MethodInfo fit = mod.GetType("UntranslatedStardew.Core.DialoguePairLayout", true)!
             .GetMethod("Fit", BindingFlags.Static | BindingFlags.NonPublic)!;
         (string Secondary, int PrimaryOffset, int SecondaryOffset, int Height)? Fit(int height, bool secondaryFirst)

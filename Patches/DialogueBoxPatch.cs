@@ -47,12 +47,18 @@ internal static class DialogueBoxPatch
             && mod.FontManager?.GetSecondaryFont(Game1.dialogueFont) is { } font
             && pairs.All(pair => pair.Secondary.All(font.Characters.Contains)))
         {
-            var layout = DialoguePairLayout.FitPage(pairs, width, box.height - 16,
-                preview?.SecondaryFirst ?? mod.Config.SecondaryFirst,
-                primary => SpriteText.getHeightOfString(primary, width - 4),
-                line => font.MeasureString(line).X * DialoguePairLayout.SecondaryScale,
-                lines => Math.Max(font.MeasureString(lines).Y,
-                    (1 + lines.Count(c => c == '\n')) * font.LineSpacing) * DialoguePairLayout.SecondaryScale);
+            DialoguePairLayout.PositionedPair[]? Fit(IReadOnlyList<DialogueTextPair> page)
+                => DialoguePairLayout.FitPage(page, width, box.height - 16,
+                    preview?.SecondaryFirst ?? mod.Config.SecondaryFirst,
+                    primary => SpriteText.getHeightOfString(primary, width - 4),
+                    line => font.MeasureString(line).X * DialoguePairLayout.SecondaryScale,
+                    lines => Math.Max(font.MeasureString(lines).Y,
+                        (1 + lines.Count(c => c == '\n')) * font.LineSpacing) * DialoguePairLayout.SecondaryScale);
+
+            var layout = Fit(pairs);
+            if (layout == null && pairs.Length > 1)
+                layout = Fit(new[] { new DialogueTextPair(text, string.Join(" ", pairs.Select(pair => pair.Secondary))) });
+
             if (layout != null)
             {
                 foreach (var pair in layout)
@@ -81,15 +87,11 @@ internal static class DialogueBoxPatch
     private static DialogueTextPair[]? ResolvePairs(
         ModEntry mod, Dialogue dialogue, string text, DialogueTextPair[][]? previewPages)
     {
-        if (previewPages != null)
-        {
-            var pairs = previewPages.ElementAtOrDefault(dialogue.currentDialogueIndex);
-            return pairs != null && string.Join(" ", pairs.Select(pair => pair.Primary)) == text
-                ? pairs.Select(pair => pair with { Secondary = pair.Secondary.Normalize() }).ToArray()
-                : null;
-        }
-
-        string? secondary = mod.GetSecondaryDialogueText(dialogue, text);
-        return secondary == null ? null : new[] { new DialogueTextPair(text, secondary.Normalize()) };
+        var pairs = previewPages == null
+            ? mod.GetDialoguePairs(dialogue, text)
+            : previewPages.ElementAtOrDefault(dialogue.currentDialogueIndex);
+        return pairs != null && string.Equals(string.Join(" ", pairs.Select(pair => pair.Primary)), text, StringComparison.Ordinal)
+            ? pairs.Select(pair => pair with { Secondary = pair.Secondary.Normalize() }).ToArray()
+            : null;
     }
 }

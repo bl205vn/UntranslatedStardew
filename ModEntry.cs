@@ -16,6 +16,8 @@ namespace UntranslatedStardew;
 /// </summary>
 public sealed class ModEntry : Mod
 {
+    private const string DialoguePairsAsset = "Mods/GiaHung.UntranslatedStardew/DialoguePairs";
+
     internal static ModEntry? Instance { get; private set; }
 
     public ModConfig Config { get; private set; } = null!;
@@ -96,7 +98,7 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_test",
-            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs]",
+            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored]",
             OnDialoguePreviewCommand
         );
 
@@ -107,10 +109,10 @@ public sealed class ModEntry : Mod
     private void OnDialoguePreviewCommand(string command, string[] args)
     {
         string? sample = args.LastOrDefault();
-        int placementCount = args.Length - (sample is "wrap" or "pairs" ? 1 : 0);
+        int placementCount = args.Length - (sample is "wrap" or "pairs" or "authored" ? 1 : 0);
         if (placementCount > 1 || (placementCount == 1 && args[0] is not ("above" or "below")))
         {
-            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored]", LogLevel.Info);
             return;
         }
 
@@ -156,7 +158,9 @@ public sealed class ModEntry : Mod
             return;
         }
 
-        DialogueTextPair[][]? pages = null;
+        DialogueTextPair[][]? pages = sample == "authored"
+            ? null
+            : new[] { new[] { new DialogueTextPair(visibleText, secondary) } };
         if (sample is "wrap" or "pairs")
         {
             string longPrimary = string.Join(" ", Enumerable.Repeat(plainPrimary, 3));
@@ -185,6 +189,29 @@ public sealed class ModEntry : Mod
             && ReferenceEquals(target, box)
             ? (preview.SecondaryFirst, preview.Pages)
             : null;
+
+    internal DialogueTextPair[]? GetDialoguePairs(Dialogue dialogue, string visibleText)
+    {
+        string? secondary = GetSecondaryDialogueText(dialogue, visibleText);
+        if (secondary == null)
+            return null;
+
+        try
+        {
+            var entries = Game1.content.Load<Dictionary<string, string[][]>>(DialoguePairsAsset);
+            string key = dialogue.TranslationKey.Replace('\\', '/');
+            if (entries.TryGetValue(key, out string[][]? variants)
+                && DialogueTranslation.MatchBlocks(visibleText, secondary, variants,
+                    Utility.FilterUserName(Game1.player.Name)) is { } pairs)
+                return pairs;
+        }
+        catch (Microsoft.Xna.Framework.Content.ContentLoadException)
+        {
+            // A broken pairing asset should not suppress an otherwise usable translation.
+        }
+
+        return new[] { new DialogueTextPair(visibleText, secondary) };
+    }
 
     internal string? GetSecondaryDialogueText(Dialogue? dialogue, string visibleText)
     {
@@ -275,6 +302,17 @@ public sealed class ModEntry : Mod
         else if (e.NameWithoutLocale.IsEquivalentTo("Mods/GiaHung.UntranslatedStardew/LanguageSources"))
         {
             e.LoadFrom(() => new System.Collections.Generic.Dictionary<string, LanguageSourceDescriptor>(StringComparer.OrdinalIgnoreCase), AssetLoadPriority.Exclusive);
+        }
+        else if (e.NameWithoutLocale.IsEquivalentTo(DialoguePairsAsset))
+        {
+            e.LoadFrom(() => new Dictionary<string, string[][]>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Characters/Dialogue/Evelyn:Mon"] = new[]
+                {
+                    new[] { "Oh my!", "What a lovely day." },
+                    new[] { "Ôi chao!", "Một ngày đẹp trời." }
+                }
+            }, AssetLoadPriority.Exclusive);
         }
     }
 

@@ -28,6 +28,44 @@ internal static class DialogueTranslation
         return secondaryText;
     }
 
+    internal static DialogueTextPair[]? MatchBlocks(
+        string primary, string secondary, string[][]? variants, string playerName)
+    {
+        if (variants == null)
+            return null;
+
+        string[]? primaryBlocks = null;
+        string[]? secondaryBlocks = null;
+        foreach (string[]? variant in variants)
+        {
+            if (variant == null || variant.Length < 2
+                || variant.Any(block => block == null || !TryGetPlainText(block, out string plain) || plain != block))
+                continue;
+
+            string[] blocks = variant.Select(block => block.Replace("@", playerName)).ToArray();
+            string joined = string.Join(" ", blocks);
+            if (string.Equals(joined, primary, StringComparison.Ordinal))
+            {
+                if (primaryBlocks != null)
+                    return null;
+
+                primaryBlocks = blocks;
+            }
+            else if (string.Equals(joined, secondary, StringComparison.Ordinal))
+            {
+                if (secondaryBlocks != null)
+                    return null;
+
+                secondaryBlocks = blocks;
+            }
+        }
+
+        if (primaryBlocks == null || secondaryBlocks == null || primaryBlocks.Length != secondaryBlocks.Length)
+            return null;
+
+        return primaryBlocks.Zip(secondaryBlocks, (main, sub) => new DialogueTextPair(main, sub)).ToArray();
+    }
+
     internal static bool TryGetPlainText(string value, out string text)
     {
         text = value.Trim();
