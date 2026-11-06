@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using StardewValley;
 using StardewValley.BellsAndWhistles;
 using StardewValley.Menus;
+using UntranslatedStardew.Core;
 
 namespace UntranslatedStardew.Patches;
 
@@ -12,9 +13,6 @@ namespace UntranslatedStardew.Patches;
 [HarmonyPatch(typeof(DialogueBox), nameof(DialogueBox.draw), new[] { typeof(SpriteBatch) })]
 internal static class DialogueBoxPatch
 {
-    private const float SecondaryScale = 0.75f;
-    private const int LineGap = 4;
-
     private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
     {
         var code = instructions.ToList();
@@ -44,27 +42,31 @@ internal static class DialogueBoxPatch
         SpriteFont? font = null;
         ModEntry? mod = ModEntry.Instance;
 
-        bool? previewPlacement = mod?.GetDialoguePreviewPlacement(box);
-        if (mod != null && (previewPlacement.HasValue || mod.Config.ShowSecondaryInDialogue)
+        var preview = mod?.GetDialoguePreview(box);
+        if (mod != null && (preview.HasValue || mod.Config.ShowSecondaryInDialogue)
             && !Game1.eventUp && !box.isQuestion && box.isPortraitBox()
             && !mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
             && box.characterDialoguesBrokenUp.Count == 1
-            && SpriteText.getWidthOfString(text) < width
-            && mod.GetSecondaryDialogueText(box.characterDialogue, text) is { } candidate
-            && mod.FontManager?.GetSecondaryFont(Game1.dialogueFont) is { } secondaryFont
-            && candidate.All(secondaryFont.Characters.Contains))
+            && box.characterDialogue is { } dialogue
+            && ResolveSecondary(mod, dialogue, text, preview?.Lines) is { } candidate
+            && mod.FontManager?.GetSecondaryFont(Game1.dialogueFont) is { } secondaryFont)
         {
-            Vector2 size = secondaryFont.MeasureString(candidate) * SecondaryScale;
-            int primaryHeight = SpriteText.getHeightOfString(text, width);
-            int secondaryHeight = (int)Math.Ceiling(Math.Max(size.Y, secondaryFont.LineSpacing * SecondaryScale));
-            if (size.X < width && primaryHeight + LineGap + secondaryHeight <= box.height - 16)
+            candidate = candidate.Normalize();
+            if (candidate.All(secondaryFont.Characters.Contains))
             {
-                secondary = candidate;
-                font = secondaryFont;
-                if (previewPlacement ?? mod.Config.SecondaryFirst)
-                    primaryY += secondaryHeight + LineGap;
-                else
-                    secondaryY += primaryHeight + LineGap;
+                int primaryHeight = SpriteText.getHeightOfString(text, width - 4);
+                var layout = DialoguePairLayout.Fit(candidate, width, box.height - 16, primaryHeight,
+                    preview?.SecondaryFirst ?? mod.Config.SecondaryFirst,
+                    line => secondaryFont.MeasureString(line).X * DialoguePairLayout.SecondaryScale,
+                    lines => Math.Max(secondaryFont.MeasureString(lines).Y,
+                        (1 + lines.Count(c => c == '\n')) * secondaryFont.LineSpacing) * DialoguePairLayout.SecondaryScale);
+                if (layout is { } fitted)
+                {
+                    secondary = fitted.Secondary;
+                    font = secondaryFont;
+                    primaryY += fitted.PrimaryOffset;
+                    secondaryY += fitted.SecondaryOffset;
+                }
             }
         }
 
@@ -74,7 +76,17 @@ internal static class DialogueBoxPatch
         if (secondary != null && font != null && position >= text.Length)
         {
             batch.DrawString(font, secondary, new Vector2(x, secondaryY), Game1.textColor,
-                0f, Vector2.Zero, SecondaryScale, SpriteEffects.None, depth);
+                0f, Vector2.Zero, DialoguePairLayout.SecondaryScale, SpriteEffects.None, depth);
         }
+    }
+
+    private static string? ResolveSecondary(
+        ModEntry mod, Dialogue dialogue, string text, (string Primary, string Secondary)[]? previewLines)
+    {
+        if (previewLines == null)
+            return mod.GetSecondaryDialogueText(dialogue, text);
+
+        var line = previewLines.ElementAtOrDefault(dialogue.currentDialogueIndex);
+        return string.Equals(line.Primary, text, StringComparison.Ordinal) ? line.Secondary : null;
     }
 }

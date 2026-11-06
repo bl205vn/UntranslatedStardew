@@ -23,8 +23,7 @@ public sealed class ModEntry : Mod
     public BilingualFontManager? FontManager => _fontManager;
     public LanguageSourceRegistry SourceRegistry { get; } = new();
 
-    private WeakReference<DialogueBox>? _dialoguePreview;
-    private bool _dialoguePreviewSecondaryFirst;
+    private (WeakReference<DialogueBox> Box, bool SecondaryFirst, (string Primary, string Secondary)[]? Lines)? _dialoguePreview;
     private Harmony? _harmony;
     private RawContentProvider? _contentProvider;
     private ItemNameResolver? _nameResolver;
@@ -97,7 +96,7 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_test",
-            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below]",
+            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap]",
             OnDialoguePreviewCommand
         );
 
@@ -107,9 +106,11 @@ public sealed class ModEntry : Mod
 
     private void OnDialoguePreviewCommand(string command, string[] args)
     {
-        if (args.Length > 1 || (args.Length == 1 && args[0] is not ("above" or "below")))
+        bool wrap = args.LastOrDefault() == "wrap";
+        int placementCount = args.Length - (wrap ? 1 : 0);
+        if (placementCount > 1 || (placementCount == 1 && args[0] is not ("above" or "below")))
         {
-            Monitor.Log("Usage: untranslated_dialogue_test [above|below]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap]", LogLevel.Info);
             return;
         }
 
@@ -137,7 +138,7 @@ public sealed class ModEntry : Mod
 
         var lines = Game1.content.Load<Dictionary<string, string>>(asset);
         if (!lines.TryGetValue(key, out string? primary) || primary == null
-            || !DialogueTranslation.TryGetPlainText(primary, out _))
+            || !DialogueTranslation.TryGetPlainText(primary, out string plainPrimary))
         {
             Monitor.Log("The current content packs changed Evelyn's sample to an unsupported dialogue.", LogLevel.Warn);
             return;
@@ -155,17 +156,28 @@ public sealed class ModEntry : Mod
             return;
         }
 
-        _dialoguePreview = new WeakReference<DialogueBox>(box);
-        _dialoguePreviewSecondaryFirst = args.Length == 0 ? Config.SecondaryFirst : args[0] == "above";
+        (string Primary, string Secondary)[]? previewLines = null;
+        if (wrap)
+        {
+            string longPrimary = string.Join(" ", Enumerable.Repeat(plainPrimary, 3));
+            string longVisible = string.Join(" ", Enumerable.Repeat(visibleText, 3));
+            string longSecondary = string.Join(" ", Enumerable.Repeat(secondary, 3));
+            box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", $"{longPrimary}#$b#{primary}"));
+            previewLines = new[] { (longVisible, longSecondary), (visibleText, secondary) };
+        }
+
+        bool secondaryFirst = placementCount == 0 ? Config.SecondaryFirst : args[0] == "above";
+        _dialoguePreview = (new WeakReference<DialogueBox>(box), secondaryFirst, previewLines);
         Game1.activeClickableMenu = box;
         Game1.dialogueUp = true;
         Game1.player.Halt();
         Game1.player.CanMove = false;
     }
 
-    internal bool? GetDialoguePreviewPlacement(DialogueBox box)
-        => _dialoguePreview?.TryGetTarget(out DialogueBox? preview) == true && ReferenceEquals(preview, box)
-            ? _dialoguePreviewSecondaryFirst
+    internal (bool SecondaryFirst, (string Primary, string Secondary)[]? Lines)? GetDialoguePreview(DialogueBox box)
+        => _dialoguePreview is { } preview && preview.Box.TryGetTarget(out DialogueBox? target)
+            && ReferenceEquals(target, box)
+            ? (preview.SecondaryFirst, preview.Lines)
             : null;
 
     internal string? GetSecondaryDialogueText(Dialogue? dialogue, string visibleText)

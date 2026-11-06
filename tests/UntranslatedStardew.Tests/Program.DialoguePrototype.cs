@@ -28,6 +28,22 @@ public static partial class Program
         foreach (string unsafeText in new[] { "$c 1#Hello.#Bye.", "Hello.^Bye.", "Hello.||Bye.", "$action AddMoney 1", "Hello. [74]", "Hello.\\nBye." })
             Assert(Pair("Hello.", unsafeText, 0, "Hello.") == null, "Dialogue skips unsupported syntax: " + unsafeText);
 
+        MethodInfo fit = mod.GetType("UntranslatedStardew.Core.DialoguePairLayout", true)!
+            .GetMethod("Fit", BindingFlags.Static | BindingFlags.NonPublic)!;
+        (string Secondary, int PrimaryOffset, int SecondaryOffset)? Fit(int height, bool secondaryFirst)
+            => ((string, int, int)?)fit.Invoke(null, new object[] {
+                "short sentence", 8, height, 30, secondaryFirst,
+                (Func<string, float>)(line => line.Length),
+                (Func<string, float>)(text => text.Split('\n').Length * 10)
+            });
+
+        Assert(Fit(54, true) == ("short\nsentence", 24, 0),
+            "Wrapped secondary keeps both lines immediately above its primary segment");
+        Assert(Fit(54, false) == ("short\nsentence", 0, 34),
+            "SecondaryFirst flips the whole wrapped block");
+        Assert(Fit(53, true) == null,
+            "An over-height pair falls back instead of overlapping the box");
+
         var original = AccessTools.Method(typeof(DialogueBox), nameof(DialogueBox.draw), new[] { typeof(SpriteBatch) });
         var patch = mod.GetType("UntranslatedStardew.Patches.DialogueBoxPatch", true)!;
         var harmony = new Harmony("UntranslatedStardew.Tests.DialoguePrototype");

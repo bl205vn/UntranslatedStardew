@@ -4,7 +4,7 @@
   "config.show-secondary.name": "Show Secondary Name",
   "config.show-secondary.description": "Whether to display the secondary language name in item tooltips and expanded UI.",
   "config.show-secondary-dialogue.name": "Show Secondary Dialogue (Preview)",
-  "config.show-secondary-dialogue.description": "Show a smaller translation for eligible one-line NPC dialogue with a portrait. Cutscenes and long dialogue use the original display.",
+  "config.show-secondary-dialogue.description": "Show a smaller translation for eligible NPC dialogue with a portrait. Both languages can wrap when the pair fits in the box.",
   "config.secondary-first.name": "Secondary Text First",
   "config.secondary-first.description": "Display secondary names and dialogue above the primary text.",
   "config.diacritic-insensitive.name": "Diacritic-Insensitive Search",
