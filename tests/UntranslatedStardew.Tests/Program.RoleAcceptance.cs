@@ -214,6 +214,7 @@ public static partial class Program
         var fontAssets = (Dictionary<string, (string Root, string Asset)>)readerType.GetProperty("SpriteFontAssets")!.GetValue(reader)!;
         var registry = new LanguageSourceRegistry();
         registry.LoadFromAdditionalLanguages(new[] { new LanguageSourceDescriptor { LanguageCode = "vi", SourceModId = "Fixture.CustomLanguage", Strings = strings } });
+        Assert(strings.Keys.Any(key => key.StartsWith("Characters/Dialogue/Abigail:", StringComparison.Ordinal)), "Installed CP pack loads NPC dialogue XNB");
         Assert(strings.ContainsKey("Strings/StringsFromCSFiles:Wallpaper.cs.13204"), "Installed CP pack resolves actual wallpaper XNB through Target token");
         Assert(fontAssets.ContainsKey("Fonts/SmallFont") && fontAssets.ContainsKey("Fonts/SpriteFont1"), "Installed CP pack resolves both UI font paths through configured patches");
 

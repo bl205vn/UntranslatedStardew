@@ -68,6 +68,7 @@ public static partial class Program
         TestRoleFontAcceptance();
         TestStandardCustomLanguagePack();
         TestInstalledCustomLanguagePairs();
+        TestDialoguePrototype();
 
         Console.WriteLine();
         Console.WriteLine($"=== Results: {_passed} Passed, {_failed} Failed ===");

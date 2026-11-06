@@ -5,6 +5,7 @@ using HarmonyLib;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Menus;
 using UntranslatedStardew.Core;
 
 namespace UntranslatedStardew;
@@ -22,6 +23,8 @@ public sealed class ModEntry : Mod
     public BilingualFontManager? FontManager => _fontManager;
     public LanguageSourceRegistry SourceRegistry { get; } = new();
 
+    private WeakReference<DialogueBox>? _dialoguePreview;
+    private bool _dialoguePreviewSecondaryFirst;
     private Harmony? _harmony;
     private RawContentProvider? _contentProvider;
     private ItemNameResolver? _nameResolver;
@@ -92,8 +95,114 @@ public sealed class ModEntry : Mod
             OnAuditCommand
         );
 
+        helper.ConsoleCommands.Add(
+            "untranslated_dialogue_test",
+            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below]",
+            OnDialoguePreviewCommand
+        );
+
         string effectiveLang = _contentProvider?.EffectiveLanguage ?? Config.SecondaryLanguage;
         Monitor.Log(I18n.Log_ModLoaded(effectiveLang), LogLevel.Info);
+    }
+
+    private void OnDialoguePreviewCommand(string command, string[] args)
+    {
+        if (args.Length > 1 || (args.Length == 1 && args[0] is not ("above" or "below")))
+        {
+            Monitor.Log("Usage: untranslated_dialogue_test [above|below]", LogLevel.Info);
+            return;
+        }
+
+        if (!Context.CanPlayerMove || Game1.eventUp || Game1.currentMinigame != null
+            || Game1.afterDialogues != null || Game1.currentObjectDialogue.Count > 0)
+        {
+            Monitor.Log("Load a save and close any menus or dialogue before running the preview.", LogLevel.Info);
+            return;
+        }
+
+        if (!Game1.options.showPortraits || Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued"))
+        {
+            Monitor.Log("The preview needs vanilla dialogue with portraits enabled.", LogLevel.Warn);
+            return;
+        }
+
+        const string asset = "Characters/Dialogue/Evelyn";
+        const string key = "Mon";
+        NPC? evelyn = Game1.getCharacterFromName("Evelyn");
+        if (evelyn?.Portrait is not { } portrait)
+        {
+            Monitor.Log("Evelyn's portrait is unavailable in this save.", LogLevel.Warn);
+            return;
+        }
+
+        var lines = Game1.content.Load<Dictionary<string, string>>(asset);
+        if (!lines.TryGetValue(key, out string? primary) || primary == null
+            || !DialogueTranslation.TryGetPlainText(primary, out _))
+        {
+            Monitor.Log("The current content packs changed Evelyn's sample to an unsupported dialogue.", LogLevel.Warn);
+            return;
+        }
+
+        // The preview NPC has its own dialogue stack, so closing the box cannot consume Evelyn's dialogue.
+        var speaker = new NPC { Name = evelyn.Name, displayName = evelyn.displayName, Portrait = portrait, EventActor = true };
+        var box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", primary));
+        string visibleText = box.getCurrentString();
+        string? secondary = GetSecondaryDialogueText(box.characterDialogue, visibleText);
+        var font = _fontManager?.GetSecondaryFont(Game1.dialogueFont);
+        if (secondary == null || font == null || !secondary.All(font.Characters.Contains))
+        {
+            Monitor.Log("No usable secondary line for this sample. Set a different secondary language with a dialogue translation and font.", LogLevel.Warn);
+            return;
+        }
+
+        _dialoguePreview = new WeakReference<DialogueBox>(box);
+        _dialoguePreviewSecondaryFirst = args.Length == 0 ? Config.SecondaryFirst : args[0] == "above";
+        Game1.activeClickableMenu = box;
+        Game1.dialogueUp = true;
+        Game1.player.Halt();
+        Game1.player.CanMove = false;
+    }
+
+    internal bool? GetDialoguePreviewPlacement(DialogueBox box)
+        => _dialoguePreview?.TryGetTarget(out DialogueBox? preview) == true && ReferenceEquals(preview, box)
+            ? _dialoguePreviewSecondaryFirst
+            : null;
+
+    internal string? GetSecondaryDialogueText(Dialogue? dialogue, string visibleText)
+    {
+        if (dialogue?.TranslationKey is not { } translationKey || _contentProvider == null)
+            return null;
+
+        int separator = translationKey.IndexOf(':');
+        if (separator < 0)
+            return null;
+
+        string asset = translationKey[..separator].Replace('\\', '/');
+        string key = translationKey[(separator + 1)..];
+        const string dialogueRoot = "Characters/Dialogue/";
+        if (!asset.StartsWith(dialogueRoot, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        string file = asset[dialogueRoot.Length..];
+        if (string.IsNullOrWhiteSpace(file) || file is "." or ".."
+            || file.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || !_contentProvider.TryGetDialogueString(asset, key, out string? secondary))
+            return null;
+
+        try
+        {
+            // Read the authored value so localization preprocessing cannot hide unsupported syntax.
+            var primaryStrings = Game1.content.Load<System.Collections.Generic.Dictionary<string, string>>(asset);
+            if (!primaryStrings.TryGetValue(key, out string? primary) || primary == null)
+                return null;
+
+            return DialogueTranslation.GetSecondaryLine(primary, secondary!, dialogue.currentDialogueIndex,
+                visibleText, Utility.FilterUserName(Game1.player.Name));
+        }
+        catch (Microsoft.Xna.Framework.Content.ContentLoadException)
+        {
+            return null;
+        }
     }
 
     public override object? GetApi()
@@ -396,6 +505,7 @@ public sealed class ModEntry : Mod
                 Config = new ModConfig();
                 InitializeResolver();
             },
+            titleScreenOnly: false,
             save: () =>
             {
                 if (string.IsNullOrWhiteSpace(Config.SecondaryLanguage))
@@ -421,6 +531,14 @@ public sealed class ModEntry : Mod
             setValue: value => Config.ShowSecondaryInTooltip = value,
             name: I18n.Config_ShowSecondary_Name,
             tooltip: I18n.Config_ShowSecondary_Description
+        );
+
+        gmcm.AddBoolOption(
+            mod: ModManifest,
+            getValue: () => Config.ShowSecondaryInDialogue,
+            setValue: value => Config.ShowSecondaryInDialogue = value,
+            name: I18n.Config_ShowSecondaryDialogue_Name,
+            tooltip: I18n.Config_ShowSecondaryDialogue_Description
         );
 
         gmcm.AddBoolOption(

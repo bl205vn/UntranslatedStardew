@@ -132,7 +132,8 @@ internal sealed class CustomLanguagePackReader
                 continue;
             }
             if (!target.StartsWith("Strings/", StringComparison.OrdinalIgnoreCase)
-                && !target.StartsWith("Data/", StringComparison.OrdinalIgnoreCase))
+                && !target.StartsWith("Data/", StringComparison.OrdinalIgnoreCase)
+                && !target.StartsWith("Characters/Dialogue/", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             bool load = action.Equals("Load", StringComparison.OrdinalIgnoreCase);

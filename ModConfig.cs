@@ -16,6 +16,9 @@ public class ModConfig
     /// </summary>
     public bool ShowSecondaryInTooltip { get; set; } = true;
 
+    /// <summary>Enable the experimental secondary line in simple NPC dialogue.</summary>
+    public bool ShowSecondaryInDialogue { get; set; } = false;
+
     /// <summary>
     /// If true, displays the secondary name on top and primary name below.
     /// If false (default), displays primary name on top and secondary below.

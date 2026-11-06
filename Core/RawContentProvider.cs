@@ -215,6 +215,20 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         return false;
     }
 
+    internal bool TryGetDialogueString(string assetSubpath, string key, out string? value)
+    {
+        value = null;
+        if (_disposed || !IsSecondaryAvailable || string.IsNullOrEmpty(key))
+            return false;
+
+        if (_activeSource?.Strings is { } overrides
+            && overrides.TryGetValue($"{assetSubpath}:{key}", out value))
+            return !string.IsNullOrWhiteSpace(value);
+
+        return GetOrLoadDictionary(assetSubpath, EffectiveLanguage)?.TryGetValue(key, out value) == true
+            && !string.IsNullOrWhiteSpace(value);
+    }
+
     internal string? GetPatchedDisplayName(string asset, string id)
         => IsSecondaryAvailable && _activeSource?.Strings is { } strings
             && strings.TryGetValue($"{asset}/DisplayName:{id}", out var title) ? title : null;
