@@ -1,0 +1,375 @@
+{
+  "scope": "Installed Stardew Valley Windows 1.6.15; filesystem and BMFont XML metadata, not GPU rendering",
+  "audited_date": "2026-11-07",
+  "locales": [
+    {
+      "language": "en",
+      "suffix": "",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1",
+          "bytes": 12734,
+          "sha256": "51416532910d707af18a8759b9ae7c9b5a45d2d4964febf43c2dbb938298691b",
+          "localized_asset_exists": false
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont",
+          "bytes": 9514,
+          "sha256": "98bd749209104b82a9d67776df09249cee11aa355afd621b8e1db96231876c66",
+          "localized_asset_exists": false
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "es",
+      "suffix": "es-ES",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.es-ES",
+          "bytes": 12734,
+          "sha256": "51416532910d707af18a8759b9ae7c9b5a45d2d4964febf43c2dbb938298691b",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.es-ES",
+          "bytes": 9514,
+          "sha256": "98bd749209104b82a9d67776df09249cee11aa355afd621b8e1db96231876c66",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "de",
+      "suffix": "de-DE",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.de-DE",
+          "bytes": 9518,
+          "sha256": "aa56ecc5a8044f20c8403c9ccbe41f117d6d397f6623118f3bae1a7372d41323",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.de-DE",
+          "bytes": 9514,
+          "sha256": "98bd749209104b82a9d67776df09249cee11aa355afd621b8e1db96231876c66",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "fr",
+      "suffix": "fr-FR",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.fr-FR",
+          "bytes": 314691,
+          "sha256": "ec88f9168a68041a07b80ac65501a2182259f0a70884085d72b51cc201e6f15b",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.fr-FR",
+          "bytes": 161091,
+          "sha256": "c37780297b592fc5c705682ba0443e7e8ba096e59cb29103de88e2968590b04a",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "pt",
+      "suffix": "pt-BR",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.pt-BR",
+          "bytes": 8660,
+          "sha256": "7708ac4d210b2d1761321719e6ba21ce4d81e5716ad372c09e54846823e45e2f",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.pt-BR",
+          "bytes": 6792,
+          "sha256": "d0e263ea86c781521036a79a6101fed1fd28848aed9b8a0acc6a29cc30604561",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "ru",
+      "suffix": "ru-RU",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.ru-RU",
+          "bytes": 365501,
+          "sha256": "03659bfeaeba6a68a46a00e107a688f3e2712e29b00da24d50d9882e38269887",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.ru-RU",
+          "bytes": 365501,
+          "sha256": "03659bfeaeba6a68a46a00e107a688f3e2712e29b00da24d50d9882e38269887",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "ja",
+      "suffix": "ja-JP",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.ja-JP",
+          "bytes": 472862,
+          "sha256": "4a7c2975106b4300e017213a9c8a81acac945f24fc184da1384b695c737fd500",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.ja-JP",
+          "bytes": 392588,
+          "sha256": "e29470f301c67cb455dd6ccd35d99b9048636f5756d890d4c2e7fb5db57e1bf5",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "zh",
+      "suffix": "zh-CN",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.zh-CN",
+          "bytes": 1196794,
+          "sha256": "6ad3c0e380997a16b07562d3552a353e41d6a3634783144df2dfbec7b02305b9",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.zh-CN",
+          "bytes": 883026,
+          "sha256": "9f48440d97792ade6e74ade4139e9d3486d308fb4b9402a09ce17f9122533706",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "ko",
+      "suffix": "ko-KR",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.ko-KR",
+          "bytes": 295334,
+          "sha256": "42eeacba3ab2a3617cb557c3a43df6768113cd54ceaffdffd7445a95413dabc7",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.ko-KR",
+          "bytes": 225464,
+          "sha256": "f2708ff29b06b370b7fedc836610e7df6e1d091ce5eb6c5bbe55d086a632886f",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "it",
+      "suffix": "it-IT",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1",
+          "bytes": 12734,
+          "sha256": "51416532910d707af18a8759b9ae7c9b5a45d2d4964febf43c2dbb938298691b",
+          "localized_asset_exists": false
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont",
+          "bytes": 9514,
+          "sha256": "98bd749209104b82a9d67776df09249cee11aa355afd621b8e1db96231876c66",
+          "localized_asset_exists": false
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "tr",
+      "suffix": "tr-TR",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.tr-TR",
+          "bytes": 316739,
+          "sha256": "86104e03130490c7e7201843bf761d2e97b018b1c13a05016e813d0ca10d3a1a",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.tr-TR",
+          "bytes": 163139,
+          "sha256": "51a557d8b550e48837daf46e3f1c0d19774fcb605f4e912c86b550e6997e0586",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    },
+    {
+      "language": "hu",
+      "suffix": "hu-HU",
+      "ui": {
+        "SpriteFont1": {
+          "asset": "Fonts/SpriteFont1.hu-HU",
+          "bytes": 32368,
+          "sha256": "f3d2adff1cd41cfd1e8901f0655dd2c8da134fbb5103a0994bc37357bf9cccf9",
+          "localized_asset_exists": true
+        },
+        "SmallFont": {
+          "asset": "Fonts/SmallFont.hu-HU",
+          "bytes": 22916,
+          "sha256": "360c8f15293c80848d76df093a836051187497aa4876e9c7049403f0bda33cf9",
+          "localized_asset_exists": true
+        },
+        "tinyFont": {
+          "asset": "Fonts/tinyFont",
+          "bytes": 19514,
+          "sha256": "9992558a31c916ffb3dc851a6515455c8419b04b340b2654f5a40603024b6879",
+          "localized_asset_exists": false
+        }
+      }
+    }
+  ],
+  "bitmap_fonts": [
+    {
+      "asset": "Fonts/Chinese",
+      "face": "Noto Sans CJK SC Bold",
+      "size": 32,
+      "line_height": 33,
+      "pages": 4,
+      "glyphs": 6985
+    },
+    {
+      "asset": "Fonts/Japanese",
+      "face": "SetoFont-SP",
+      "size": 24,
+      "line_height": 24,
+      "pages": 2,
+      "glyphs": 2514
+    },
+    {
+      "asset": "Fonts/Korean",
+      "face": "Sandoll MiSaeng",
+      "size": 48,
+      "line_height": 49,
+      "pages": 12,
+      "glyphs": 11386
+    },
+    {
+      "asset": "Fonts/Russian",
+      "face": "BasicSmaller4Ext",
+      "size": 15,
+      "line_height": 15,
+      "pages": 1,
+      "glyphs": 450
+    },
+    {
+      "asset": "Fonts/Chinese_round/Chinese",
+      "face": "荆南麦圆体",
+      "size": 42,
+      "line_height": 54,
+      "pages": 1,
+      "glyphs": 8394
+    }
+  ],
+  "vietnamese_pack": {
+    "pack": "Kou.ViethoaSV",
+    "version": "1.6.1",
+    "config": {
+      "Font1": "NewFont",
+      "Font2": "Style1",
+      "DeactiveFonts": "false",
+      "ChangeUI": "false",
+      "ChangeBuildings": "false",
+      "ChangeIndoor": "false",
+      "ChangeFestival": "false",
+      "StartupChoice": "false",
+      "StartupMoney": "50"
+    },
+    "ui_files": [
+      {
+        "path": "assets/Content/Fonts/SmallFont_vi1.xnb",
+        "bytes": 246401,
+        "sha256": "3f01cc7e8bb80d97d6ce6c478e442ec4243da824a05acbd03183c3e9329e1b3b"
+      },
+      {
+        "path": "assets/Content/Fonts/SpriteFont1_vi1.xnb",
+        "bytes": 569985,
+        "sha256": "6b90a95fbaac4cbca42eb210c3c58647d7f99cb5f6f32003c70c0d5815c150fd"
+      }
+    ],
+    "bitmap": {
+      "asset": "Fonts/NewFont",
+      "face": "StardewValley_K",
+      "size": 48,
+      "line_height": 48,
+      "pages": 1
+    }
+  },
+  "limitations": [
+    "XNB original TTF family names are not inferred from paths or hashes.",
+    "Thai has code branches but no selectable vanilla menu entry or installed Thai font asset found.",
+    "UI font files may be overridden at runtime by other mods."
+  ]
+}

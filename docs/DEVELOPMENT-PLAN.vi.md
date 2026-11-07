@@ -126,3 +126,9 @@ Mỗi lần hoàn thành mốc, cập nhật bảng tiến độ, bằng chứng
 - Đã kiểm tra hồi quy: identity khác nhưng cùng chữ không ghép; nguồn chia sẻ/mơ hồ; nguồn không hỗ trợ; invalidation; page count; xuống dòng; giới tính; template, item/command; chữ chính bị sửa; trang trống; chữ ký Harmony thật. **1015/1015 đạt**, build thành công.
 - Antigravity rà soát thiết kế; các rủi ro template, chuỗi chia sẻ, click chỉ reveal và hình học được đối chiếu với code. Chưa nghiệm thu thị giác đường khung mới. Event/câu hỏi địa điểm/shop, chuỗi format/thao tác nối làm mất instance nguồn và `DialogueBox(List<string>)` vẫn chưa có adapter.
 - **Phiếu nghiệm thu gộp M2:** trong một lượt chơi bình thường, kiểm tra hộp thông tin không chân dung (ưu tiên câu trong rạp phim vừa báo), chuyển tới trang sau nếu có và đóng khung. Quan sát hai ngôn ngữ, khung chứa đủ chữ và việc tiếp/thoát vẫn đúng. Không yêu cầu chạy lại log PASS từng token hoặc dựng lại ảnh mẫu câu hỏi cũ. Chỉ thực hiện khi nghiệm thu bản giao diện này; không phải điều kiện để chuẩn bị phần event độc lập.
+
+## Khảo sát font sau preview 21
+
+- Người dùng gửi ảnh ba hộp thoại trong rạp ở cả chiều Việt–Anh và Anh–Việt: đã thấy bản phụ và khung chứa chữ. Đây là nghiệm thu thị giác các ca đã gửi, không phải toàn bộ event/GUI.
+- Đã hoàn tất [bảng font theo locale/vai trò](FONT-MATRIX-1.6.15.vi.md) và inventory asset. M11 có thêm căn cứ về SpriteText/font_bold/BMFont, SpriteFont1, SmallFont, tinyFont, Nga alternate, Trung smooth và pack Việt Font1/Font2.
+- Khoảng trống fidelity: dòng phụ hội thoại hiện ưu tiên SpriteFont1 ở scale 0.75 thay vì renderer native SpriteText của locale phụ. Cần dùng bảng vai trò làm căn cứ trước khi thay renderer; chưa đổi font trong lượt nghiên cứu. Không yêu cầu người dùng chạy lại toàn bộ ca cũ.

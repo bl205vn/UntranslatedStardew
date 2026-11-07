@@ -1,5 +1,7 @@
 # Font theo vai trò và nguồn ngôn ngữ — 1.3.0
 
+Bản khảo sát mới cho hội thoại và toàn bộ ngôn ngữ: [Bảng font 1.6.15](FONT-MATRIX-1.6.15.vi.md). Phạm vi và một số mô tả dưới đây thuộc mốc 1.3.0.
+
 Phạm vi: tên item, tooltip kỹ năng/nghề và menu chọn nghề cấp 5/10, Vật phẩm & Quyền hạn, tên trong Bộ sưu tập (gồm tiêu đề thư/mật thư). Không bổ sung hội thoại song ngữ, ruby text hay ô tìm kiếm.
 
 ## Hai vai trò font
