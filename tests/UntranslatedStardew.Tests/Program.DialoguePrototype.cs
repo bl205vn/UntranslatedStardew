@@ -15,8 +15,8 @@ public static partial class Program
         MethodInfo pair = mod.GetType("UntranslatedStardew.Core.DialogueTranslation", true)!
             .GetMethod("GetSecondaryLine", BindingFlags.Static | BindingFlags.NonPublic)!;
 
-        string? Pair(string primary, string secondary, int index, string visible, Gender gender = Gender.Male, uint daysPlayed = 0)
-            => (string?)pair.Invoke(null, new object[] { primary, secondary, index, visible, "Alex", gender, daysPlayed });
+        string? Pair(string primary, string secondary, int index, string visible, Gender gender = Gender.Male, uint daysPlayed = 0, Func<string, bool>? answered = null)
+            => (string?)pair.Invoke(null, new object?[] { primary, secondary, index, visible, "Alex", gender, daysPlayed, answered });
 
         Assert(Pair("Hello, @$h#$b#Goodbye.", "Chào @.$1#$b#Tạm biệt.", 0, "Hello, Alex") == "Chào Alex.",
             "Dialogue pairs a player-name token and portrait suffix without executing commands");
@@ -79,6 +79,22 @@ public static partial class Program
             && Pair("$query TRUE#Hello.|Goodbye.", "$query TRUE#Chào.|$action AddMoney 1", 0, "Hello.") == null
             && Pair("$d kent#Hello.|Goodbye.", "$query TRUE#Chào.|Tạm biệt.", 0, "Hello.") == null,
             "Query ambiguity, unsafe inactive branches and different condition types fall back");
+
+        Assert(Pair("$p AnswerA AnswerB#Hello, @.$h|Goodbye.", "$p AnswerA AnswerB#Chào @.$1|Tạm biệt.", 0,
+                "Hello, Alex.") == "Chào Alex."
+            && Pair("First.||$p AnswerA#Hello.|Goodbye.", "Đầu.||$p AnswerA#Chào.|Tạm biệt.", 0,
+                "Goodbye.", daysPlayed: 7) == "Tạm biệt.",
+            "Response prerequisites preserve IDs, player names, portraits and weekly selection");
+        Assert(Pair("$p AnswerA#Hello.|Goodbye.", "$p AnswerA#${^}$|Tạm biệt.", 0, "Hello.") == null
+            && Pair("$p AnswerA#Hello.|Hello.", "$p AnswerA#${^}$|Tạm biệt.", 0, "Hello.") == null
+            && Pair("$p AnswerA#Hello.|Goodbye.#$b#More.", "$p AnswerA#Chào.|Tạm biệt.#$b#Nữa.", 0, "Hello.") == null,
+            "Blank responses and unsupported prerequisite page structures fall back");
+
+        Assert(Pair("$p AnswerA#Hello.|Hello.", "$p AnswerA#Đã chọn.|Chưa chọn.", 0, "Hello.", answered: id => id == "AnswerA") == "Đã chọn."
+            && Pair("$p AnswerA AnswerB#Hello.|Goodbye.", "$p AnswerA AnswerB#Chào.|Tạm biệt.", 0, "Hello.", answered: id => id == "AnswerB") == "Chào."
+            && Pair("$p AnswerA#Hello.|Hello.", "$p AnswerA#Đã chọn.|Chưa chọn.", 0, "Hello.", answered: _ => false) == "Chưa chọn."
+            && Pair("$p AnswerA#Hello.|Goodbye.", "$p AnswerA#Chào.|Tạm biệt.", 0, "Goodbye.", answered: _ => true) == null,
+            "Previous-response history resolves identical primary branches and must agree with live text");
 
         MethodInfo match = pair.DeclaringType!.GetMethod("MatchBlocks", BindingFlags.Static | BindingFlags.NonPublic)!;
         string[][] variants = { new[] { "Oh my!", "What a lovely day." }, new[] { "Ôi chao!", "Một ngày đẹp trời." } };
@@ -167,6 +183,7 @@ public static partial class Program
         var groups = new[] { "branch", "pairs", "fallback", "layout" }.Select(group => Run(group)!).ToArray();
         Assert(groups.All(group => group.Length > 0 && group.All(check => check.Passed))
             && Run("state") is { Length: 4 } stateChecks && stateChecks.All(check => check.Passed)
+            && Run("response") is { Length: 5 } responseChecks && responseChecks.All(check => check.Passed)
             && Run("all")!.SequenceEqual(groups.SelectMany(group => group)) && Run("invalid") == null,
             "Console dialogue checks run individually and aggregate the same passing results");
 

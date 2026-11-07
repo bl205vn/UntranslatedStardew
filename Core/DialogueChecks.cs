@@ -8,13 +8,14 @@ internal static class DialogueChecks
     internal static (string Name, bool Passed)[]? Run(string group)
         => group switch
         {
-            "branch" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).ToArray(),
+            "branch" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckResponses()).ToArray(),
             "state" => CheckWorldState(),
             "query" => CheckQueries(),
+            "response" => CheckResponses(),
             "pairs" => CheckPairs(),
             "fallback" => CheckFallback(),
             "layout" => CheckLayout(),
-            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).ToArray(),
+            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckResponses()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).ToArray(),
             _ => null
         };
 
@@ -79,6 +80,34 @@ internal static class DialogueChecks
                 Resolve("$query TRUE#Hello.|Hello.", "$query TRUE#Chào.|Xin chào.", "Hello.") == null
                 && !DialogueTranslation.IsSafePreview("$query CUSTOM#Hello.|Goodbye.")
                 && DialogueTranslation.IsSafePreview(primary))
+        };
+    }
+
+    private static (string, bool)[] CheckResponses()
+    {
+        const string primary = "$p AnswerA#You agreed.|You refused.";
+        const string secondary = "$p AnswerA#Bạn đồng ý.|Bạn từ chối.";
+        return new[]
+        {
+            ("Previous-response branches follow the live primary outcome",
+                Resolve(primary, secondary, "You agreed.") == "Bạn đồng ý."
+                && Resolve(primary, secondary, "You refused.") == "Bạn từ chối."),
+            ("Response IDs and condition types must match",
+                Resolve(primary, secondary.Replace("AnswerA", "answera"), "You agreed.") == null
+                && Resolve(primary, secondary.Replace("AnswerA", "AnswerB"), "You agreed.") == null
+                && Resolve(primary, "$query TRUE#Bạn đồng ý.|Bạn từ chối.", "You agreed.") == null),
+            ("Ambiguous previous-response text falls back",
+                Resolve("$p AnswerA#Hello.|Hello.", "$p AnswerA#Chào.|Xin chào.", "Hello.") == null
+                && Resolve("$p AnswerA#Hello.|Hello.", "$p AnswerA#Chào.|Chào.", "Hello.") == "Chào."),
+            ("Previous answers disambiguate identical primary text",
+                DialogueTranslation.GetSecondaryLine("$p AnswerA#Hello.|Hello.", "$p AnswerA#Đã chọn.|Chưa chọn.",
+                    0, "Hello.", "Alex", Gender.Male, 0, id => id == "AnswerA") == "Đã chọn."
+                && DialogueTranslation.GetSecondaryLine("$p AnswerA#Hello.|Hello.", "$p AnswerA#Đã chọn.|Chưa chọn.",
+                    0, "Hello.", "Alex", Gender.Male, 0, _ => false) == "Chưa chọn."),
+            ("Response preview rejects extra pages and actions",
+                DialogueTranslation.IsSafePreview(primary)
+                && !DialogueTranslation.IsSafePreview("$p AnswerA#Hello.|Goodbye.#$b#Another page.")
+                && !DialogueTranslation.IsSafePreview("$p AnswerA#Hello.|$action AddMoney 1"))
         };
     }
 

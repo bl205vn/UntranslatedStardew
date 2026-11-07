@@ -7,7 +7,7 @@ namespace UntranslatedStardew.Core;
 internal static class DialogueTranslation
 {
     internal static string? GetSecondaryLine(
-        string primary, string secondary, int index, string visibleText, string playerName, Gender gender, uint daysPlayed)
+        string primary, string secondary, int index, string visibleText, string playerName, Gender gender, uint daysPlayed, Func<string, bool>? answered = null)
     {
         string[] primaryWeeks = primary.Split("||");
         string[] secondaryWeeks = secondary.Split("||");
@@ -25,6 +25,14 @@ internal static class DialogueTranslation
                 || !TryGetConditionalBranches(sub, out string subCondition, out secondaryBranches)
                 || mainCondition != subCondition)
                 return null;
+
+            if (answered != null && mainCondition.StartsWith("$p:", StringComparison.Ordinal))
+            {
+                string[] ids = ArgUtility.SplitBySpace(mainCondition[3..]);
+                int selected = ids.Any(answered) ? 0 : 1;
+                primaryBranches = new[] { primaryBranches[selected] };
+                secondaryBranches = new[] { secondaryBranches[selected] };
+            }
         }
 
         bool found = false;
@@ -67,7 +75,8 @@ internal static class DialogueTranslation
     }
 
     private static bool IsConditional(string text)
-        => text.StartsWith("$d", StringComparison.Ordinal) || text.StartsWith("$query", StringComparison.Ordinal);
+        => text.StartsWith("$d", StringComparison.Ordinal) || text.StartsWith("$query", StringComparison.Ordinal)
+            || text.StartsWith("$p", StringComparison.Ordinal);
 
     private static bool TryGetConditionalBranches(string text, out string condition, out string[] branches)
     {
@@ -79,7 +88,17 @@ internal static class DialogueTranslation
 
         string headerText = text[..delimiter];
         bool query = headerText.StartsWith("$query ", StringComparison.Ordinal);
-        if (query)
+        bool response = headerText.StartsWith("$p ", StringComparison.Ordinal);
+        if (response)
+        {
+            string arguments = headerText[3..].Trim();
+            if (arguments.Length == 0 || arguments.Any(char.IsControl)
+                || arguments.IndexOfAny(new[] { '#', '|', '$', '[', ']', '{', '}' }) >= 0)
+                return false;
+
+            condition = "$p:" + arguments;
+        }
+        else if (query)
         {
             string expression = headerText[7..].Trim();
             if (expression.Length == 0 || expression.Any(char.IsControl) || expression.Contains('|'))
@@ -101,7 +120,12 @@ internal static class DialogueTranslation
             condition = "$d:" + state;
         }
 
-        branches = text[(delimiter + 1)..].Split('|');
+        string body = text[(delimiter + 1)..];
+        // $p rewrites only the next #-delimited field. Multi-page forms need a separate adapter.
+        if (response && body.Contains('#'))
+            return false;
+
+        branches = body.Split('|');
         if (query && branches.Length == 1)
             branches = new[] { branches[0], branches[0] };
         return branches.Length == 2

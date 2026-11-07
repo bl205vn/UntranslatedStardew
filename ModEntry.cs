@@ -104,7 +104,7 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_check",
-            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|state|query|pairs|fallback|layout|all]",
+            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|state|query|response|pairs|fallback|layout|all]",
             OnDialogueCheckCommand
         );
 
@@ -118,7 +118,7 @@ public sealed class ModEntry : Mod
         var checks = args.Length <= 1 ? DialogueChecks.Run(group) : null;
         if (checks == null)
         {
-            Monitor.Log("Usage: untranslated_dialogue_check [branch|state|query|pairs|fallback|layout|all]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_check [branch|state|query|response|pairs|fallback|layout|all]", LogLevel.Info);
             return;
         }
 
@@ -347,7 +347,8 @@ public sealed class ModEntry : Mod
                 return null;
 
             return DialogueTranslation.GetSecondaryLine(primary, secondary!, dialogue.currentDialogueIndex,
-                visibleText, Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed);
+                visibleText, Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed,
+                dialogue.farmer.DialogueQuestionsAnswered.Contains);
         }
         catch (Microsoft.Xna.Framework.Content.ContentLoadException)
         {
