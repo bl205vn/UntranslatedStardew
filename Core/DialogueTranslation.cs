@@ -18,7 +18,8 @@ internal static class DialogueTranslation
         "Strings/StringsFromMaps",
         "Strings/SimpleNonVillagerDialogues",
         "Strings/animationDescriptions",
-        "Strings/SpeechBubbles"
+        "Strings/SpeechBubbles",
+        "Strings/Movies"
     };
 
     private static readonly string[] SupportedDialoguePrefixes =

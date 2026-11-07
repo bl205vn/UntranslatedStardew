@@ -2,7 +2,7 @@
 
 Kế hoạch làm việc và nghiệm thu: [Kế hoạch phát triển](DEVELOPMENT-PLAN.vi.md).
 
-Mốc: dialogue preview 25, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Mốc: dialogue preview 26, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
 
 **Quyết định hiện tại (preview 24):** hiển thị theo hai khối nguyên trang, bỏ xen từng hàng của preview 22/23. Toàn bộ bản phụ đợi chữ chính hiện xong; `SecondaryFirst` chỉ đổi vị trí trên/dưới của nguyên khối. Font native nhỏ 75% và các sửa `$e` vẫn giữ. Các mục preview 22/23 bên dưới là lịch sử, không mô tả bố cục đang dùng.
 
@@ -87,3 +87,15 @@ Chiều cao gồm toàn bộ hai khối cùng khoảng cách cho ascender native
 Đã kiểm tra constructor → câu hỏi → `chooseResponse` → hai trang phản hồi → copy trên đối tượng headless có Harmony thật; source/null copy cũng được giữ trong nhóm coverage hiện có. Fixture chặn friendship boundary và khôi phục trạng thái static, không thao tác save. Kiểm tra toàn bộ 1114/1114; chưa xác nhận render trong game của reaction mới.
 
 RawContentProvider chỉ phát lại cảnh báo cùng locale/lý do sau khi nguồn từng phục hồi rồi lại mất; registry refresh lặp không tạo lại cùng cảnh báo. Lỗi thiếu nguồn thật vẫn hiển thị và giữ primary-only. Cơ chế không sửa hay bỏ qua đăng ký nguồn.
+
+## Preview 26: poster phim từ action có nguồn
+
+MoviePosterPatch bắt đúng MovieData trong action Theater_Poster/ComingSoon, rồi xác thực list trang hiện có trước khi gắn MoviePosterAdapter vào ObjectDialoguePatch. Phim đang chiếu có trang tên và trang mô tả; poster sắp chiếu có một trang tên. Bộ phim vẫn do vanilla chọn từ ngày/tiến độ của game; adapter không gọi lại GetMovieForDate hoặc đổi locale. Giải bản phụ bằng strict locale lookup từ Strings/Movies, template Strings/Locations và metadata Title/Description của custom pack theo ID phim. Không chạy token động của bản phụ hoặc chạy lại token ngẫu nhiên chính. Khi không đủ nguồn/format/metrics thì fallback.
+
+Metadata hỗ trợ chiếu Entries/Fields riêng cho Data/Movies; đây không phải bộ thực thi Content Patcher đầy đủ hay loader cho mọi dữ liệu typed. List trang chỉ được attach trong scope poster có MovieData và primary đã đối chiếu; không mở nhận diện tùy ý mọi DialogueBox(List<string>). Finalizer phục hồi scope khi exception/nested action. Giữ block layout, font native75%, SecondaryFirst và cơ chế chuyển/hiện chữ của vanilla.
+
+SecondarySourceDiagnostics hoãn warning nguồn custom trong giai đoạn khởi động đến sau quét nguồn. Nguồn usable sau quét hủy cảnh báo tạm; lỗi còn tồn tại vẫn báo, nguồn mất sau đó vẫn dùng cảnh báo vòng đời provider. Không che lỗi thật hoặc tự gắn update key.
+
+Ảnh preview 25 xác nhận phản hồi Alex cả hai trang đã song ngữ. Hiển thị poster preview 26 và log khởi động mới chưa nghiệm thu trực tiếp trong game.
+
+Kiểm tra preview 26: build thành công, lượt cuối 1162/1162 đạt; có ca lấy dữ liệu phim thật và pack Việt hóa. Một lần harness có lỗi CLR/MonoMod khi cài Harmony; cùng DLL chạy lại bình thường đạt toàn bộ. Đây chưa phải bằng chứng renderer hoặc khởi động SMAPI trong game.

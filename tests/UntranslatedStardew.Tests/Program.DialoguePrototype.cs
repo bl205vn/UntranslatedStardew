@@ -16,6 +16,7 @@ public static partial class Program
         TestDialogueReportedCases();
         TestDialogueProgress();
         TestObjectDialogue();
+        TestMoviePosterDialogue();
         TestNativeDialogueFont();
         TestBlockDialogue();
         Assembly mod = typeof(RawContentProvider).Assembly;
@@ -278,7 +279,8 @@ public static partial class Program
                 && ParseSource(@"Strings\StringsFromMaps:BusStop_Desert") == ("Strings/StringsFromMaps", "BusStop_Desert")
                 && ParseSource(@"Strings\SimpleNonVillagerDialogues:Derp") == ("Strings/SimpleNonVillagerDialogues", "Derp")
                 && ParseSource(@"Strings\animationDescriptions:abigail_videogames") == ("Strings/animationDescriptions", "abigail_videogames")
-                && ParseSource(@"Strings\SpeechBubbles:Abigail_Greeting") == ("Strings/SpeechBubbles", "Abigail_Greeting"),
+                && ParseSource(@"Strings\SpeechBubbles:Abigail_Greeting") == ("Strings/SpeechBubbles", "Abigail_Greeting")
+                && ParseSource(@"Strings\Movies:BraveLittleSapling_Title") == ("Strings/Movies", "BraveLittleSapling_Title"),
                 "Dialogue source parser accepts and normalizes supported vanilla dictionary dialogue assets");
             foreach (string rejected in new[]
             {

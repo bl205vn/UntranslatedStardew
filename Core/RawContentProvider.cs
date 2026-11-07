@@ -237,6 +237,14 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
         => IsSecondaryAvailable && _activeSource?.Strings is { } strings
             && strings.TryGetValue($"{asset}/DisplayName:{id}", out var title) ? title : null;
 
+    internal string? GetPatchedMovieTitle(string movieId)
+        => IsSecondaryAvailable && _activeSource?.Strings is { } strings
+            && strings.TryGetValue($"Data/Movies/Title:{movieId}", out var title) ? title : null;
+
+    internal string? GetPatchedMovieDescription(string movieId)
+        => IsSecondaryAvailable && _activeSource?.Strings is { } strings
+            && strings.TryGetValue($"Data/Movies/Description:{movieId}", out var desc) ? desc : null;
+
     public string? GetString(string assetSubpath, string key)
     {
         TryGetString(assetSubpath, key, out string? value);

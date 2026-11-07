@@ -218,6 +218,17 @@ public static partial class Program
         Assert(strings.ContainsKey("Strings/StringsFromCSFiles:Wallpaper.cs.13204"), "Installed CP pack resolves actual wallpaper XNB through Target token");
         Assert(fontAssets.ContainsKey("Fonts/SmallFont") && fontAssets.ContainsKey("Fonts/SpriteFont1"), "Installed CP pack resolves both UI font paths through configured patches");
 
+        using (var movieContent = new LocalizedContentManager(services, content))
+        using (var movieSecondary = new RawContentProvider(() => services, content, "vi", sourceRegistry: registry))
+        {
+            var movies = movieContent.Load<List<StardewValley.GameData.Movies.MovieData>>("Data/Movies");
+            var movie = movies.Single(item => item.Id == "spring_movie_0");
+            var poster = MoviePosterAdapter.GetMoviePosterPages(movie, false, movieSecondary, movieContent);
+            Assert(poster is { Length: 2 } && poster[0].Primary.Contains("The Brave Little Sapling")
+                && poster[0].Primary != poster[0].Secondary && poster[1].Primary != poster[1].Secondary,
+                "Installed Vietnamese pack pairs both poster pages for the real spring_movie_0 movie record");
+        }
+
         foreach (var (primary, secondary) in new[] { ("en", "vi"), ("vi", "en"), ("zh", "vi"), ("vi", "zh") })
         {
             using var primaryData = new RawContentProvider(() => services, content, primary, sourceRegistry: registry);

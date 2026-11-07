@@ -26,6 +26,15 @@ internal static class ObjectDialoguePatch
     }
     private static readonly ConditionalWeakTable<DialogueBox, State> States = new();
 
+    internal static bool Attach(DialogueBox box, DialogueTextPair[] pages)
+    {
+        if (box == null || pages == null || pages.Length == 0) return false;
+        States.Remove(box);
+        States.Add(box, new(pages));
+        Refresh(box);
+        return true;
+    }
+
     private static IEnumerable<MethodBase> TargetMethods() => new MethodBase[]
     {
         AccessTools.Constructor(typeof(DialogueBox), new[] { typeof(string) }),

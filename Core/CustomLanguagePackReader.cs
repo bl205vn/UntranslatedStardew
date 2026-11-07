@@ -183,10 +183,32 @@ internal sealed class CustomLanguagePackReader
             if (key == null)
                 continue;
             bool structured = entry.Value is JsonObject;
+            if (structured && target.Equals("Data/Movies", StringComparison.OrdinalIgnoreCase))
+            {
+                var obj = (JsonObject)entry.Value!;
+                foreach (string fieldName in new[] { "Title", "Description" })
+                {
+                    var field = obj.FirstOrDefault(item => item.Key.Equals(fieldName, StringComparison.OrdinalIgnoreCase));
+                    if (field.Key == null) continue; // absent field preserves an earlier partial edit
+                    string movieKey = $"{target}/{fieldName}:{key}";
+                    if (field.Value == null) _strings.Remove(movieKey);
+                    else if (field.Value is JsonValue value && value.TryGetValue<string>(out string? rawMovie)
+                        && Expand(rawMovie, root, id) is string expanded)
+                        _strings[movieKey] = expanded;
+                }
+                continue;
+            }
             JsonNode? token = structured ? ((JsonObject)entry.Value!).FirstOrDefault(field => field.Key.Equals("DisplayName", StringComparison.OrdinalIgnoreCase)).Value : entry.Value;
             string storageKey = structured ? $"{target}/DisplayName:{key}" : $"{target}:{key}";
             if (token == null && !structured)
+            {
                 _strings.Remove(storageKey);
+                if (target.Equals("Data/Movies", StringComparison.OrdinalIgnoreCase))
+                {
+                    _strings.Remove($"{target}/Title:{key}");
+                    _strings.Remove($"{target}/Description:{key}");
+                }
+            }
             else if (token is JsonValue field && field.TryGetValue<string>(out string? raw) && Expand(raw, root, id) is string value)
                 _strings[storageKey] = value;
         }

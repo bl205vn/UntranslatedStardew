@@ -70,6 +70,7 @@ public static partial class Program
         TestInstalledCustomLanguagePairs();
         TestDialoguePrototype();
         TestProviderWarningLifecycle();
+        TestStartupSourceDiagnostics();
 
         Console.WriteLine();
         Console.WriteLine($"=== Results: {_passed} Passed, {_failed} Failed ===");
