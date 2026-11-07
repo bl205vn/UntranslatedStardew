@@ -22,7 +22,7 @@ internal static class DialogueBoxPatch
         if (calls.Length != 4)
             return code;
 
-        foreach (CodeInstruction bodyCall in calls.Skip(2))
+        foreach (CodeInstruction bodyCall in calls)
         {
             var loadBox = new CodeInstruction(OpCodes.Ldarg_0);
             loadBox.labels.AddRange(bodyCall.labels);
@@ -38,6 +38,9 @@ internal static class DialogueBoxPatch
         float alpha, float depth, bool junimo, int background, string placeholder, Color? color,
         SpriteText.ScrollTextAlignment alignment, DialogueBox box)
     {
+        if (DialogueQuestionPatch.TryDraw(batch, text, x, y, position, alpha, depth, box))
+            return;
+
         ModEntry? mod = ModEntry.Instance;
         var preview = mod?.GetDialoguePreview(box);
         if (mod != null && (preview.HasValue || mod.Config.ShowSecondaryInDialogue)

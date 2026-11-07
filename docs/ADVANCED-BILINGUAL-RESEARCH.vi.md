@@ -1,5 +1,7 @@
 # Nghiên cứu mở rộng song ngữ — chưa triển khai
 
+Trạng thái code mới nhất: [Theo dõi triển khai hội thoại](DIALOGUE-IMPLEMENTATION.vi.md). Các mô tả “chưa triển khai” dưới đây thuộc thời điểm khảo sát.
+
 Ngày: 05/11/2026. Codex tổng hợp ba khảo sát AGY chỉ đọc chạy song song, rồi đối chiếu các điểm quan trọng với mã nguồn cục bộ. Phần sửa font của phiên bản hiện tại là công việc triển khai riêng. Tài liệu này không cấp phép triển khai hội thoại, ruby hay song ngữ toàn game.
 
 ## 1. Kết luận thiết kế

@@ -12,10 +12,11 @@ internal static class DialogueChecks
             "state" => CheckWorldState(),
             "query" => CheckQueries(),
             "response" => CheckResponses(),
+            "question" => CheckQuestions(),
             "pairs" => CheckPairs(),
             "fallback" => CheckFallback(),
             "layout" => CheckLayout(),
-            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckResponses()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).ToArray(),
+            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckResponses()).Concat(CheckQuestions()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).ToArray(),
             _ => null
         };
 
@@ -108,6 +109,55 @@ internal static class DialogueChecks
                 DialogueTranslation.IsSafePreview(primary)
                 && !DialogueTranslation.IsSafePreview("$p AnswerA#Hello.|Goodbye.#$b#Another page.")
                 && !DialogueTranslation.IsSafePreview("$p AnswerA#Hello.|$action AddMoney 1"))
+        };
+    }
+
+    private static (string, bool)[] CheckQuestions()
+    {
+        const string main = "$q -1 null#Hello @!#$r Yes 0 accept#Yes please.#$r No -10 refuse#No thanks.";
+        const string sub = "$q -1 null#Chào @!#$r Yes 0 accept#Vâng ạ.#$r No -10 refuse#Không cảm ơn.";
+        var answers = new[] { ("accept", "Yes please."), ("refuse", "No thanks.") };
+        DialogueQuestionTranslation.Question? Match(string p, string s, (string, string)[]? r = null)
+            => DialogueQuestionTranslation.Match(p, s, "Hello Alex!", r ?? answers, "Alex", Gender.Male, 0);
+        var matched = Match(main, sub);
+        var pairs = new[] { new DialogueTextPair("Prompt", "Câu hỏi"), new DialogueTextPair("Yes", "Một câu trả lời dài cần xuống dòng") };
+        Dictionary<string, DialogueQuestionLayout.Row>? Fit(int height, bool above = true)
+            => DialogueQuestionLayout.Fit(pairs, 80, height, above, _ => 20, text => text.Length * 5, text => (1 + text.Count(c => c == '\n')) * 12);
+        return new[]
+        {
+            ("Question prompt and answers pair by reaction key and live order",
+                matched?.Prompt.Secondary == "Chào Alex!" && matched.Answers[1].Secondary == "Không cảm ơn."
+                && Match("Introduction.#" + main, "Mở đầu.#" + sub) != null
+                && Match(main, sub, new[] { answers[1], answers[0] }) == null),
+            ("Question IDs, friendship and reaction headers must agree",
+                Match(main, sub.Replace("No -10", "No 0")) == null
+                && Match(main, sub.Replace("accept", "wrong")) == null
+                && Match(main, sub.Replace("$q -1", "$q Other")) == null),
+            ("Shared remembered answer IDs still pair through distinct reaction keys",
+                Match(main.Replace("$r No", "$r Yes"), sub.Replace("$r No", "$r Yes")) != null),
+            ("Question weekly variants must have matching structure",
+                Match(main + "||" + main, sub) == null
+                && DialogueQuestionTranslation.Match(main + "||" + main.Replace("Hello @!", "Goodbye @!"),
+                    sub + "||" + sub.Replace("Chào @!", "Tạm biệt @!"), "Goodbye Alex!", answers,
+                    "Alex", Gender.Female, 7)?.Prompt.Secondary == "Tạm biệt Alex!"),
+            ("Question actions, extra pages and duplicate reaction keys fall back",
+                Match(main, sub.Replace("Vâng ạ.", "%item object 74 1 %%")) == null
+                && Match(main, sub + "#$b#More.") == null
+                && Match(main.Replace("refuse", "accept"), sub.Replace("refuse", "accept")) == null),
+            ("A wrapped question uses one height for both lines and flips their offsets",
+                Fit(300) is { } above && Fit(300, false) is { } below
+                && above["Yes"].Pair.Secondary.Contains('\n')
+                && above["Yes"].Height == below["Yes"].Height
+                && above["Yes"].Pair.PrimaryOffset > above["Yes"].Pair.SecondaryOffset
+                && below["Yes"].Pair.PrimaryOffset < below["Yes"].Pair.SecondaryOffset),
+            ("Identical translations occupy a single row without duplicate text",
+                DialogueQuestionLayout.Fit(new[] { new DialogueTextPair("Same", "Same"),
+                    new DialogueTextPair("Other", "Other") }, 200, 100, true, _ => 20, text => text.Length * 5, _ => 12)
+                    is { } single && single["Same"].Height == 20 && single["Same"].Pair.Secondary == ""),
+            ("Oversized questions and conflicting identical labels fall back as a whole",
+                Fit(100) == null && DialogueQuestionLayout.Fit(new[] {
+                    new DialogueTextPair("Same", "First"), new DialogueTextPair("Same", "Other") },
+                    200, 200, true, _ => 20, text => text.Length * 5, _ => 12) == null)
         };
     }
 

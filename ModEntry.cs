@@ -98,13 +98,13 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_test",
-            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|state|query|key <NPC> <key>]",
+            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|state|query|question|key <NPC> <key>]",
             OnDialoguePreviewCommand
         );
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_check",
-            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|state|query|response|pairs|fallback|layout|all]",
+            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|state|query|response|question|pairs|fallback|layout|all]",
             OnDialogueCheckCommand
         );
 
@@ -118,7 +118,7 @@ public sealed class ModEntry : Mod
         var checks = args.Length <= 1 ? DialogueChecks.Run(group) : null;
         if (checks == null)
         {
-            Monitor.Log("Usage: untranslated_dialogue_check [branch|state|query|response|pairs|fallback|layout|all]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_check [branch|state|query|response|question|pairs|fallback|layout|all]", LogLevel.Info);
             return;
         }
 
@@ -135,10 +135,10 @@ public sealed class ModEntry : Mod
         int offset = args.FirstOrDefault() is "above" or "below" ? 1 : 0;
         string? sample = args.ElementAtOrDefault(offset);
         bool fromKey = sample == "key" && args.Length == offset + 3;
-        bool builtInSample = args.Length - offset <= 1 && sample is null or "wrap" or "pairs" or "authored" or "gender" or "weekly" or "state" or "query";
+        bool builtInSample = args.Length - offset <= 1 && sample is null or "wrap" or "pairs" or "authored" or "gender" or "weekly" or "state" or "query" or "question";
         if (!fromKey && !builtInSample)
         {
-            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|state|query|key <NPC> <key>]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|state|query|question|key <NPC> <key>]", LogLevel.Info);
             return;
         }
 
@@ -152,6 +152,41 @@ public sealed class ModEntry : Mod
         if (Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued"))
         {
             Monitor.Log("The preview needs vanilla dialogue rendering.", LogLevel.Warn);
+            return;
+        }
+
+        if (sample == "question")
+        {
+            string main = "$q -1 null#Which answer would you choose? " +
+                "This preview keeps both languages in the same selectable row.#$r PreviewA 0 accept#" +
+                "A longer answer that should wrap when the available width becomes narrow.#$r PreviewB 0 refuse#A short answer.";
+            string sub = "$q -1 null#Bạn sẽ chọn câu trả lời nào? " +
+                "Bản thử đặt hai ngôn ngữ trong cùng một vùng lựa chọn.#$r PreviewA 0 accept#" +
+                "Một câu trả lời dài hơn để kiểm tra xuống dòng khi chiều rộng khung bị thu hẹp.#$r PreviewB 0 refuse#Một câu ngắn.";
+            var actor = new NPC { Name = "UntranslatedPreview", displayName = "Preview", EventActor = true };
+            var dialogue = new Dialogue(actor, null, main);
+            dialogue.answerQuestionBehavior = _ => true;
+            var questionBox = new DialogueBox(dialogue);
+            var question = DialogueQuestionTranslation.Match(main, sub,
+                questionBox.getCurrentString()[GetDialogueSpeakerPrefix(dialogue).Length..],
+                questionBox.responses.Select(r => (r.responseKey, r.responseText)).ToArray(),
+                Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed);
+            if (question == null)
+            {
+                Monitor.Log("Question preview could not match the vanilla prompt and answers.", LogLevel.Warn);
+                return;
+            }
+            if (!Patches.DialogueQuestionPatch.RegisterPreview(questionBox, question,
+                offset == 0 ? Config.SecondaryFirst : args[0] == "above"))
+            {
+                Monitor.Log("Question preview needs a compatible secondary font and enough vertical screen space.", LogLevel.Warn);
+                return;
+            }
+            Game1.activeClickableMenu = questionBox;
+            Game1.dialogueUp = true;
+            Game1.player.Halt();
+            Game1.player.CanMove = false;
+            Monitor.Log("Question preview: choose either answer to close; no friendship or answer history is changed.", LogLevel.Info);
             return;
         }
 
@@ -304,7 +339,7 @@ public sealed class ModEntry : Mod
         try
         {
             var entries = Game1.content.Load<Dictionary<string, string[][]>>(DialoguePairsAsset);
-            string key = dialogue.TranslationKey.Replace('\\', '/');
+            string key = (Patches.DialogueSourcePatch.GetKey(dialogue) ?? "").Replace('\\', '/');
             if (entries.TryGetValue(key, out string[][]? variants)
                 && DialogueTranslation.MatchBlocks(visibleText, secondary, variants,
                     Utility.FilterUserName(Game1.player.Name)) is { } pairs)
@@ -320,39 +355,50 @@ public sealed class ModEntry : Mod
 
     internal string? GetSecondaryDialogueText(Dialogue? dialogue, string visibleText)
     {
-        if (dialogue?.TranslationKey is not { } translationKey || _contentProvider == null)
+        if (dialogue == null || !TryGetDialogueSources(dialogue, out string primary, out string secondary))
             return null;
+        return DialogueTranslation.GetSecondaryLine(primary, secondary, dialogue.currentDialogueIndex,
+            visibleText, Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed,
+            dialogue.farmer.DialogueQuestionsAnswered.Contains);
+    }
 
+    internal DialogueQuestionTranslation.Question? GetDialogueQuestion(Dialogue dialogue, string visiblePrompt, Response[] responses)
+        => TryGetDialogueSources(dialogue, out string primary, out string secondary)
+            ? DialogueQuestionTranslation.Match(primary, secondary, visiblePrompt,
+                responses.Select(r => (r.responseKey, r.responseText)).ToArray(),
+                Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed)
+            : null;
+
+    private bool TryGetDialogueSources(Dialogue dialogue, out string primary, out string secondary)
+    {
+        primary = secondary = "";
+        if (Patches.DialogueSourcePatch.GetKey(dialogue) is not { } translationKey || _contentProvider == null)
+            return false;
         int separator = translationKey.IndexOf(':');
         if (separator < 0)
-            return null;
-
+            return false;
         string asset = translationKey[..separator].Replace('\\', '/');
         string key = translationKey[(separator + 1)..];
-        const string dialogueRoot = "Characters/Dialogue/";
-        if (!asset.StartsWith(dialogueRoot, StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        string file = asset[dialogueRoot.Length..];
+        const string root = "Characters/Dialogue/";
+        if (!asset.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            return false;
+        string file = asset[root.Length..];
         if (string.IsNullOrWhiteSpace(file) || file is "." or ".."
             || file.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
-            || !_contentProvider.TryGetDialogueString(asset, key, out string? secondary))
-            return null;
-
+            || !_contentProvider.TryGetDialogueString(asset, key, out string? sub) || sub == null)
+            return false;
         try
         {
-            // Read the authored value so localization preprocessing cannot hide unsupported syntax.
-            var primaryStrings = Game1.content.Load<System.Collections.Generic.Dictionary<string, string>>(asset);
-            if (!primaryStrings.TryGetValue(key, out string? primary) || primary == null)
-                return null;
-
-            return DialogueTranslation.GetSecondaryLine(primary, secondary!, dialogue.currentDialogueIndex,
-                visibleText, Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed,
-                dialogue.farmer.DialogueQuestionsAnswered.Contains);
+            var values = Game1.content.Load<Dictionary<string, string>>(asset);
+            if (!values.TryGetValue(key, out string? main) || main == null)
+                return false;
+            primary = main;
+            secondary = sub;
+            return true;
         }
         catch (Microsoft.Xna.Framework.Content.ContentLoadException)
         {
-            return null;
+            return false;
         }
     }
 

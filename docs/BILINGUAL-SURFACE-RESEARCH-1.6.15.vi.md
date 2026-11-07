@@ -1,5 +1,7 @@
 # Khảo sát hiển thị song ngữ Stardew Valley 1.6.15
 
+Trạng thái code mới nhất: [Theo dõi triển khai hội thoại](DIALOGUE-IMPLEMENTATION.vi.md). Các mô tả “chưa triển khai” dưới đây thuộc thời điểm khảo sát.
+
 Phạm vi là mã game dịch ngược, tài liệu modding và điểm nối của UntranslatedStardew. Các phương án bố cục bên dưới cần thử trong game.
 
 ## 1. Giữ nguồn câu cho đến lúc vẽ

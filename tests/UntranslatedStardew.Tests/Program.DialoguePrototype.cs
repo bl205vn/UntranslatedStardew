@@ -3,6 +3,7 @@ using HarmonyLib;
 using Microsoft.Xna.Framework.Graphics;
 using StardewValley;
 using StardewValley.Menus;
+using StardewValley.BellsAndWhistles;
 using UntranslatedStardew.Core;
 
 namespace UntranslatedStardew.Tests;
@@ -180,8 +181,9 @@ public static partial class Program
             .GetMethod("Run", BindingFlags.Static | BindingFlags.NonPublic)!;
         (string Name, bool Passed)[]? Run(string group)
             => ((string, bool)[]?)runChecks.Invoke(null, new object[] { group });
-        var groups = new[] { "branch", "pairs", "fallback", "layout" }.Select(group => Run(group)!).ToArray();
+        var groups = new[] { "branch", "question", "pairs", "fallback", "layout" }.Select(group => Run(group)!).ToArray();
         Assert(groups.All(group => group.Length > 0 && group.All(check => check.Passed))
+            && Run("question") is { Length: 8 } questionChecks && questionChecks.All(check => check.Passed)
             && Run("state") is { Length: 4 } stateChecks && stateChecks.All(check => check.Passed)
             && Run("response") is { Length: 5 } responseChecks && responseChecks.All(check => check.Passed)
             && Run("all")!.SequenceEqual(groups.SelectMany(group => group)) && Run("invalid") == null,
@@ -193,13 +195,38 @@ public static partial class Program
         try
         {
             harmony.CreateClassProcessor(patch).Patch();
+            var questionPatch = mod.GetType("UntranslatedStardew.Patches.DialogueQuestionPatch", true)!;
+            harmony.CreateClassProcessor(questionPatch).Patch();
+            var measure = AccessTools.Method(typeof(SpriteText), nameof(SpriteText.getHeightOfString));
+            var questionMeasure = AccessTools.Method(questionPatch, "Measure");
+            foreach (string method in new[] { "setUpQuestions", "performHoverAction", "update", "draw" })
+            {
+                var target = AccessTools.Method(typeof(DialogueBox), method, method == "draw" ? new[] { typeof(SpriteBatch) } : null);
+                var instructions = PatchProcessor.GetCurrentInstructions(target).ToArray();
+                Assert(!instructions.Any(i => i.Calls(measure)) && instructions.Any(i => i.Calls(questionMeasure)),
+                    $"Question height wrapper covers every call in {method}");
+            }
+            var sourcePatch = mod.GetType("UntranslatedStardew.Patches.DialogueSourcePatch", true)!;
+            harmony.CreateClassProcessor(sourcePatch).Patch();
+            var sourcePrefix = AccessTools.Method(sourcePatch, "Prefix");
+            var getKey = AccessTools.Method(sourcePatch, "GetKey");
+            var emptyDialogue = (Dialogue)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(Dialogue));
+            sourcePrefix.Invoke(null, new object[] { emptyDialogue, "Characters/Dialogue/Evelyn:Question" });
+            sourcePrefix.Invoke(null, new object[] { emptyDialogue, "Characters/Dialogue/Evelyn:Reaction" });
+            Assert((string?)getKey.Invoke(null, new object[] { emptyDialogue }) == "Characters/Dialogue/Evelyn:Reaction",
+                "A reparsed dialogue uses its reaction key rather than the original question key");
+            sourcePrefix.Invoke(null, new object?[] { emptyDialogue, null });
+            Assert(getKey.Invoke(null, new object[] { emptyDialogue }) == null,
+                "An unkeyed reparse clears stale translation provenance");
             var wrapper = AccessTools.Method(patch, "DrawDialogueText");
-            Assert(PatchProcessor.GetCurrentInstructions(original).Count(instruction => instruction.Calls(wrapper)) == 2,
-                "Harmony installs both NPC body draw wrappers in Stardew 1.6.15");
+            Assert(PatchProcessor.GetCurrentInstructions(original).Count(instruction => instruction.Calls(wrapper)) == 4,
+                "Harmony installs NPC body, question and response draw wrappers in Stardew 1.6.15");
         }
         finally
         {
-            harmony.Unpatch(original, HarmonyPatchType.All, harmony.Id);
+            foreach (string method in new[] { "setUpQuestions", "performHoverAction", "update", "draw" })
+                harmony.Unpatch(AccessTools.Method(typeof(DialogueBox), method, method == "draw" ? new[] { typeof(SpriteBatch) } : null), HarmonyPatchType.All, harmony.Id);
+            harmony.Unpatch(AccessTools.Method(typeof(Dialogue), "parseDialogueString"), HarmonyPatchType.All, harmony.Id);
         }
     }
 }
