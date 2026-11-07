@@ -26,6 +26,30 @@ internal static class DialogueQuestionTranslation
             main.Answers.Select((answer, i) => new DialogueTextPair(answer.Primary, sub.Answers[i].Primary)).ToArray());
     }
 
+    /// <summary>Pairs narration preceding a validated question; question/answer execution remains vanilla.</summary>
+    internal static string? GetNarrationLine(string primary, string secondary, int index, string visible,
+        string player, Gender gender, uint days)
+    {
+        string[] mainWeeks = primary.Split("||");
+        string[] subWeeks = secondary.Split("||");
+        if (mainWeeks.Length != subWeeks.Length)
+            return null;
+        var main = Parse(primary, player, gender, days);
+        var sub = Parse(secondary, player, gender, days);
+        if (main == null || sub == null || main.Header != sub.Header || !main.Headers.SequenceEqual(sub.Headers))
+            return null;
+        int week = DialogueTranslation.GetWeeklyVariantIndex(days, mainWeeks.Length);
+        string[] Narration(string source) => source.Split('#').TakeWhile(field => !field.StartsWith("$q ", StringComparison.Ordinal))
+            .Where(field => field != "$b").ToArray();
+        var mainLines = Narration(mainWeeks[week]);
+        var subLines = Narration(subWeeks[week]);
+        if (index < 0 || index >= mainLines.Length || mainLines.Length != subLines.Length
+            || !Text(mainLines[index], player, gender, out string expected) || expected != visible
+            || !Text(subLines[index], player, gender, out string translated) || translated == visible)
+            return null;
+        return translated;
+    }
+
     private static Question? Parse(string source, string player, Gender gender, uint days)
     {
         string[] weeks = source.Split("||");

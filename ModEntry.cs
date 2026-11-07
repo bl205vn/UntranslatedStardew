@@ -378,17 +378,7 @@ public sealed class ModEntry : Mod
         primary = secondary = "";
         if (Patches.DialogueSourcePatch.GetKey(dialogue) is not { } translationKey || _contentProvider == null)
             return false;
-        int separator = translationKey.IndexOf(':');
-        if (separator < 0)
-            return false;
-        string asset = translationKey[..separator].Replace('\\', '/');
-        string key = translationKey[(separator + 1)..];
-        const string root = "Characters/Dialogue/";
-        if (!asset.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            return false;
-        string file = asset[root.Length..];
-        if (string.IsNullOrWhiteSpace(file) || file is "." or ".."
-            || file.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+        if (!DialogueTranslation.TryParseSourceKey(translationKey, out string asset, out string key)
             || !_contentProvider.TryGetDialogueString(asset, key, out string? sub) || sub == null)
             return false;
         try
@@ -401,6 +391,10 @@ public sealed class ModEntry : Mod
             return true;
         }
         catch (Microsoft.Xna.Framework.Content.ContentLoadException)
+        {
+            return false;
+        }
+        catch (InvalidCastException)
         {
             return false;
         }
@@ -520,6 +514,7 @@ public sealed class ModEntry : Mod
             name.IsEquivalentTo("Data/Pants") ||
             name.IsEquivalentTo("Data/Shirts") ||
             name.IsEquivalentTo("Data/Mannequins") ||
+            DialogueTranslation.IsSupportedDialogueAsset(name.BaseName) ||
             name.StartsWith("Fonts")))
         {
             _nameResolver?.Invalidate();

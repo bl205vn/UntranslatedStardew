@@ -6,9 +6,89 @@ namespace UntranslatedStardew.Core;
 /// <summary>Pairs simple authored segments without running the game's dialogue commands.</summary>
 internal static class DialogueTranslation
 {
+    private static readonly string[] SupportedDialogueAssets =
+    {
+        "Data/ExtraDialogue",
+        "Data/EngagementDialogue",
+        "Strings/Characters",
+        "Strings/Events",
+        "Strings/StringsFromCSFiles",
+        "Strings/Locations",
+        "Strings/1_6_Strings",
+        "Strings/StringsFromMaps",
+        "Strings/SimpleNonVillagerDialogues",
+        "Strings/animationDescriptions",
+        "Strings/SpeechBubbles"
+    };
+
+    private static readonly string[] SupportedDialoguePrefixes =
+    {
+        "Characters/Dialogue/",
+        "Strings/schedules/"
+    };
+
+    internal static bool TryParseSourceKey(string? translationKey, out string asset, out string key)
+    {
+        asset = "";
+        key = "";
+        if (string.IsNullOrWhiteSpace(translationKey))
+            return false;
+
+        int separator = translationKey.IndexOf(':');
+        if (separator <= 0 || separator >= translationKey.Length - 1)
+            return false;
+
+        string candidateAsset = translationKey[..separator].Replace('\\', '/');
+        string candidateKey = translationKey[(separator + 1)..];
+        if (string.IsNullOrWhiteSpace(candidateKey) || !TryNormalizeDialogueAsset(candidateAsset, out string normalizedAsset))
+            return false;
+
+        asset = normalizedAsset;
+        key = candidateKey;
+        return true;
+    }
+
+    internal static bool IsSupportedDialogueAsset(string? assetName)
+        => TryNormalizeDialogueAsset(assetName, out _);
+
+    private static bool TryNormalizeDialogueAsset(string? assetName, out string normalized)
+    {
+        normalized = "";
+        if (string.IsNullOrWhiteSpace(assetName))
+            return false;
+
+        string candidate = assetName.Replace('\\', '/');
+        foreach (string prefix in SupportedDialoguePrefixes)
+        {
+            if (candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string file = candidate[prefix.Length..];
+                if (string.IsNullOrWhiteSpace(file) || file is "." or ".."
+                    || file.Contains('/') || file.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                    return false;
+
+                normalized = prefix + file;
+                return true;
+            }
+        }
+
+        foreach (string exact in SupportedDialogueAssets)
+        {
+            if (candidate.Equals(exact, StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = exact;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal static string? GetSecondaryLine(
         string primary, string secondary, int index, string visibleText, string playerName, Gender gender, uint daysPlayed, Func<string, bool>? answered = null)
     {
+        if (primary.Contains("$q ", StringComparison.Ordinal) || secondary.Contains("$q ", StringComparison.Ordinal))
+            return DialogueQuestionTranslation.GetNarrationLine(primary, secondary, index, visibleText, playerName, gender, daysPlayed);
         string[] primaryWeeks = primary.Split("||");
         string[] secondaryWeeks = secondary.Split("||");
         if (primaryWeeks.Length != secondaryWeeks.Length)

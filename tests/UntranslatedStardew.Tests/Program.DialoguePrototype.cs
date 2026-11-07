@@ -12,6 +12,7 @@ public static partial class Program
 {
     private static void TestDialoguePrototype()
     {
+        TestDialogueNarration();
         Assembly mod = typeof(RawContentProvider).Assembly;
         var previewBuilder = mod.GetType("UntranslatedStardew.Core.DialogueQuestionPreview", true)!
             .GetMethod("Create", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -231,13 +232,100 @@ public static partial class Program
             var sourcePrefix = AccessTools.Method(sourcePatch, "Prefix");
             var getKey = AccessTools.Method(sourcePatch, "GetKey");
             var emptyDialogue = (Dialogue)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(Dialogue));
+            AccessTools.Field(typeof(Dialogue), nameof(Dialogue.dialogues)).SetValue(emptyDialogue, new List<DialogueLine>());
+            AccessTools.Field(typeof(Dialogue), "indexesWithoutPortrait").SetValue(emptyDialogue, new HashSet<int>());
+            AccessTools.Field(typeof(Dialogue), nameof(Dialogue.TranslationKey)).SetValue(emptyDialogue, "Characters/Dialogue/Evelyn:Question");
+            var unreparsedCopy = new Dialogue(emptyDialogue);
+            Assert((string?)getKey.Invoke(null, new object[] { unreparsedCopy }) == "Characters/Dialogue/Evelyn:Question",
+                "Copying an unreparsed dialogue preserves its initial translation key");
             sourcePrefix.Invoke(null, new object[] { emptyDialogue, "Characters/Dialogue/Evelyn:Question" });
             sourcePrefix.Invoke(null, new object[] { emptyDialogue, "Characters/Dialogue/Evelyn:Reaction" });
             Assert((string?)getKey.Invoke(null, new object[] { emptyDialogue }) == "Characters/Dialogue/Evelyn:Reaction",
                 "A reparsed dialogue uses its reaction key rather than the original question key");
+            var reactionCopy = new Dialogue(emptyDialogue);
+            Assert(reactionCopy.TranslationKey == "Characters/Dialogue/Evelyn:Question"
+                && (string?)getKey.Invoke(null, new object[] { reactionCopy }) == "Characters/Dialogue/Evelyn:Reaction",
+                "Copying a reparsed dialogue preserves the current reaction key despite a stale readonly TranslationKey");
             sourcePrefix.Invoke(null, new object?[] { emptyDialogue, null });
             Assert(getKey.Invoke(null, new object[] { emptyDialogue }) == null,
                 "An unkeyed reparse clears stale translation provenance");
+            var clearedCopy = new Dialogue(emptyDialogue);
+            Assert(clearedCopy.TranslationKey == "Characters/Dialogue/Evelyn:Question"
+                && getKey.Invoke(null, new object[] { clearedCopy }) == null,
+                "Copying a dialogue after an unkeyed reparse preserves intentional null provenance over a stale TranslationKey");
+
+            var tryParseSourceKey = pair.DeclaringType!.GetMethod("TryParseSourceKey", BindingFlags.Static | BindingFlags.NonPublic)!;
+            (string Asset, string Key)? ParseSource(string? rawKey)
+            {
+                object?[] args = { rawKey, null, null };
+                return tryParseSourceKey.Invoke(null, args) is true ? ((string)args[1]!, (string)args[2]!) : null;
+            }
+            Assert(ParseSource(@"Characters\Dialogue\Abigail:Mon") == ("Characters/Dialogue/Abigail", "Mon")
+                && ParseSource(@"Strings\schedules\Abigail:marriage_Mon.000") == ("Strings/schedules/Abigail", "marriage_Mon.000")
+                && ParseSource(@"Data\ExtraDialogue:Clint_No InventorySpace") == ("Data/ExtraDialogue", "Clint_No InventorySpace")
+                && ParseSource(@"Data\EngagementDialogue:Abigail0") == ("Data/EngagementDialogue", "Abigail0")
+                && ParseSource(@"Strings\Characters:WipedMemory") == ("Strings/Characters", "WipedMemory")
+                && ParseSource(@"Strings\Events:Birth0") == ("Strings/Events", "Birth0")
+                && ParseSource(@"Strings\StringsFromCSFiles:NPC.cs.3926") == ("Strings/StringsFromCSFiles", "NPC.cs.3926")
+                && ParseSource(@"Strings\Locations:FieldOfficeDonated_0") == ("Strings/Locations", "FieldOfficeDonated_0")
+                && ParseSource(@"Strings\1_6_Strings:Fizz_Intro_1") == ("Strings/1_6_Strings", "Fizz_Intro_1")
+                && ParseSource(@"Strings\StringsFromMaps:BusStop_Desert") == ("Strings/StringsFromMaps", "BusStop_Desert")
+                && ParseSource(@"Strings\SimpleNonVillagerDialogues:Derp") == ("Strings/SimpleNonVillagerDialogues", "Derp")
+                && ParseSource(@"Strings\animationDescriptions:abigail_videogames") == ("Strings/animationDescriptions", "abigail_videogames")
+                && ParseSource(@"Strings\SpeechBubbles:Abigail_Greeting") == ("Strings/SpeechBubbles", "Abigail_Greeting"),
+                "Dialogue source parser accepts and normalizes supported vanilla dictionary dialogue assets");
+            foreach (string rejected in new[]
+            {
+                "Data/IncomingPhoneCalls:Abigail",
+                "Data/Objects:74",
+                "Data/Quests:1",
+                "Data/Events/Town:1",
+                "Data/Festivals/spring13:Abigail",
+                "Data/mail:wizard",
+                "Strings/UI:Confirm",
+                "Strings/Objects:Parsnip_Name",
+                "Characters/Dialogue/../Abigail:Mon",
+                "Characters/Dialogue/sub/Abigail:Mon",
+                "Strings/schedules/../Abigail:key",
+                "Strings/schedules/sub/Abigail:key",
+                "Characters/Dialogue/Abigail:",
+                ":Mon",
+                ""
+            })
+            {
+                Assert(ParseSource(rejected) == null, "Dialogue source parser rejects unsupported or unsafe source: " + rejected);
+            }
+
+            using (var enProvider = new RawContentProvider(() => new DummyServiceProvider(), Path.Combine(game, "Content"), "en"))
+            {
+                var tryGetDialogueString = AccessTools.Method(typeof(RawContentProvider), "TryGetDialogueString")!;
+                string? LoadDialogue(string asset, string key)
+                {
+                    object?[] args = { asset, key, null };
+                    return tryGetDialogueString.Invoke(enProvider, args) is true ? (string?)args[2] : null;
+                }
+                foreach (string rawSource in new[]
+                {
+                    @"Data\ExtraDialogue:Wizard_Hatch",
+                    @"Data\EngagementDialogue:Abigail0",
+                    @"Strings\Characters:WipedMemory",
+                    @"Strings\Events:ElliottBook_default",
+                    @"Strings\StringsFromCSFiles:NPC.cs.3926",
+                    @"Strings\Locations:FieldOfficeDonated_0",
+                    @"Strings\1_6_Strings:Jas_IceCream"
+                })
+                {
+                    var parsed = ParseSource(rawSource);
+                    Assert(parsed is { } source && !string.IsNullOrWhiteSpace(LoadDialogue(source.Asset, source.Key)),
+                        "Installed content resolves broadened dictionary dialogue source: " + rawSource);
+                }
+
+                string? rawFormatted = LoadDialogue("Strings/Characters", "MovieInvite_CantInvite");
+                Assert(rawFormatted != null && rawFormatted.Contains("{0}", StringComparison.Ordinal)
+                    && Pair(rawFormatted, "Không thể mời {0}!", 0, rawFormatted.Replace("{0}", "Abigail")) == null,
+                    "Preprocessed formatted dialogue with substituted arguments falls back instead of mispairing");
+            }
+
             var wrapper = AccessTools.Method(patch, "DrawDialogueText");
             Assert(PatchProcessor.GetCurrentInstructions(original).Count(instruction => instruction.Calls(wrapper)) == 4,
                 "Harmony installs NPC body, question and response draw wrappers in Stardew 1.6.15");
@@ -247,6 +335,7 @@ public static partial class Program
             foreach (string method in new[] { "setUpQuestions", "performHoverAction", "update", "draw" })
                 harmony.Unpatch(AccessTools.Method(typeof(DialogueBox), method, method == "draw" ? new[] { typeof(SpriteBatch) } : null), HarmonyPatchType.All, harmony.Id);
             harmony.Unpatch(AccessTools.Method(typeof(Dialogue), "parseDialogueString"), HarmonyPatchType.All, harmony.Id);
+            harmony.Unpatch(AccessTools.Constructor(typeof(Dialogue), new[] { typeof(Dialogue) }), HarmonyPatchType.All, harmony.Id);
         }
     }
 }
