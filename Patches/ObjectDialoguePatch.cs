@@ -20,7 +20,7 @@ internal static class ObjectDialoguePatch
         internal readonly DialogueTextPair[] Pages;
         internal readonly int Generation = LoadedDialogueSource.Generation;
         internal CacheKey? Key;
-        internal DialogueInterleavedLayout.Page? Layout;
+        internal DialogueBlockLayout.Page? Layout;
         internal DialogueNativeFont? Font;
         internal State(DialogueTextPair[] pages) { Pages = pages; }
     }
@@ -84,7 +84,7 @@ internal static class ObjectDialoguePatch
         if (!enabled || font == null || string.IsNullOrWhiteSpace(pair.Primary)
             || string.IsNullOrWhiteSpace(pair.Secondary) || pair.Primary == pair.Secondary
             || !font.Supports(pair.Secondary)) return;
-        var layout = DialogueInterleavedLayout.Fit(new[] { pair }, width, Game1.uiViewport.Height - 144, above,
+        var layout = DialogueBlockLayout.Fit(new[] { pair }, width, Game1.uiViewport.Height - 144, above,
             text => SpriteText.getHeightOfString(text, width),
             text => font.Measure(text).X * DialoguePairLayout.SecondaryScale,
             text => font.Measure(text).Y * DialoguePairLayout.SecondaryScale);

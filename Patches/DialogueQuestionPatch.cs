@@ -15,7 +15,7 @@ namespace UntranslatedStardew.Patches;
 internal static class DialogueQuestionPatch
 {
     private sealed record Snapshot(DialogueNativeFont Font, int Width, int ViewportHeight, bool Above,
-        string Prompt, (string Key, string Text)[] Answers, Dictionary<string, DialogueInterleavedLayout.Page> Rows);
+        string Prompt, (string Key, string Text)[] Answers, Dictionary<string, DialogueBlockLayout.Page> Rows);
     private sealed record Preview(DialogueQuestionTranslation.Question Question, bool Above);
     private static readonly ConditionalWeakTable<DialogueBox, Snapshot> Layouts = new();
     private static readonly ConditionalWeakTable<DialogueBox, Preview> Previews = new();

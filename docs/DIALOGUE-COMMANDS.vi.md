@@ -1,6 +1,6 @@
-# Lệnh kiểm tra hội thoại — preview 23
+# Lệnh kiểm tra hội thoại — preview 24
 
-Preview 22 giữ các lệnh cũ. Font native và xen hàng tự áp dụng khi bật song ngữ; dùng `untranslated_dialogue_test above wrap` hoặc `untranslated_dialogue_test below wrap` nếu cần mở mẫu dài. Không cần chạy lại từng nhóm PASS. Font/độ vừa khung vẫn cần xem trong game; các ca logic đã được chạy gộp khi build.
+Preview 24 giữ lệnh cũ nhưng chuyển về bố cục nguyên khối: chữ chính hiện hết trang rồi bản phụ mới hiện. `SecondaryFirst` đặt nguyên khối phụ trên/dưới. Font native vẫn nhỏ 75%. Có thể dùng `untranslated_dialogue_test above wrap` hoặc `untranslated_dialogue_test below wrap` để mở mẫu dài nếu cần; không cần chạy lại từng nhóm PASS.
 
 Preview 23 bổ sung ngắt thoại `$e`, lời dẫn/câu hỏi có `$e` và cache NPC. Các nhóm kiểm tra giữ nguyên số ca và lệnh; không cần nhập lại từng nhóm. Khi chơi bình thường có thể gặp Caroline/Alex để nghiệm thu các ca vừa sửa; câu khuyên tặng quà động của Gus vẫn chưa hỗ trợ.
 

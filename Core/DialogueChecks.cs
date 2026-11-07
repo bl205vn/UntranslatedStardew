@@ -269,21 +269,20 @@ internal static class DialogueChecks
 
     private static (string, bool)[] CheckLayout()
     {
-        DialogueInterleavedLayout.Page? Fit(bool above)
-            => DialogueInterleavedLayout.Fit(new[] { new DialogueTextPair("One two three four", "Một hai ba bốn") },
+        DialogueBlockLayout.Page? Fit(bool above)
+            => DialogueBlockLayout.Fit(new[] { new DialogueTextPair("One two three four", "Một hai ba bốn") },
                 8, 300, above, text => Math.Max(1, (int)Math.Ceiling(text.Length / 8d)) * 20,
                 text => text.Length, _ => 10);
         var above = Fit(true);
         var below = Fit(false);
         return new[]
         {
-            ("Wrapped dialogue interleaves visual rows and flips each row",
-                above is not null && below is not null && above.Rows.Length > 1
+            ("Wrapped dialogue keeps whole language blocks and flips their order",
+                above is not null && below is not null && above.Rows.Length == 1 && below.Rows.Length == 1
                 && above.Height == below.Height
                 && above.Rows[0].SecondaryOffset < above.Rows[0].PrimaryOffset
-                && below.Rows[0].PrimaryOffset < below.Rows[0].SecondaryOffset
-                && below.Rows[0].SecondaryOffset < below.Rows[1].PrimaryOffset
-                && below.Rows[0].RevealAt < "One two three four".Length),
+                && below.Rows[0].SecondaryOffset >= below.Rows[0].PrimaryOffset + 60
+                && below.Rows[0].RevealAt == "One two three four".Length),
             ("The last translation reveals at the vanilla advance threshold",
                 DialoguePairLayout.GetVisiblePosition(8, 10) == 8
                 && DialoguePairLayout.GetVisiblePosition(9, 10) == 10)

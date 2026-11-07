@@ -2,7 +2,9 @@
 
 Kế hoạch làm việc và nghiệm thu: [Kế hoạch phát triển](DEVELOPMENT-PLAN.vi.md).
 
-Mốc: dialogue preview 23, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Mốc: dialogue preview 24, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+
+**Quyết định hiện tại (preview 24):** hiển thị theo hai khối nguyên trang, bỏ xen từng hàng của preview 22/23. Toàn bộ bản phụ đợi chữ chính hiện xong; `SecondaryFirst` chỉ đổi vị trí trên/dưới của nguyên khối. Font native nhỏ 75% và các sửa `$e` vẫn giữ. Các mục preview 22/23 bên dưới là lịch sử, không mô tả bố cục đang dùng.
 
 ## Đã nối vào code
 
@@ -69,3 +71,11 @@ Hỗ trợ policy font của 12 ngôn ngữ vanilla cùng custom khai báo font 
 Gus khuyên tặng Pam Beer vẫn giữ vanilla: câu format runtime từ `NPC.cs.4097` rồi gắn `%revealtaste`, không có TranslationKey và mất instance nguồn. Cần adapter lấy đúng tham số tên NPC/vật phẩm từ luồng game; resolver hiện tại không tự dựng bản dịch bằng cách phân tích ngược chữ đang hiện.
 
 Cache NPC tránh wrap/đo lại mỗi frame nếu chỉ tăng số chữ hiện. Thay nội dung/kích thước/thứ tự/ngôn ngữ/font/tùy chọn native làm cache tính lại, kể cả kết quả không vừa.
+
+## Preview 24: toàn bộ trang chính rồi mới hiện bản phụ
+
+`DialogueBlockLayout` thay `DialogueInterleavedLayout`. Primary của các cặp đã xác thực được nối lại đúng dấu cách của trang gốc, giữ nguyên chuỗi/vị trí reveal; SpriteText của game tự wrap khối chính. Secondary nối thành một khối, wrap bằng metrics native riêng. Bản phụ chỉ được vẽ sau `RevealAt = Primary.Length`, có chuẩn hóa ngưỡng advance ký tự cuối như vanilla. Đặt phụ trên không làm bản phụ hiện sớm. Khối trùng toàn bộ chỉ vẽ một bản.
+
+Chiều cao gồm toàn bộ hai khối cùng khoảng cách cho ascender native; không có hàng trống giả để ép số dòng bằng nhau. Câu hỏi dùng cùng Page.Height cho vẽ/hover/gamepad, nhưng vẫn giữ prompt và từng đáp án riêng. Hộp thông tin tăng chiều cao trong ngân sách màn hình; NPC giữ fallback nếu khung không đủ. Không làm tăng độ phủ nguồn dịch chỉ bằng thay layout.
+
+Ảnh preview 23 đã xác nhận câu hỏi/lời dẫn Alex và trang Caroline có bản phụ. Phản ứng Alex sau đáp án và xác nhận rời rạp còn chưa có bản phụ trong ảnh; nguồn động Gus cũng chưa hỗ trợ. Đây là các việc còn lại, không bị che bằng ghép từ chữ nhìn thấy. Build/kiểm tra logic preview 24: 1099/1099; chưa nghiệm thu giao diện phiên bản mới trong game.

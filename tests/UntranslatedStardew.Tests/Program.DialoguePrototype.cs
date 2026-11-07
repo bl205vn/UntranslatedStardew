@@ -17,7 +17,7 @@ public static partial class Program
         TestDialogueProgress();
         TestObjectDialogue();
         TestNativeDialogueFont();
-        TestInterleavedDialogue();
+        TestBlockDialogue();
         Assembly mod = typeof(RawContentProvider).Assembly;
         var previewBuilder = mod.GetType("UntranslatedStardew.Core.DialogueQuestionPreview", true)!
             .GetMethod("Create", BindingFlags.Static | BindingFlags.NonPublic)!;

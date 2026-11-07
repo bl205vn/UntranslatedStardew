@@ -16,7 +16,7 @@ internal static class DialogueBoxPatch
 {
     private readonly record struct LayoutKey(int Width, int Height, bool Above, DialogueNativeFont Font,
         LocalizedContentManager.LanguageCode Language, float PrimaryZoom, bool Alternate, bool Smooth, float Scale);
-    private sealed record CachedLayout(LayoutKey Key, DialogueTextPair[] Pairs, DialogueInterleavedLayout.Page? Page);
+    private sealed record CachedLayout(LayoutKey Key, DialogueTextPair[] Pairs, DialogueBlockLayout.Page? Page);
     private static readonly ConditionalWeakTable<DialogueBox, CachedLayout> Layouts = new();
 
     private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
@@ -69,7 +69,7 @@ internal static class DialogueBoxPatch
             {
                 // Cache both successful layouts and overflow fallback. Revealing more
                 // characters does not require measuring and wrapping the whole page again.
-                var page = DialogueInterleavedLayout.Fit(pairs, key.Width, key.Height, key.Above,
+                var page = DialogueBlockLayout.Fit(pairs, key.Width, key.Height, key.Above,
                     primary => SpriteText.getHeightOfString(primary, bodyWidth - 4),
                     line => font.Measure(line).X * DialoguePairLayout.SecondaryScale,
                     line => font.Measure(line).Y * DialoguePairLayout.SecondaryScale);

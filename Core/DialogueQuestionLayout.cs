@@ -5,21 +5,21 @@ internal static class DialogueQuestionLayout
 {
     internal sealed record Row(DialoguePairLayout.PositionedPair Pair, int Height);
 
-    internal static Dictionary<string, DialogueInterleavedLayout.Page>? FitRows(IReadOnlyList<DialogueTextPair> pairs,
+    internal static Dictionary<string, DialogueBlockLayout.Page>? FitRows(IReadOnlyList<DialogueTextPair> pairs,
         int width, int availableHeight, bool above, Func<string, int> primaryHeight,
         Func<string, float> secondaryWidth, Func<string, float> secondaryHeight, out string? failure)
     {
         failure = null;
-        var rows = new Dictionary<string, DialogueInterleavedLayout.Page>(StringComparer.Ordinal);
+        var rows = new Dictionary<string, DialogueBlockLayout.Page>(StringComparer.Ordinal);
         var translations = new Dictionary<string, string>(StringComparer.Ordinal);
         int total = 40 + (pairs.Count - 1) * 16;
         foreach (var pair in pairs)
         {
             if (translations.TryGetValue(pair.Primary, out string? previous) && previous != pair.Secondary)
             { failure = "identical primary labels have different translations"; return null; }
-            var page = DialogueInterleavedLayout.Fit(new[] { pair }, width, availableHeight, above,
+            var page = DialogueBlockLayout.Fit(new[] { pair }, width, availableHeight, above,
                 primaryHeight, secondaryWidth, secondaryHeight);
-            if (page == null) { failure = "an interleaved question row does not fit"; return null; }
+            if (page == null) { failure = "a bilingual question block does not fit"; return null; }
             translations[pair.Primary] = pair.Secondary;
             rows[pair.Primary] = page;
             total += page.Height;
