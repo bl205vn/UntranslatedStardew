@@ -1,6 +1,6 @@
 # Khảo sát font theo ngôn ngữ và vai trò — Stardew Valley 1.6.15
 
-Ngày: 07/11/2026. Phạm vi: bản Windows 1.6.15 đang cài, mã game dịch ngược, wiki modding và pack Việt hóa `Kou.ViethoaSV` 1.6.1. Đây là nghiên cứu; chưa đổi renderer/font trong mod.
+Ngày: 07/11/2026. Phạm vi: bản Windows 1.6.15 đang cài, mã game dịch ngược, wiki modding và pack Việt hóa `Kou.ViethoaSV` 1.6.1. Đây là khảo sát gốc sau preview 21. **Cập nhật preview 22:** đã tích hợp font native theo locale cho dòng phụ hội thoại ở ba đường NPC/hộp thông tin/câu hỏi, scale 0.75; các mô tả SpriteFont1 bên dưới ghi lại trạng thái preview 21. Xem DIALOGUE-IMPLEMENTATION.vi.md để biết phạm vi hiện tại.
 
 ## Kết luận cho dòng phụ đang thấy trong ảnh
 

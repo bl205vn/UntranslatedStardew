@@ -14,14 +14,14 @@ namespace UntranslatedStardew.Patches;
 [HarmonyPatch]
 internal static class ObjectDialoguePatch
 {
-    private readonly record struct CacheKey(int Page, int Width, int Viewport, int Generation, bool Enabled, bool Above, SpriteFont? Font);
+    private readonly record struct CacheKey(int Page, int Width, int Viewport, int Generation, bool Enabled, bool Above, DialogueNativeFont? Font);
     private sealed class State
     {
         internal readonly DialogueTextPair[] Pages;
         internal readonly int Generation = LoadedDialogueSource.Generation;
         internal CacheKey? Key;
-        internal DialoguePairLayout.PositionedPair? Layout;
-        internal SpriteFont? Font;
+        internal DialogueInterleavedLayout.Page? Layout;
+        internal DialogueNativeFont? Font;
         internal State(DialogueTextPair[] pages) { Pages = pages; }
     }
     private static readonly ConditionalWeakTable<DialogueBox, State> States = new();
@@ -63,7 +63,7 @@ internal static class ObjectDialoguePatch
         bool enabled = mod?.Config.ShowSecondaryInDialogue == true && !Game1.eventUp
             && !mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
             && state.Generation == LoadedDialogueSource.Generation;
-        var font = enabled ? mod?.FontManager?.GetSecondaryFont(Game1.dialogueFont) : null;
+        var font = enabled ? mod?.GetSecondaryDialogueFont() : null;
         bool above = mod?.Config.SecondaryFirst == true;
         var key = new CacheKey(index, box.width, Game1.uiViewport.Height, LoadedDialogueSource.Generation, enabled, above, font);
         if (state.Key == key) return;
@@ -83,16 +83,14 @@ internal static class ObjectDialoguePatch
         if (wasBilingual) SetHeight(box, primaryHeight + 4);
         if (!enabled || font == null || string.IsNullOrWhiteSpace(pair.Primary)
             || string.IsNullOrWhiteSpace(pair.Secondary) || pair.Primary == pair.Secondary
-            || pair.Secondary.Any(c => c != '\n' && !font.Characters.Contains(c))) return;
-        float SecondaryHeight(string text) => Math.Max(font.MeasureString(text).Y,
-            (1 + text.Count(c => c == '\n')) * font.LineSpacing) * DialoguePairLayout.SecondaryScale;
-        var layout = DialoguePairLayout.FitPage(new[] { pair }, width, Game1.uiViewport.Height - 144, above,
-            _ => primaryHeight, text => font.MeasureString(text).X * DialoguePairLayout.SecondaryScale, SecondaryHeight);
+            || !font.Supports(pair.Secondary)) return;
+        var layout = DialogueInterleavedLayout.Fit(new[] { pair }, width, Game1.uiViewport.Height - 144, above,
+            text => SpriteText.getHeightOfString(text, width),
+            text => font.Measure(text).X * DialoguePairLayout.SecondaryScale,
+            text => font.Measure(text).Y * DialoguePairLayout.SecondaryScale);
         if (layout == null) return;
-        var row = layout[0];
-        int height = Math.Max(row.PrimaryOffset + primaryHeight, row.SecondaryOffset + (int)Math.Ceiling(SecondaryHeight(row.Secondary))) + 16;
-        SetHeight(box, height);
-        state.Layout = row;
+        SetHeight(box, layout.Height + 16);
+        state.Layout = layout;
         state.Font = font;
     }
 
@@ -100,13 +98,18 @@ internal static class ObjectDialoguePatch
         float alpha, float depth, DialogueBox box)
     {
         Refresh(box);
-        if (!States.TryGetValue(box, out var state) || state.Layout is not { } pair
-            || state.Font == null || text != pair.Primary) return false;
+        if (!States.TryGetValue(box, out var state) || state.Layout is not { } page || state.Font == null
+            || state.Key is not { } key || key.Page < 0 || text != state.Pages[key.Page].Primary) return false;
         int visible = DialoguePairLayout.GetVisiblePosition(position, text.Length);
-        SpriteText.drawString(batch, text, x, y + pair.PrimaryOffset, visible, box.width - 16, alpha: alpha, layerDepth: depth);
-        if (visible >= text.Length)
-            batch.DrawString(state.Font, pair.Secondary, new Vector2(x, y + pair.SecondaryOffset), Game1.textColor * alpha,
-                0, Vector2.Zero, DialoguePairLayout.SecondaryScale, SpriteEffects.None, depth);
+        foreach (var row in page.Rows)
+        {
+            int revealed = row.RevealedCharacters(visible);
+            if (revealed > 0)
+                SpriteText.drawString(batch, row.Primary, x, y + row.PrimaryOffset, revealed, box.width - 16, alpha: alpha, layerDepth: depth);
+            if (row.Secondary.Length > 0 && visible >= row.RevealAt)
+                state.Font.Draw(batch, row.Secondary, new Vector2(x, y + row.SecondaryOffset), Game1.textColor * alpha,
+                    DialoguePairLayout.SecondaryScale, depth);
+        }
         return true;
     }
 }

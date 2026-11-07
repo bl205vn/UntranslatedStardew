@@ -14,8 +14,8 @@ namespace UntranslatedStardew.Patches;
 [HarmonyPatch]
 internal static class DialogueQuestionPatch
 {
-    private sealed record Snapshot(SpriteFont Font, int Width, int ViewportHeight, bool Above,
-        string Prompt, (string Key, string Text)[] Answers, Dictionary<string, DialogueQuestionLayout.Row> Rows);
+    private sealed record Snapshot(DialogueNativeFont Font, int Width, int ViewportHeight, bool Above,
+        string Prompt, (string Key, string Text)[] Answers, Dictionary<string, DialogueInterleavedLayout.Page> Rows);
     private sealed record Preview(DialogueQuestionTranslation.Question Question, bool Above);
     private static readonly ConditionalWeakTable<DialogueBox, Snapshot> Layouts = new();
     private static readonly ConditionalWeakTable<DialogueBox, Preview> Previews = new();
@@ -62,6 +62,10 @@ internal static class DialogueQuestionPatch
         }
         if (__instance.isQuestion && Layouts.TryGetValue(__instance, out var old)
             && (old.Width != __instance.width - 16 || old.ViewportHeight != Game1.uiViewport.Height
+                || !ReferenceEquals(old.Font, ModEntry.Instance?.GetSecondaryDialogueFont())
+                || old.Above != (Previews.TryGetValue(__instance, out var sample)
+                    ? sample.Above : ModEntry.Instance?.Config.SecondaryFirst ?? false)
+                || (!Previews.TryGetValue(__instance, out _) && ModEntry.Instance?.Config.ShowSecondaryInDialogue != true)
                 || old.Prompt != __instance.getCurrentString()
                 || !old.Answers.SequenceEqual(__instance.responses.Select(r => (r.responseKey, r.responseText)))))
         {
@@ -88,7 +92,7 @@ internal static class DialogueQuestionPatch
             return "an event is active";
         if (mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued"))
             return "DDFC uses a different dialogue renderer";
-        if (mod.FontManager?.GetSecondaryFont(Game1.dialogueFont) is not { } font)
+        if (mod.GetSecondaryDialogueFont() is not { } font)
             return $"secondary font is unavailable for language '{mod.Config.SecondaryLanguage}'";
         string shown = box.getCurrentString();
         string prefix = box.characterDialogue is { } dialogue ? ModEntry.GetDialogueSpeakerPrefix(dialogue) : "";
@@ -101,18 +105,17 @@ internal static class DialogueQuestionPatch
             return "question source does not match the live prompt and answers";
         var pairs = new[] { question.Prompt with { Primary = shown } }.Concat(question.Answers)
             .Select(pair => pair with { Secondary = pair.Secondary.Normalize() }).ToArray();
-        string missing = new string(pairs.SelectMany(p => p.Secondary).Where(c => !font.Characters.Contains(c)).Distinct().ToArray());
+        string missing = new string(pairs.SelectMany(p => p.Secondary).Where(c => !font.Supports(c.ToString())).Distinct().ToArray());
         if (missing.Length > 0)
             return $"secondary font '{mod.Config.SecondaryLanguage}' is missing "
                 + string.Join(", ", missing.Take(12).Select(c => $"U+{(int)c:X4}"));
         int width = box.width - 16;
         bool above = preview ? sample!.Above : mod.Config.SecondaryFirst;
         // NPC boxes have bottom = viewport -64. Leave room above for the question icon and border.
-        var rows = DialogueQuestionLayout.Fit(pairs, width, Game1.uiViewport.Height - 192, above,
+        var rows = DialogueQuestionLayout.FitRows(pairs, width, Game1.uiViewport.Height - 192, above,
             text => SpriteText.getHeightOfString(text, width),
-            text => font.MeasureString(text).X * DialoguePairLayout.SecondaryScale,
-            text => Math.Max(font.MeasureString(text).Y, (1 + text.Count(c => c == '\n')) * font.LineSpacing)
-                * DialoguePairLayout.SecondaryScale, out string? failure);
+            text => font.Measure(text).X * DialoguePairLayout.SecondaryScale,
+            text => font.Measure(text).Y * DialoguePairLayout.SecondaryScale, out string? failure);
         if (rows != null)
             Layouts.Add(box, new(font, width, Game1.uiViewport.Height, above, shown,
                 box.responses.Select(r => (r.responseKey, r.responseText)).ToArray(), rows));
@@ -128,13 +131,17 @@ internal static class DialogueQuestionPatch
     {
         if (!box.isQuestion || !Layouts.TryGetValue(box, out var state) || !state.Rows.TryGetValue(text, out var row))
             return false;
-        var pair = row.Pair;
         int visible = DialoguePairLayout.GetVisiblePosition(position, text.Length);
-        SpriteText.drawString(batch, text, x, y + pair.PrimaryOffset, visible, state.Width,
-            alpha: alpha, layerDepth: depth);
-        if (visible >= text.Length)
-            batch.DrawString(state.Font, pair.Secondary, new Vector2(x, y + pair.SecondaryOffset),
-                Game1.textColor * alpha, 0, Vector2.Zero, DialoguePairLayout.SecondaryScale, SpriteEffects.None, depth);
+        foreach (var line in row.Rows)
+        {
+            int revealed = line.RevealedCharacters(visible);
+            if (revealed > 0)
+                SpriteText.drawString(batch, line.Primary, x, y + line.PrimaryOffset, revealed, state.Width,
+                    alpha: alpha, layerDepth: depth);
+            if (line.Secondary.Length > 0 && visible >= line.RevealAt)
+                state.Font.Draw(batch, line.Secondary, new Vector2(x, y + line.SecondaryOffset),
+                    Game1.textColor * alpha, DialoguePairLayout.SecondaryScale, depth);
+        }
         return true;
     }
 }

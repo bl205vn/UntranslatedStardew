@@ -1,4 +1,6 @@
-# Lệnh kiểm tra hội thoại — preview 21
+# Lệnh kiểm tra hội thoại — preview 22
+
+Preview 22 giữ các lệnh cũ. Font native và xen hàng tự áp dụng khi bật song ngữ; dùng `untranslated_dialogue_test above wrap` hoặc `untranslated_dialogue_test below wrap` nếu cần mở mẫu dài. Không cần chạy lại từng nhóm PASS. Font/độ vừa khung vẫn cần xem trong game; các ca logic đã được chạy gộp khi build.
 
 Xem danh sách bất kỳ lúc nào: `untranslated_dialogue_help`.
 

@@ -51,39 +51,27 @@ internal static class DialogueBoxPatch
             && box.characterDialoguesBrokenUp.Count == 1
             && box.characterDialogue is { } dialogue
             && ResolvePairs(mod, dialogue, text, preview?.Pages) is { } pairs
-            && mod.FontManager?.GetSecondaryFont(Game1.dialogueFont) is { } font
-            && pairs.All(pair => pair.Secondary.All(font.Characters.Contains)))
+            && mod.GetSecondaryDialogueFont() is { } font
+            && pairs.All(pair => font.Supports(pair.Secondary)))
         {
             int bodyWidth = box.isPortraitBox() ? width : width - 16;
-            DialoguePairLayout.PositionedPair[]? Fit(IReadOnlyList<DialogueTextPair> page)
-                => DialoguePairLayout.FitPage(page, bodyWidth, box.height - 16,
-                    preview?.SecondaryFirst ?? mod.Config.SecondaryFirst,
-                    primary => SpriteText.getHeightOfString(primary, bodyWidth - 4),
-                    line => font.MeasureString(line).X * DialoguePairLayout.SecondaryScale,
-                    lines => Math.Max(font.MeasureString(lines).Y,
-                        (1 + lines.Count(c => c == '\n')) * font.LineSpacing) * DialoguePairLayout.SecondaryScale);
-
-            var layout = Fit(pairs);
-            if (layout == null && pairs.Length > 1)
-                layout = Fit(new[] { new DialogueTextPair(text, string.Join(" ", pairs.Select(pair => pair.Secondary))) });
-
+            var layout = DialogueInterleavedLayout.Fit(pairs, bodyWidth, box.height - 16,
+                preview?.SecondaryFirst ?? mod.Config.SecondaryFirst,
+                primary => SpriteText.getHeightOfString(primary, bodyWidth - 4),
+                line => font.Measure(line).X * DialoguePairLayout.SecondaryScale,
+                line => font.Measure(line).Y * DialoguePairLayout.SecondaryScale);
             if (layout != null)
             {
                 int visiblePosition = DialoguePairLayout.GetVisiblePosition(position, text.Length);
-                foreach (var pair in layout)
+                foreach (var row in layout.Rows)
                 {
-                    int revealed = pair.RevealedCharacters(visiblePosition);
-                    if (revealed == 0)
-                        break;
-
-                    SpriteText.drawString(batch, pair.Primary, x, y + pair.PrimaryOffset, revealed, bodyWidth, height,
-                        alpha, depth, junimo, background, placeholder, color, alignment);
-
-                    if (revealed == pair.Primary.Length)
-                    {
-                        batch.DrawString(font, pair.Secondary, new Vector2(x, y + pair.SecondaryOffset),
-                            Game1.textColor, 0f, Vector2.Zero, DialoguePairLayout.SecondaryScale, SpriteEffects.None, depth);
-                    }
+                    int revealed = row.RevealedCharacters(visiblePosition);
+                    if (revealed > 0)
+                        SpriteText.drawString(batch, row.Primary, x, y + row.PrimaryOffset, revealed, bodyWidth, height,
+                            alpha, depth, junimo, background, placeholder, color, alignment);
+                    if (row.Secondary.Length > 0 && visiblePosition >= row.RevealAt)
+                        font.Draw(batch, row.Secondary, new Vector2(x, y + row.SecondaryOffset),
+                            Game1.textColor * alpha, DialoguePairLayout.SecondaryScale, depth);
                 }
                 return;
             }

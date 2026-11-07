@@ -2,7 +2,7 @@
 
 Kế hoạch làm việc và nghiệm thu: [Kế hoạch phát triển](DEVELOPMENT-PLAN.vi.md).
 
-Mốc: dialogue preview 21, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Mốc: dialogue preview 22, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
 
 ## Đã nối vào code
 
@@ -51,3 +51,11 @@ Mẫu lấy cặp câu Evelyn Monday đã giải theo đúng ngôn ngữ chính/
 - [Nghiên cứu mở rộng](ADVANCED-BILINGUAL-RESEARCH.vi.md), phần provenance, tác dụng phụ và bố cục.
 - [Wiki Dialogue](https://stardewvalleywiki.com/Modding%3ADialogue), phần Dialogue commands, Question example và Response IDs.
 - Mã cục bộ `Dialogue.parseDialogueString`, `chooseResponse`, `DialogueBox.setUpQuestions`, `draw`, `performHoverAction`, `update` của 1.6.15 được dùng để chốt hành vi. AGY rà soát thiết kế; các mô tả call site khác mã cục bộ không được áp dụng.
+
+## Preview 22: font native và xen hàng
+
+Ba đường vẽ hiện có (NPC, hộp thông tin, câu hỏi) dùng DialogueNativeFontProvider/DialogueNativeFont thay SpriteFont1 cho bản phụ, scale 0.75. Provider đọc font native của locale phụ: Latin font_bold/font_colored, BMFont theo locale và metadata custom language. Icon đặc biệt giữ sheet SpriteText. Không đổi font/ngôn ngữ toàn cục; font thiếu hoặc thiếu glyph giữ fallback. Font UI của tooltip và các GUI khác không thuộc thay đổi này.
+
+DialogueInterleavedLayout wrap riêng hai bản trong từng khối có nguồn đối chiếu, xen hàng phụ với hàng chính và đảo từng cặp qua SecondaryFirst. Offset chữ chính giữ theo chuỗi vanilla để reveal không chạy sang hàng sau. Hàng phụ xuất hiện khi hàng chính tương ứng hoàn tất. Nếu hai bản có số hàng khác nhau, phần dư giữ trong cùng khối; đây là bố cục theo hàng, không bảo đảm tương đương nghĩa từng hàng. Câu hỏi dùng cùng hình học cho vẽ và hitbox. Hộp thông tin điều chỉnh chiều cao; NPC chưa tăng khung vượt vùng vanilla và fallback khi không vừa.
+
+Hỗ trợ policy font của 12 ngôn ngữ vanilla cùng custom khai báo font hội thoại native; không đồng nghĩa đã tích hợp mọi nguồn hội thoại hay nghiệm thu mọi ngôn ngữ trong game. Thai thiếu asset vanilla và custom chỉ khai báo SpriteFont UI không có font native để suy ra. Custom renderer như DDFC vẫn ngoài phạm vi. Kiểm tra tự động: 1092/1092; kiểm tra GPU/thị giác preview 22 còn chờ.

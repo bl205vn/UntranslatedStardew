@@ -28,6 +28,11 @@ public sealed class ModEntry : Mod
     private (WeakReference<DialogueBox> Box, bool SecondaryFirst, DialogueTextPair[][]? Pages)? _dialoguePreview;
     private Harmony? _harmony;
     private DialogueCheckMonitor? _dialogueCheckMonitor;
+    private DialogueNativeFontProvider? _nativeDialogueFonts;
+
+    internal DialogueNativeFont? GetSecondaryDialogueFont()
+        => (_nativeDialogueFonts ??= new DialogueNativeFontProvider(SourceRegistry, message => Monitor.Log(message, LogLevel.Debug)))
+            .Get(_contentProvider?.EffectiveLanguage ?? Config.SecondaryLanguage);
     private RawContentProvider? _contentProvider;
     private ItemNameResolver? _nameResolver;
     private BilingualFontManager? _fontManager;
@@ -225,8 +230,8 @@ public sealed class ModEntry : Mod
         var box = new DialogueBox(new Dialogue(speaker, $"{asset}:{key}", primary));
         string visibleText = box.getCurrentString()[GetDialogueSpeakerPrefix(box.characterDialogue).Length..];
         string? secondary = GetSecondaryDialogueText(box.characterDialogue, visibleText);
-        var font = _fontManager?.GetSecondaryFont(Game1.dialogueFont);
-        if (secondary == null || font == null || !secondary.All(font.Characters.Contains))
+        var font = GetSecondaryDialogueFont();
+        if (secondary == null || font == null || !font.Supports(secondary))
         {
             Monitor.Log("No usable secondary line for this sample. Set a different secondary language with a dialogue translation and font.", LogLevel.Warn);
             return;
@@ -501,6 +506,7 @@ public sealed class ModEntry : Mod
     private void OnLocaleChanged(object? sender, LocaleChangedEventArgs e)
     {
         LoadedDialogueSource.Invalidate();
+        _nativeDialogueFonts?.Invalidate();
         _nameResolver?.Invalidate();
         _fontManager?.Invalidate();
     }
@@ -531,6 +537,7 @@ public sealed class ModEntry : Mod
     private void OnAssetsInvalidated(object? sender, AssetsInvalidatedEventArgs e)
     {
         LoadedDialogueSource.Invalidate();
+        _nativeDialogueFonts?.Invalidate();
         if (e.NamesWithoutLocale.Any(name => name.IsEquivalentTo("Mods/GiaHung.UntranslatedStardew/Names")))
         {
             ReloadCpTranslations();
@@ -962,6 +969,8 @@ public sealed class ModEntry : Mod
     {
         if (disposing)
         {
+            _nativeDialogueFonts?.Dispose();
+            _nativeDialogueFonts = null;
             _dialogueCheckMonitor?.Dispose();
             _dialogueCheckMonitor = null;
             Helper.Events.GameLoop.GameLaunched -= OnGameLaunched;
