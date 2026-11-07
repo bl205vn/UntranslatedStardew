@@ -38,6 +38,8 @@ internal static class DialogueBoxPatch
         float alpha, float depth, bool junimo, int background, string placeholder, Color? color,
         SpriteText.ScrollTextAlignment alignment, DialogueBox box)
     {
+        if (ObjectDialoguePatch.TryDraw(batch, text, x, y, position, alpha, depth, box))
+            return;
         if (DialogueQuestionPatch.TryDraw(batch, text, x, y, position, alpha, depth, box))
             return;
 
@@ -45,7 +47,6 @@ internal static class DialogueBoxPatch
         var preview = mod?.GetDialoguePreview(box);
         if (mod != null && (preview.HasValue || mod.Config.ShowSecondaryInDialogue)
             && !Game1.eventUp && !box.isQuestion
-            && (box.isPortraitBox() || !Game1.options.showPortraits)
             && !mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
             && box.characterDialoguesBrokenUp.Count == 1
             && box.characterDialogue is { } dialogue

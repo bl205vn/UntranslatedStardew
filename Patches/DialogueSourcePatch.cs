@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using HarmonyLib;
 using StardewValley;
+using UntranslatedStardew.Core;
 
 namespace UntranslatedStardew.Patches;
 
@@ -26,6 +27,17 @@ internal static class DialogueSourcePatch
         Sources.Remove(__instance);
         if (other != null)
             Sources.Add(__instance, new(GetKey(other)));
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch(MethodType.Constructor, typeof(NPC), typeof(string), typeof(string))]
+    private static void CaptureLoaded(Dialogue __instance, string translationKey, string dialogueText)
+    {
+        if (translationKey == null && GetKey(__instance) == null && dialogueText != null && LoadedDialogueSource.Get(dialogueText) is { } source)
+        {
+            Sources.Remove(__instance);
+            Sources.Add(__instance, new(source));
+        }
     }
 
     internal static string? GetKey(Dialogue dialogue)

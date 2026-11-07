@@ -412,6 +412,21 @@ public sealed class ModEntry : Mod
             dialogue.farmer.DialogueQuestionsAnswered.Contains, Lookup);
     }
 
+    internal DialogueTextPair[]? GetObjectDialoguePages(string source, string displayed)
+    {
+        if (_contentProvider == null || !DialogueTranslation.TryParseSourceKey(source, out string asset, out string key)
+            || !_contentProvider.TryGetDialogueString(asset, key, out string? secondary) || secondary == null)
+            return null;
+        try
+        {
+            var primary = Game1.content.Load<Dictionary<string, string>>(asset);
+            return primary.TryGetValue(key, out string? text) && text != null
+                ? ObjectDialogueTranslation.Match(text, secondary, displayed, Game1.player.Gender) : null;
+        }
+        catch (Microsoft.Xna.Framework.Content.ContentLoadException) { return null; }
+        catch (InvalidCastException) { return null; }
+    }
+
     internal DialogueQuestionTranslation.Question? GetDialogueQuestion(Dialogue dialogue, string visiblePrompt, Response[] responses)
         => TryGetDialogueSources(dialogue, out string primary, out string secondary)
             ? DialogueQuestionTranslation.Match(primary, secondary, visiblePrompt,
@@ -485,6 +500,7 @@ public sealed class ModEntry : Mod
 
     private void OnLocaleChanged(object? sender, LocaleChangedEventArgs e)
     {
+        LoadedDialogueSource.Invalidate();
         _nameResolver?.Invalidate();
         _fontManager?.Invalidate();
     }
@@ -514,6 +530,7 @@ public sealed class ModEntry : Mod
 
     private void OnAssetsInvalidated(object? sender, AssetsInvalidatedEventArgs e)
     {
+        LoadedDialogueSource.Invalidate();
         if (e.NamesWithoutLocale.Any(name => name.IsEquivalentTo("Mods/GiaHung.UntranslatedStardew/Names")))
         {
             ReloadCpTranslations();

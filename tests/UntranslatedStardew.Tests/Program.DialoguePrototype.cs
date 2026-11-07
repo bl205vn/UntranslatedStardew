@@ -14,6 +14,7 @@ public static partial class Program
     {
         TestDialogueNarration();
         TestDialogueProgress();
+        TestObjectDialogue();
         Assembly mod = typeof(RawContentProvider).Assembly;
         var previewBuilder = mod.GetType("UntranslatedStardew.Core.DialogueQuestionPreview", true)!
             .GetMethod("Create", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -338,6 +339,7 @@ public static partial class Program
                 harmony.Unpatch(AccessTools.Method(typeof(DialogueBox), method, method == "draw" ? new[] { typeof(SpriteBatch) } : null), HarmonyPatchType.All, harmony.Id);
             harmony.Unpatch(AccessTools.Method(typeof(Dialogue), "parseDialogueString"), HarmonyPatchType.All, harmony.Id);
             harmony.Unpatch(AccessTools.Constructor(typeof(Dialogue), new[] { typeof(Dialogue) }), HarmonyPatchType.All, harmony.Id);
+            harmony.Unpatch(AccessTools.Constructor(typeof(Dialogue), new[] { typeof(NPC), typeof(string), typeof(string) }), HarmonyPatchType.All, harmony.Id);
         }
     }
 }

@@ -1,4 +1,4 @@
-# Lệnh kiểm tra hội thoại — preview 20
+# Lệnh kiểm tra hội thoại — preview 21
 
 Xem danh sách bất kỳ lúc nào: `untranslated_dialogue_help`.
 
@@ -26,3 +26,7 @@ Lệnh `key` hiện chỉ chọn khóa trong `Characters/Dialogue/<NPC>` và v�
 ## Danh sách và lịch sử
 
 Các lệnh của mod được đăng ký lại mỗi lần khởi động SMAPI. Danh sách lệnh không bị xóa qua lần chạy; dùng `untranslated_dialogue_help` để xem lại. Lịch sử ↑/↓ thuộc phiên console và có thể mất khi mở tiến trình mới. File này được kèm trong ZIP dưới tên `UntranslatedStardew/COMMANDS.vi.md` để tra cứu độc lập với console.
+
+## Bản 21 và các hộp thông tin thực tế
+
+Không thêm lệnh mẫu nhỏ. Adapter tự áp dụng cho hộp thông tin có nguồn xác định trong lúc chơi. `coverage` là kiểm tra logic/runtime, không mở hộp thoại mẫu và không xác nhận tất cả GUI đã có bản phụ. Đợt nghiệm thu M2 được gom trong kế hoạch phát triển; các mẫu câu hỏi cũ không cần chạy lại.

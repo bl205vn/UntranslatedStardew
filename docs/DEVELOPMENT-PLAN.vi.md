@@ -16,12 +16,12 @@ Không yêu cầu mọi bề mặt phải chen thêm hai dòng cố định: vù
 
 | Phần | Bằng chứng | Phạm vi kết luận |
 |---|---|---|
-| Build và bộ test preview 20 | 1005 đạt, 0 lỗi | Logic/offline và một số điểm nối Harmony; không phải xác nhận toàn bộ GUI |
+| Build và bộ test preview 21 | 1015 đạt, 0 lỗi | Logic/offline và một số điểm nối Harmony; không phải xác nhận toàn bộ GUI |
 | `coverage` | Người dùng chạy trong game: 8/8 đạt | Luật nguồn, lời dẫn, constructor/copy/reparse thật và giữ/xóa khóa nguồn |
 | Câu hỏi song ngữ | Hai ảnh người dùng ở preview 17 | Mở được mẫu, đảo trên/dưới, đáp án dài xuống dòng, highlight bao hai ngôn ngữ |
 | Các quy tắc thoại trước đó | Log PASS đã gửi: gender/weekly/state/query/response/pairs/fallback/layout | Giữ làm kiểm tra hồi quy tự động; chỉ thử lại khi thay đổi đường xử lý tương ứng |
 | Nguồn thoại mở rộng | Preview 18–19 đã có code và kiểm tra dữ liệu cài đặt | Nguồn đọc được không đồng nghĩa mọi nơi sử dụng nguồn đó đã hỗ trợ song ngữ |
-| Cutscene/dịch chuyển sau `coverage` | Người dùng báo; log có `Warping to Farm` sau lệnh | Chưa biết nguyên nhân; chưa đóng vấn đề |
+| Cutscene/dịch chuyển sau `coverage` | Người dùng xác nhận cầm Return Scepter; snapshot trước/sau lệnh `unchanged=True` | Đóng M0 theo xác nhận người dùng; không quy lỗi warp cho command |
 
 Chưa xác nhận đầy đủ: chọn đáp án bằng gamepad, nhánh `$q` đã trả lời chèn fallback, event UI, bong bóng, tên NPC song ngữ, các GUI chuyên biệt phía dưới, tương thích DDFC.
 
@@ -42,9 +42,9 @@ Trạng thái dùng: **Chưa làm → Đang làm → Đã code → Đã kiểm t
 
 | Mốc | Phạm vi và đầu ra | Điều kiện hoàn tất | Trạng thái |
 |---|---|---|---|
-| M0 | Xác minh cutscene/dịch chuyển sau `coverage`; bảo đảm lệnh thử không thay trạng thái chơi | Có nguyên nhân hoặc phép tái hiện đủ phân biệt quan hệ nhân quả; nếu sửa, có hồi quy phù hợp và xác nhận hành vi | Đã code/đã kiểm tra phần chẩn đoán preview 20; nguyên nhân warp chưa xác định |
+| M0 | Xác minh cutscene/dịch chuyển sau `coverage`; bảo đảm lệnh thử không thay trạng thái chơi | Có nguyên nhân hoặc phép tái hiện đủ phân biệt quan hệ nhân quả; nếu sửa, có hồi quy phù hợp và xác nhận hành vi | Đã đóng: người dùng xác nhận Return Scepter; trạng thái tức thời không đổi |
 | M1 | Chốt hội thoại NPC: lời dẫn, phản hồi, `$q` đã trả lời/fallback, nguồn và phân trang còn thiếu | Ghép đúng khóa/chỉ số đoạn; không chạy lại tác dụng phụ; trường hợp chưa hỗ trợ được ghi và fallback rõ | Đã code/đã kiểm tra fallback thuần và $p phẳng ở preview 20; chưa nghiệm thu runtime nhánh mới |
-| M2 | Hộp thông tin không chân dung và thoại event/lễ hội: `speak`, `message`, câu hỏi | Adapter giữ asset/event/command và ngữ cảnh; câu hỏi dùng đúng ID; event tiếp tục và kết thúc đúng | Chưa làm; dùng lại khảo sát có sẵn |
+| M2 | Hộp thông tin không chân dung và thoại event/lễ hội: `speak`, `message`, câu hỏi | Adapter giữ asset/event/command và ngữ cảnh; câu hỏi dùng đúng ID; event tiếp tục và kết thúc đúng | Đã code/đã kiểm tra hộp thông tin và NPC không chân dung; event UI còn thiếu |
 | M3 | Tên NPC trong biển tên, danh sách xã hội và hồ sơ; bong bóng trên đầu NPC | Không lộ tên `???`; không trùng tên; bong bóng dùng chung timer/fade và nằm trong màn hình | Chưa làm |
 | M4 | Thư, ghi chú và các trang đọc | Đọc được hai ngôn ngữ; phân trang/điều hướng đúng; nhận quà và nút nhận việc chỉ thực hiện một lần | Chưa làm |
 | M5 | QuestLog, bảng giao việc thường và Special Orders/Qi | Tiêu đề/mô tả/mục tiêu/phần thưởng đúng nguồn; vùng cuộn, nút nhận/hủy và trạng thái tiến độ đúng | Chưa làm |
@@ -115,3 +115,14 @@ Mỗi lần hoàn thành mốc, cập nhật bảng tiến độ, bằng chứng
 - Đã thêm hồi quy cho offset, nhiều trang, giới tính, weekly của câu cha, `-1`, `null`, chưa trả lời, header không khớp, thiếu dịch, lệnh item/action, câu hỏi lồng và `$p` cùng chữ khác nhánh; kiểm tra observer phân biệt đi bộ với chuyển location/event.
 - Build thành công, **1005/1005** kiểm tra tự động đạt. `qfallback` là nhóm console mới gồm 4 ca thuần; `coverage` giữ 8 ca khi runtime đủ điều kiện. Không yêu cầu người dùng chạy lại nhóm cũ ở mốc này.
 - **Chưa đóng M0**, chưa xác nhận runtime/ảnh của fallback mới. Bước tiếp: thu bằng chứng M0 khi có log từ tình huống thực; M2 (event/hộp thông tin) có thể chuẩn bị độc lập dựa trên khảo sát sẵn có. Không coi việc đọc được `Strings/Events` là đã tích hợp renderer event.
+
+## Nhật ký triển khai — preview 21
+
+- **M0 đóng:** người dùng xác nhận nguyên nhân là cầm Return Scepter khi thao tác console. Snapshot `before`/`immediate after` không đổi. Không cần yêu cầu thử lại M0.
+- **M2, phần hộp thông tin:** theo dõi chính instance chuỗi trả về từ `Game1.content.LoadStringReturnNullIfNotFound(path, bool)`. Không dò ngược từ chữ đang hiện. Instance chuỗi có nhiều khóa nguồn bị coi là mơ hồ và giữ vanilla; đổi locale/content làm mất hiệu lực nguồn cũ.
+- `DialogueBox(string)` được gắn các trang bản phụ sau khi đối chiếu nguyên chuỗi chính với dictionary. Mỗi trang `#` có vị trí riêng, kể cả trang trống. `^` trong loại khung này là xuống dòng hiển thị; không được diễn giải như dấu phân cách giới tính cũ của thoại NPC.
+- Khung thông tin tăng chiều cao theo tổng hai bản văn, giữ đáy khung, sử dụng font chính/phụ đúng vai trò và `SecondaryFirst`. Click chỉ hiện hết chữ không làm nhảy bản dịch sang trang sau. Nếu thiếu glyph, thiếu bản dịch, đổi nội dung hoặc không vừa vùng màn hình thì giữ vanilla.
+- **M2, NPC thiếu ảnh:** bỏ điều kiện vô tình chỉ cho phép NPC có portrait khi tùy chọn portrait đang bật. Với literal `Dialogue` không có key nhưng giữ đúng instance chuỗi vừa nạp, có thể khôi phục nguồn đã theo dõi; các lần reparse xóa key vẫn giữ ngữ nghĩa riêng.
+- Đã kiểm tra hồi quy: identity khác nhưng cùng chữ không ghép; nguồn chia sẻ/mơ hồ; nguồn không hỗ trợ; invalidation; page count; xuống dòng; giới tính; template, item/command; chữ chính bị sửa; trang trống; chữ ký Harmony thật. **1015/1015 đạt**, build thành công.
+- Antigravity rà soát thiết kế; các rủi ro template, chuỗi chia sẻ, click chỉ reveal và hình học được đối chiếu với code. Chưa nghiệm thu thị giác đường khung mới. Event/câu hỏi địa điểm/shop, chuỗi format/thao tác nối làm mất instance nguồn và `DialogueBox(List<string>)` vẫn chưa có adapter.
+- **Phiếu nghiệm thu gộp M2:** trong một lượt chơi bình thường, kiểm tra hộp thông tin không chân dung (ưu tiên câu trong rạp phim vừa báo), chuyển tới trang sau nếu có và đóng khung. Quan sát hai ngôn ngữ, khung chứa đủ chữ và việc tiếp/thoát vẫn đúng. Không yêu cầu chạy lại log PASS từng token hoặc dựng lại ảnh mẫu câu hỏi cũ. Chỉ thực hiện khi nghiệm thu bản giao diện này; không phải điều kiện để chuẩn bị phần event độc lập.

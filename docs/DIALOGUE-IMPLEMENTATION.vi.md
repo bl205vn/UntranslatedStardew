@@ -2,7 +2,7 @@
 
 Kế hoạch làm việc và nghiệm thu: [Kế hoạch phát triển](DEVELOPMENT-PLAN.vi.md).
 
-Mốc: dialogue preview 20, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Mốc: dialogue preview 21, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
 
 ## Đã nối vào code
 
@@ -15,9 +15,15 @@ Mốc: dialogue preview 20, Stardew Valley 1.6.15. Đây là trạng thái code;
 
 Bản phụ được đọc như dữ liệu. Mod không chạy parser hội thoại thứ hai, không tự chọn đáp án, không áp lại điểm tình bạn hoặc lệnh hành động. Mẫu console dùng callback trả lời riêng để đóng khung trước các tác dụng phụ vanilla.
 
+## Khung thông tin không chân dung (M2, preview 21)
+
+Đã có adapter cho `DialogueBox(string)` khi đầu vào giữ đúng instance chuỗi từ `Game1.content.LoadStringReturnNullIfNotFound(path, bool)`, thuộc danh mục nguồn từ điển hỗ trợ và khớp chuỗi chính hiện tại. Khung tự đo/tăng chiều cao cho cả hai vai trò, giữ thứ tự `SecondaryFirst`, trang `#`, dòng `^` và click reveal/tiếp trang của vanilla. NPC có `Dialogue` nhưng không có portrait cũng được đưa qua đường vẽ đã có. Đã kiểm tra tự động; chưa nghiệm thu hình ảnh trong game.
+
+Không dùng text bằng nhau để suy ra khóa. Shared instance khác khóa bị loại; primary bị nối/sửa, chuỗi format, template, lệnh, item token, trang không tương ứng, nguồn thiếu hoặc tràn khung đều có thể giữ vanilla. Chưa hỗ trợ `DialogueBox(List<string>)` và câu hỏi địa điểm/shop bằng adapter mới.
+
 ## Giới hạn hiện tại
 
-- Chỉ thoại/câu hỏi NPC có khóa nguồn từ điển hợp lệ và khớp nguyên văn câu chính đang hiển thị (hoặc mẫu console) mới gắn bản phụ. Thoại đã qua tiền xử lý làm mất `TranslationKey` hoặc đã thay thế tham số `{0}`/`%endearment` trước khi tạo `Dialogue` giữ nguyên vanilla.
+- Chỉ thoại/câu hỏi NPC hoặc hộp thông tin có khóa nguồn từ điển hợp lệ và khớp nguyên văn câu chính đang hiển thị (hoặc mẫu console) mới gắn bản phụ. Thoại mất `TranslationKey` và không giữ đúng instance chuỗi đã nạp, hoặc đã thay thế tham số `{0}`/`%endearment` trước khi tạo `Dialogue` giữ nguyên vanilla.
 - Dù `Strings/Events` nằm trong danh mục từ điển đọc được khi thoại thường dùng khóa này, renderer vẫn chặn cứng `!Game1.eventUp`; hội thoại trong event UI, câu hỏi địa điểm, shop và câu hỏi do mod tạo động vẫn chưa hỗ trợ.
 - Nhánh điều kiện bao quanh câu hỏi, câu hỏi lồng nhau, lệnh trong nhãn và cấu trúc không tương ứng giữ vanilla. Lời dẫn thuần trước `$q` đã được ghép theo chỉ số đoạn và cấu trúc câu hỏi/đáp án tương ứng; câu đang hiện vẫn phải khớp nguyên văn.
 - Đường `$q` đã trả lời có ánh xạ fallback theo lịch sử chính và đúng khóa NPC. Hỗ trợ câu thuần nhiều trang và `$p` phẳng, có tính offset lời dẫn. Fallback chứa query/weekly riêng, câu hỏi lồng hoặc lệnh chưa hỗ trợ vẫn dùng vanilla. Phần mới đã kiểm tra tự động, chưa nghiệm thu runtime.
