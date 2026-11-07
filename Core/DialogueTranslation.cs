@@ -15,27 +15,78 @@ internal static class DialogueTranslation
             return null;
 
         int week = GetWeeklyVariantIndex(daysPlayed, primaryWeeks.Length);
-        string[] primaryLines = primaryWeeks[week].Split("#$b#");
-        string[] secondaryLines = secondaryWeeks[week].Split("#$b#");
-        if (primaryLines.Length != secondaryLines.Length || index < 0 || index >= primaryLines.Length)
-            return null;
-
-        for (int i = 0; i < primaryLines.Length; i++)
+        string main = primaryWeeks[week];
+        string sub = secondaryWeeks[week];
+        string[] primaryBranches = { main };
+        string[] secondaryBranches = { sub };
+        if (main.StartsWith("$d", StringComparison.Ordinal) || sub.StartsWith("$d", StringComparison.Ordinal))
         {
-            if (!TryResolveSegment(primaryLines[i], gender, out primaryLines[i])
-                || !TryResolveSegment(secondaryLines[i], gender, out secondaryLines[i]))
+            if (!TryGetWorldBranches(main, out string mainCondition, out primaryBranches)
+                || !TryGetWorldBranches(sub, out string subCondition, out secondaryBranches)
+                || mainCondition != subCondition)
                 return null;
         }
 
-        string primaryText = primaryLines[index].Replace("@", playerName);
-        string secondaryText = secondaryLines[index].Replace("@", playerName);
-        if (string.IsNullOrWhiteSpace(primaryText) || string.IsNullOrWhiteSpace(secondaryText)
-            || !string.Equals(primaryText, visibleText, StringComparison.Ordinal)
-            || string.Equals(primaryText, secondaryText, StringComparison.Ordinal)
-            || secondaryText.Any(char.IsControl))
-            return null;
+        bool found = false;
+        string? matchedSecondary = null;
+        for (int branch = 0; branch < primaryBranches.Length; branch++)
+        {
+            string[] primaryLines = primaryBranches[branch].Split("#$b#");
+            string[] secondaryLines = secondaryBranches[branch].Split("#$b#");
+            if (primaryLines.Length != secondaryLines.Length)
+                return null;
 
-        return secondaryText;
+            for (int i = 0; i < primaryLines.Length; i++)
+            {
+                if (!TryResolveSegment(primaryLines[i], gender, out primaryLines[i])
+                    || !TryResolveSegment(secondaryLines[i], gender, out secondaryLines[i]))
+                    return null;
+            }
+
+            if (index < 0 || index >= primaryLines.Length)
+                continue;
+
+            string primaryText = primaryLines[index].Replace("@", playerName);
+            string secondaryText = secondaryLines[index].Replace("@", playerName);
+            if (!string.Equals(primaryText, visibleText, StringComparison.Ordinal))
+                continue;
+
+            // Blank and duplicate translations must also participate in ambiguity checks.
+            if (found && !string.Equals(matchedSecondary, secondaryText, StringComparison.Ordinal))
+                return null;
+
+            found = true;
+            matchedSecondary = secondaryText;
+        }
+
+        return found && !string.IsNullOrWhiteSpace(visibleText)
+            && !string.IsNullOrWhiteSpace(matchedSecondary)
+            && matchedSecondary != visibleText && !matchedSecondary.Any(char.IsControl)
+                ? matchedSecondary
+                : null;
+    }
+
+    private static bool TryGetWorldBranches(string text, out string condition, out string[] branches)
+    {
+        condition = "";
+        branches = Array.Empty<string>();
+        int delimiter = text.IndexOf('#');
+        if (delimiter < 0)
+            return false;
+
+        string[] header = text[..delimiter].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (header.Length != 2 || header[0] != "$d")
+            return false;
+
+        condition = header[1].ToLowerInvariant();
+        if (condition == "communitycenter")
+            condition = "cc";
+        if (condition is not ("joja" or "cc" or "bus" or "kent"))
+            return false;
+
+        branches = text[(delimiter + 1)..].Split('|');
+        return branches.Length == 2
+            && branches.All(branch => branch.Split("#$b#").All(IsSafeSegment));
     }
 
     internal static DialogueTextPair[]? MatchBlocks(
@@ -100,7 +151,9 @@ internal static class DialogueTranslation
         => (int)(daysPlayed / 7 % (uint)variantCount);
 
     internal static bool IsSafePreview(string text)
-        => text.Split("||").All(variant => variant.Split("#$b#").All(IsSafeSegment));
+        => text.Split("||").All(variant => variant.StartsWith("$d", StringComparison.Ordinal)
+            ? TryGetWorldBranches(variant, out _, out _)
+            : variant.Split("#$b#").All(IsSafeSegment));
 
     internal static bool TryResolveSegment(string segment, Gender gender, out string text)
     {

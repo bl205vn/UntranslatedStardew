@@ -60,6 +60,15 @@ public static partial class Program
             && Pair(weeklyMain, weeklySecondary, 0, "First week.", daysPlayed: 7) == null,
             "Weekly dialogue rejects unequal variant counts and mismatched live text");
 
+        Assert(Pair("$d cc#Open.|Closed.", "$d communitycenter#Mở cửa.|Đóng cửa.", 0, "Open.") == "Mở cửa."
+            && Pair("$d kent#Home.#$b#Welcome.|Away.", "$d kent#Ở nhà.#$b#Chào mừng.|Đi vắng.", 1, "Welcome.") == "Chào mừng."
+            && Pair("First.||$d kent#Home.|Away.", "Đầu.||$d kent#Ở nhà.|Đi vắng.", 0, "Away.", daysPlayed: 7) == "Đi vắng.",
+            "World-state branches combine with aliases, authored pages and weekly variants");
+        Assert(Pair("$d kent#Hello.|Hello.", "$d kent#Chào.|Chào.", 0, "Hello.") == "Chào."
+            && Pair("$d kent#Hello.|Hello.", "$d kent#Chào.|Xin chào.", 0, "Hello.") == null
+            && Pair("$d kent#Hello.|Hello.", "$d kent#${^}$|Xin chào.", 0, "Hello.") == null,
+            "World-state ambiguity includes blank translations and permits only identical results");
+
         MethodInfo match = pair.DeclaringType!.GetMethod("MatchBlocks", BindingFlags.Static | BindingFlags.NonPublic)!;
         string[][] variants = { new[] { "Oh my!", "What a lovely day." }, new[] { "Ôi chao!", "Một ngày đẹp trời." } };
         Array? Match(string primary, string secondary, string[][] data)
@@ -146,6 +155,7 @@ public static partial class Program
             => ((string, bool)[]?)runChecks.Invoke(null, new object[] { group });
         var groups = new[] { "branch", "pairs", "fallback", "layout" }.Select(group => Run(group)!).ToArray();
         Assert(groups.All(group => group.Length > 0 && group.All(check => check.Passed))
+            && Run("state") is { Length: 4 } stateChecks && stateChecks.All(check => check.Passed)
             && Run("all")!.SequenceEqual(groups.SelectMany(group => group)) && Run("invalid") == null,
             "Console dialogue checks run individually and aggregate the same passing results");
 

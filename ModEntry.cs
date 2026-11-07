@@ -98,13 +98,13 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_test",
-            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|key <NPC> <key>]",
+            "Opens a bilingual dialogue sample without changing configuration. Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|state|key <NPC> <key>]",
             OnDialoguePreviewCommand
         );
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_check",
-            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|pairs|fallback|layout|all]",
+            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|state|pairs|fallback|layout|all]",
             OnDialogueCheckCommand
         );
 
@@ -118,7 +118,7 @@ public sealed class ModEntry : Mod
         var checks = args.Length <= 1 ? DialogueChecks.Run(group) : null;
         if (checks == null)
         {
-            Monitor.Log("Usage: untranslated_dialogue_check [branch|pairs|fallback|layout|all]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_check [branch|state|pairs|fallback|layout|all]", LogLevel.Info);
             return;
         }
 
@@ -135,10 +135,10 @@ public sealed class ModEntry : Mod
         int offset = args.FirstOrDefault() is "above" or "below" ? 1 : 0;
         string? sample = args.ElementAtOrDefault(offset);
         bool fromKey = sample == "key" && args.Length == offset + 3;
-        bool builtInSample = args.Length - offset <= 1 && sample is null or "wrap" or "pairs" or "authored" or "gender" or "weekly";
+        bool builtInSample = args.Length - offset <= 1 && sample is null or "wrap" or "pairs" or "authored" or "gender" or "weekly" or "state";
         if (!fromKey && !builtInSample)
         {
-            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|key <NPC> <key>]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|state|key <NPC> <key>]", LogLevel.Info);
             return;
         }
 
@@ -183,7 +183,7 @@ public sealed class ModEntry : Mod
         }
 
         string plainSample = "";
-        if (sample is "wrap" or "pairs" or "gender" or "weekly"
+        if (sample is "wrap" or "pairs" or "gender" or "weekly" or "state"
             && !DialogueTranslation.TryGetPlainText(primary, out plainSample))
         {
             Monitor.Log("This preview needs the plain Evelyn Monday line as its sample.", LogLevel.Warn);
@@ -220,7 +220,7 @@ public sealed class ModEntry : Mod
                 : new[] { new[] { longPair }, new[] { shortPair } };
         }
 
-        if (sample is "gender" or "weekly")
+        if (sample is "gender" or "weekly" or "state")
         {
             string authored;
             string translated;
@@ -231,6 +231,12 @@ public sealed class ModEntry : Mod
                 translated = $"{secondary}||{secondary} {secondary}";
                 int selected = DialogueTranslation.GetWeeklyVariantIndex(daysPlayed, 2) + 1;
                 Monitor.Log($"Weekly preview: DaysPlayed={daysPlayed}, variant {selected}/2 (short, then long).", LogLevel.Info);
+            }
+            else if (sample == "state")
+            {
+                authored = $"$d kent#{plainSample} {plainSample}|{plainSample}";
+                translated = $"$d kent#{secondary} {secondary}|{secondary}";
+                Monitor.Log($"World-state preview: kent={(Game1.year >= 2 ? "true (long)" : "false (short)")}.", LogLevel.Info);
             }
             else
             {
@@ -243,7 +249,10 @@ public sealed class ModEntry : Mod
             }
 
             string[] weeks = authored.Split("||");
-            string[] sourcePages = weeks[DialogueTranslation.GetWeeklyVariantIndex(daysPlayed, weeks.Length)].Split("#$b#");
+            string selectedWeek = weeks[DialogueTranslation.GetWeeklyVariantIndex(daysPlayed, weeks.Length)];
+            string[] sourcePages = sample == "state"
+                ? new[] { Game1.year >= 2 ? $"{plainSample} {plainSample}" : plainSample }
+                : selectedWeek.Split("#$b#");
             Gender gender = Game1.player.Gender;
             string playerName = Utility.FilterUserName(Game1.player.Name);
             pages = new DialogueTextPair[sourcePages.Length][];

@@ -8,11 +8,12 @@ internal static class DialogueChecks
     internal static (string Name, bool Passed)[]? Run(string group)
         => group switch
         {
-            "branch" => CheckBranches(),
+            "branch" => CheckBranches().Concat(CheckWorldState()).ToArray(),
+            "state" => CheckWorldState(),
             "pairs" => CheckPairs(),
             "fallback" => CheckFallback(),
             "layout" => CheckLayout(),
-            "all" => CheckBranches().Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).ToArray(),
+            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).ToArray(),
             _ => null
         };
 
@@ -36,6 +37,26 @@ internal static class DialogueChecks
                 Resolve("First.||Second.", "Đầu.||Sau.", "First.", daysPlayed: 6) == "Đầu."
                 && Resolve("First.||Second.", "Đầu.||Sau.", "Second.", daysPlayed: 7) == "Sau."
                 && Resolve("First.||Second.", "Đầu.||Sau.", "First.", daysPlayed: 14) == "Đầu.")
+        };
+    }
+
+    private static (string, bool)[] CheckWorldState()
+    {
+        const string primary = "$d kent#Kent is home.|Kent is away.";
+        const string secondary = "$d kent#Kent đã về.|Kent đi vắng.";
+        return new[]
+        {
+            ("World-state branch follows the live primary text",
+                Resolve(primary, secondary, "Kent is home.") == "Kent đã về."
+                && Resolve(primary, secondary, "Kent is away.") == "Kent đi vắng."),
+            ("World-state conditions must agree",
+                Resolve(primary, secondary.Replace("$d kent", "$d bus"), "Kent is home.") == null),
+            ("Indistinguishable world-state branches fall back",
+                Resolve("$d kent#Hello.|Hello.", "$d kent#Chào.|Xin chào.", "Hello.") == null
+                && Resolve("$d kent#Hello.|Hello.", "$d kent#Hello.|Xin chào.", "Hello.") == null),
+            ("Unsafe inactive branches are rejected before a console preview",
+                !DialogueTranslation.IsSafePreview("$d kent#Hello.|$action AddMoney 1")
+                && Resolve(primary, "$d kent#Kent đã về.|Here is [74].", "Kent is home.") == null)
         };
     }
 
