@@ -202,8 +202,9 @@ public static partial class Program
             .GetMethod("Run", BindingFlags.Static | BindingFlags.NonPublic)!;
         (string Name, bool Passed)[]? Run(string group)
             => ((string, bool)[]?)runChecks.Invoke(null, new object[] { group });
-        var groups = new[] { "branch", "question", "pairs", "fallback", "layout" }.Select(group => Run(group)!).ToArray();
+        var groups = new[] { "branch", "question", "pairs", "fallback", "layout", "sources", "narration" }.Select(group => Run(group)!).ToArray();
         Assert(groups.All(group => group.Length > 0 && group.All(check => check.Passed))
+            && Run("coverage") is { Length: 5 } coverageChecks && coverageChecks.All(check => check.Passed)
             && Run("question") is { Length: 8 } questionChecks && questionChecks.All(check => check.Passed)
             && Run("state") is { Length: 4 } stateChecks && stateChecks.All(check => check.Passed)
             && Run("response") is { Length: 5 } responseChecks && responseChecks.All(check => check.Passed)

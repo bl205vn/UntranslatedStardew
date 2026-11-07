@@ -16,9 +16,45 @@ internal static class DialogueChecks
             "pairs" => CheckPairs(),
             "fallback" => CheckFallback(),
             "layout" => CheckLayout(),
-            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckResponses()).Concat(CheckQuestions()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).ToArray(),
+            "sources" => CheckSources(),
+            "narration" => CheckNarration(),
+            "coverage" => CheckSources().Concat(CheckNarration()).ToArray(),
+            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckResponses()).Concat(CheckQuestions()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).Concat(CheckSources()).Concat(CheckNarration()).ToArray(),
             _ => null
         };
+
+    private static (string, bool)[] CheckSources() => new[]
+    {
+        ("Dialogue sources normalize supported dictionary asset keys",
+            DialogueTranslation.TryParseSourceKey(@"Strings\Characters:WipedMemory", out string asset, out string key)
+            && asset == "Strings/Characters" && key == "WipedMemory"
+            && DialogueTranslation.TryParseSourceKey("Data/ExtraDialogue:Wizard_Hatch", out _, out _)),
+        ("Dialogue sources reject typed data, scripts and traversal paths",
+            !DialogueTranslation.TryParseSourceKey("Data/Objects:74", out _, out _)
+            && !DialogueTranslation.TryParseSourceKey("Data/Events/Town:1", out _, out _)
+            && !DialogueTranslation.TryParseSourceKey("Characters/Dialogue/../Evelyn:Mon", out _, out _))
+    };
+
+    private static (string, bool)[] CheckNarration()
+    {
+        const string main = "Hello @.$h#$b#One more thing.#$q -1 null#A question?#$r Yes 0 accept#Yes please.";
+        const string sub = "Chào @.$1#$b#Còn một chuyện.#$q -1 null#Một câu hỏi?#$r Yes 0 accept#Vâng ạ.";
+        return new[]
+        {
+            ("Pre-question narration preserves authored pages and player names",
+                Resolve(main, sub, "Hello Alex.") == "Chào Alex."
+                && Resolve(main, sub, "One more thing.", 1) == "Còn một chuyện."),
+            ("Narration rejects stale text, prompt indices and unsafe answer branches",
+                Resolve(main, sub, "Different.") == null
+                && Resolve(main, sub, "A question?", 2) == null
+                && Resolve(main, sub.Replace("Yes 0", "Yes 10"), "Hello Alex.") == null
+                && Resolve(main, sub.Replace("Vâng ạ.", "$action AddMoney 1"), "Hello Alex.") == null),
+            ("Narration selects the same weekly variant in both languages",
+                Resolve(main + "||" + main.Replace("One more thing.", "Next week."),
+                    sub + "||" + sub.Replace("Còn một chuyện.", "Tuần sau."), "Next week.", 1, daysPlayed: 7) == "Tuần sau."
+                && Resolve(main + "||" + main, sub, "Hello Alex.") == null)
+        };
+    }
 
     private static string? Resolve(string primary, string secondary, string visible, int page = 0,
         Gender gender = Gender.Male, uint daysPlayed = 0)

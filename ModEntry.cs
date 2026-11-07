@@ -102,9 +102,17 @@ public sealed class ModEntry : Mod
             OnDialoguePreviewCommand
         );
 
+        helper.ConsoleCommands.Add("untranslated_dialogue_help", "Lists bilingual dialogue preview and check commands.",
+            (_, _) =>
+            {
+                Monitor.Log("untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|state|query|question|key <NPC> <key>]", LogLevel.Info);
+                Monitor.Log("untranslated_dialogue_check coverage  - source, narration and real copy checks (load a save first)", LogLevel.Info);
+                Monitor.Log("untranslated_dialogue_check [all|sources|narration|copy|branch|state|query|response|question|pairs|fallback|layout]", LogLevel.Info);
+            });
+
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_check",
-            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|state|query|response|question|pairs|fallback|layout|all]",
+            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|state|query|response|question|sources|narration|coverage|copy|pairs|fallback|layout|all]",
             OnDialogueCheckCommand
         );
 
@@ -115,10 +123,24 @@ public sealed class ModEntry : Mod
     private void OnDialogueCheckCommand(string command, string[] args)
     {
         string group = args.FirstOrDefault()?.ToLowerInvariant() ?? "all";
-        var checks = args.Length <= 1 ? DialogueChecks.Run(group) : null;
+        if (args.Length <= 1 && group is "coverage" or "copy" && !Context.IsWorldReady)
+        {
+            Monitor.Log("Load a save before checking the real Dialogue copy boundary. Use sources or narration without a save.", LogLevel.Info);
+            return;
+        }
+        var checks = args.Length <= 1 ? group == "copy" ? Array.Empty<(string Name, bool Passed)>() : DialogueChecks.Run(group) : null;
+        if (checks != null && Context.IsWorldReady && group is "coverage" or "copy" or "all")
+        {
+            try { checks = checks.Concat(DialogueRuntimeChecks.RunCopies()).ToArray(); }
+            catch (Exception ex)
+            {
+                Monitor.Log($"Copy boundary check could not finish: {ex.GetType().Name}: {ex.Message}", LogLevel.Error);
+                checks = checks.Append(("Real Dialogue copy boundary completed without an exception", false)).ToArray();
+            }
+        }
         if (checks == null)
         {
-            Monitor.Log("Usage: untranslated_dialogue_check [branch|state|query|response|question|pairs|fallback|layout|all]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_check [branch|state|query|response|question|sources|narration|coverage|copy|pairs|fallback|layout|all]", LogLevel.Info);
             return;
         }
 

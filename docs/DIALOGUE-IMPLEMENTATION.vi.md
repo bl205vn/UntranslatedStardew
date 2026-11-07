@@ -1,6 +1,6 @@
 # Trạng thái triển khai hội thoại song ngữ
 
-Mốc: dialogue preview 18, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Mốc: dialogue preview 19, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
 
 ## Đã nối vào code
 
@@ -23,6 +23,8 @@ Bản phụ được đọc như dữ liệu. Mod không chạy parser hội tho
 - DDFC chưa được hỗ trợ. Chưa mở rộng thư, bong bóng, bundle, xây dựng hoặc nhiệm vụ bằng bản thay đổi này.
 
 ## Kiểm tra theo nhóm
+
+Danh sách đầy đủ và kiểm tra coverage mới: [Lệnh console](DIALOGUE-COMMANDS.vi.md). `untranslated_dialogue_check coverage` kiểm tra gộp nguồn, lời dẫn và sao chép khóa sau khi nạp save; `untranslated_dialogue_help` in danh sách lệnh.
 
 `untranslated_dialogue_check all` gom kiểm tra quy tắc; `question` là nhóm mới cho câu hỏi, gồm ghép nguồn, header, ID chung, tuần, lệnh không phù hợp, bố cục và overflow. Các nhóm cũ vẫn dùng được. Không cần chạy từng nhóm cũ sau mỗi bản.
 
