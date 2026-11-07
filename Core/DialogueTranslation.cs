@@ -27,6 +27,11 @@ internal static class DialogueTranslation
         "Strings/schedules/"
     };
 
+    private static readonly string[] PageSeparators = { "#$b#", "#$e#" };
+
+    internal static string[] SplitPages(string text)
+        => text.Split(PageSeparators, StringSplitOptions.None);
+
     internal static bool TryParseSourceKey(string? translationKey, out string asset, out string key)
     {
         asset = "";
@@ -119,8 +124,8 @@ internal static class DialogueTranslation
         string? matchedSecondary = null;
         for (int branch = 0; branch < primaryBranches.Length; branch++)
         {
-            string[] primaryLines = primaryBranches[branch].Split("#$b#");
-            string[] secondaryLines = secondaryBranches[branch].Split("#$b#");
+            string[] primaryLines = SplitPages(primaryBranches[branch]);
+            string[] secondaryLines = SplitPages(secondaryBranches[branch]);
             if (primaryLines.Length != secondaryLines.Length)
                 return null;
 
@@ -209,7 +214,7 @@ internal static class DialogueTranslation
         if (query && branches.Length == 1)
             branches = new[] { branches[0], branches[0] };
         return branches.Length == 2
-            && branches.All(branch => branch.Split("#$b#").All(IsSafeSegment));
+            && branches.All(branch => SplitPages(branch).All(IsSafeSegment));
     }
 
     internal static DialogueTextPair[]? MatchBlocks(
@@ -277,7 +282,7 @@ internal static class DialogueTranslation
         => text.Split("||").All(variant =>
         {
             if (!IsConditional(variant))
-                return variant.Split("#$b#").All(IsSafeSegment);
+                return SplitPages(variant).All(IsSafeSegment);
             if (!TryGetConditionalBranches(variant, out string condition, out _))
                 return false;
 

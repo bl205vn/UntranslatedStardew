@@ -2,7 +2,7 @@
 
 Kế hoạch làm việc và nghiệm thu: [Kế hoạch phát triển](DEVELOPMENT-PLAN.vi.md).
 
-Mốc: dialogue preview 22, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Mốc: dialogue preview 23, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
 
 ## Đã nối vào code
 
@@ -59,3 +59,13 @@ Ba đường vẽ hiện có (NPC, hộp thông tin, câu hỏi) dùng DialogueN
 DialogueInterleavedLayout wrap riêng hai bản trong từng khối có nguồn đối chiếu, xen hàng phụ với hàng chính và đảo từng cặp qua SecondaryFirst. Offset chữ chính giữ theo chuỗi vanilla để reveal không chạy sang hàng sau. Hàng phụ xuất hiện khi hàng chính tương ứng hoàn tất. Nếu hai bản có số hàng khác nhau, phần dư giữ trong cùng khối; đây là bố cục theo hàng, không bảo đảm tương đương nghĩa từng hàng. Câu hỏi dùng cùng hình học cho vẽ và hitbox. Hộp thông tin điều chỉnh chiều cao; NPC chưa tăng khung vượt vùng vanilla và fallback khi không vừa.
 
 Hỗ trợ policy font của 12 ngôn ngữ vanilla cùng custom khai báo font hội thoại native; không đồng nghĩa đã tích hợp mọi nguồn hội thoại hay nghiệm thu mọi ngôn ngữ trong game. Thai thiếu asset vanilla và custom chỉ khai báo SpriteFont UI không có font native để suy ra. Custom renderer như DDFC vẫn ngoài phạm vi. Kiểm tra tự động: 1092/1092; kiểm tra GPU/thị giác preview 22 còn chờ.
+
+## Preview 23: ngắt thoại `$e` và các ca thiếu dịch
+
+Đã bổ sung `#$e#` cạnh `#$b#` trong resolver trang/nhánh và preview an toàn. `$e` được bỏ khỏi danh sách lời dẫn thực khi tính index trước câu hỏi; shape lời dẫn câu hỏi vẫn giữ riêng loại ngắt để từ chối cấu trúc không khớp. Các token vẫn do vanilla xử lý, renderer chỉ đọc kết quả và bản phụ thuần. Ca dữ liệu thật: Caroline `Wed6`, Alex `Wed` (giới tính/prompt/ba đáp án/lời dẫn), Demetrius Introduction có hai loại ngắt. Kiểm tra tự động 1099/1099; chưa xác nhận hiển thị của các ca mới trong game.
+
+Ảnh preview 22 đã xác nhận font native/xen hàng cho Vincent, Kent và các hộp thông tin trong rạp cùng bảng chỉ đường. Chưa thể suy ra mọi NPC/locale/event đều hoạt động.
+
+Gus khuyên tặng Pam Beer vẫn giữ vanilla: câu format runtime từ `NPC.cs.4097` rồi gắn `%revealtaste`, không có TranslationKey và mất instance nguồn. Cần adapter lấy đúng tham số tên NPC/vật phẩm từ luồng game; resolver hiện tại không tự dựng bản dịch bằng cách phân tích ngược chữ đang hiện.
+
+Cache NPC tránh wrap/đo lại mỗi frame nếu chỉ tăng số chữ hiện. Thay nội dung/kích thước/thứ tự/ngôn ngữ/font/tùy chọn native làm cache tính lại, kể cả kết quả không vừa.

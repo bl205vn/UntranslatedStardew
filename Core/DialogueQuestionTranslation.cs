@@ -40,7 +40,7 @@ internal static class DialogueQuestionTranslation
             return null;
         int week = DialogueTranslation.GetWeeklyVariantIndex(days, mainWeeks.Length);
         string[] Narration(string source) => source.Split('#').TakeWhile(field => !field.StartsWith("$q ", StringComparison.Ordinal))
-            .Where(field => field != "$b").ToArray();
+            .Where(field => field is not ("$b" or "$e")).ToArray();
         var mainLines = Narration(mainWeeks[week]);
         var subLines = Narration(subWeeks[week]);
         if (index < 0 || index >= mainLines.Length || mainLines.Length != subLines.Length
@@ -69,7 +69,7 @@ internal static class DialogueQuestionTranslation
             return null;
         int week = DialogueTranslation.GetWeeklyVariantIndex(days, mainWeeks.Length);
         int narrationCount = mainWeeks[week].Split('#')
-            .TakeWhile(field => !field.StartsWith("$q ", StringComparison.Ordinal)).Count(field => field != "$b");
+            .TakeWhile(field => !field.StartsWith("$q ", StringComparison.Ordinal)).Count(field => field is not ("$b" or "$e"));
         int fallbackIndex = index - narrationCount;
         if (fallbackIndex < 0 || lookup(header[2]) is not { } fallback)
             return null;
@@ -77,7 +77,7 @@ internal static class DialogueQuestionTranslation
         bool Plain(string text) => !text.Contains("||", StringComparison.Ordinal)
             && (text.StartsWith("$p ", StringComparison.Ordinal)
                 ? DialogueTranslation.IsSafePreview(text)
-                : text.Split("#$b#").All(segment => DialogueTranslation.TryResolveSegment(segment, gender, out _)));
+                : DialogueTranslation.SplitPages(text).All(segment => DialogueTranslation.TryResolveSegment(segment, gender, out _)));
         if (!Plain(fallback.Primary) || !Plain(fallback.Secondary))
             return null;
         return DialogueTranslation.GetSecondaryLine(fallback.Primary, fallback.Secondary, fallbackIndex,
@@ -93,10 +93,10 @@ internal static class DialogueQuestionTranslation
         if (questionIndex < 0)
             return null;
         var introduction = fields.Take(questionIndex).ToArray();
-        if (introduction.Any(field => field != "$b" && !Text(field, player, gender, out _)))
+        if (introduction.Any(field => field is not ("$b" or "$e") && !Text(field, player, gender, out _)))
             return null;
         fields = fields.Skip(questionIndex).ToArray();
-        string shape = string.Join(",", introduction.Select(field => field == "$b" ? "break" : "text"));
+        string shape = string.Join(",", introduction.Select(field => field switch { "$b" => "break", "$e" => "end", _ => "text" }));
         if (fields.Length < 4 || fields.Length % 2 != 0 || !fields[0].StartsWith("$q ", StringComparison.Ordinal))
             return null;
         string[] question = ArgUtility.SplitBySpace(fields[0]);

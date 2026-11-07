@@ -191,7 +191,7 @@ internal static class DialogueChecks
         {
             ("Question prompt and answers pair by reaction key and live order",
                 matched?.Prompt.Secondary == "Chào Alex!" && matched.Answers[1].Secondary == "Không cảm ơn."
-                && Match("Introduction.#" + main, "Mở đầu.#" + sub) != null
+                && Match("Introduction.#$e#" + main, "Mở đầu.#$e#" + sub) != null
                 && Match(main, sub, new[] { answers[1], answers[0] }) == null),
             ("Question IDs, friendship and reaction headers must agree",
                 Match(main, sub.Replace("No -10", "No 0")) == null
@@ -247,7 +247,8 @@ internal static class DialogueChecks
                 && forward[0] == new DialogueTextPair("Oh my!", "Ôi chao!")
                 && reverse[1] == new DialogueTextPair("Một ngày đẹp trời.", "What a lovely day.")),
             ("Authored page and player-name placeholder stay aligned",
-                Resolve("Hello.#$b#Goodbye, @.", "Chào.#$b#Tạm biệt, @.", "Goodbye, Alex.", page: 1) == "Tạm biệt, Alex.")
+                Resolve("Hello.#$b#Goodbye, @.", "Chào.#$b#Tạm biệt, @.", "Goodbye, Alex.", page: 1) == "Tạm biệt, Alex."
+                && Resolve("First page.#$e#Second page.", "Trang đầu.#$e#Trang hai.", "Second page.", page: 1) == "Trang hai.")
         };
     }
 

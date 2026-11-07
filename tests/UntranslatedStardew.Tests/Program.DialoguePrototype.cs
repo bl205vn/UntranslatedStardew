@@ -13,6 +13,7 @@ public static partial class Program
     private static void TestDialoguePrototype()
     {
         TestDialogueNarration();
+        TestDialogueReportedCases();
         TestDialogueProgress();
         TestObjectDialogue();
         TestNativeDialogueFont();

@@ -1,4 +1,5 @@
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -13,6 +14,11 @@ namespace UntranslatedStardew.Patches;
 [HarmonyPatch(typeof(DialogueBox), nameof(DialogueBox.draw), new[] { typeof(SpriteBatch) })]
 internal static class DialogueBoxPatch
 {
+    private readonly record struct LayoutKey(int Width, int Height, bool Above, DialogueNativeFont Font,
+        LocalizedContentManager.LanguageCode Language, float PrimaryZoom, bool Alternate, bool Smooth, float Scale);
+    private sealed record CachedLayout(LayoutKey Key, DialogueTextPair[] Pairs, DialogueInterleavedLayout.Page? Page);
+    private static readonly ConditionalWeakTable<DialogueBox, CachedLayout> Layouts = new();
+
     private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
     {
         var code = instructions.ToList();
@@ -55,11 +61,23 @@ internal static class DialogueBoxPatch
             && pairs.All(pair => font.Supports(pair.Secondary)))
         {
             int bodyWidth = box.isPortraitBox() ? width : width - 16;
-            var layout = DialogueInterleavedLayout.Fit(pairs, bodyWidth, box.height - 16,
-                preview?.SecondaryFirst ?? mod.Config.SecondaryFirst,
-                primary => SpriteText.getHeightOfString(primary, bodyWidth - 4),
-                line => font.Measure(line).X * DialoguePairLayout.SecondaryScale,
-                line => font.Measure(line).Y * DialoguePairLayout.SecondaryScale);
+            var key = new LayoutKey(bodyWidth, box.height - 16,
+                preview?.SecondaryFirst ?? mod.Config.SecondaryFirst, font,
+                LocalizedContentManager.CurrentLanguageCode, SpriteText.FontPixelZoom,
+                Game1.options.useAlternateFont, Game1.options.useChineseSmoothFont, Game1.options.dialogueFontScale);
+            if (!Layouts.TryGetValue(box, out var cached) || cached.Key != key || !cached.Pairs.SequenceEqual(pairs))
+            {
+                // Cache both successful layouts and overflow fallback. Revealing more
+                // characters does not require measuring and wrapping the whole page again.
+                var page = DialogueInterleavedLayout.Fit(pairs, key.Width, key.Height, key.Above,
+                    primary => SpriteText.getHeightOfString(primary, bodyWidth - 4),
+                    line => font.Measure(line).X * DialoguePairLayout.SecondaryScale,
+                    line => font.Measure(line).Y * DialoguePairLayout.SecondaryScale);
+                cached = new(key, pairs, page);
+                Layouts.Remove(box);
+                Layouts.Add(box, cached);
+            }
+            var layout = cached.Page;
             if (layout != null)
             {
                 int visiblePosition = DialoguePairLayout.GetVisiblePosition(position, text.Length);
