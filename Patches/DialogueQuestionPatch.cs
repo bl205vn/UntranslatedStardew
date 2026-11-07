@@ -32,6 +32,8 @@ internal static class DialogueQuestionPatch
         return Layouts.TryGetValue(box, out _);
     }
 
+    internal static void RebuildSourceQuestion(DialogueBox box) => Setup.Invoke(box, null);
+
     private static IEnumerable<MethodBase> TargetMethods()
         => new[] { Setup, AccessTools.Method(typeof(DialogueBox), nameof(DialogueBox.draw), new[] { typeof(SpriteBatch) }),
             AccessTools.Method(typeof(DialogueBox), nameof(DialogueBox.update)),
@@ -100,7 +102,7 @@ internal static class DialogueQuestionPatch
             return "speaker prefix does not match the live prompt";
         var question = preview ? sample!.Question
             : box.characterDialogue is { } d && box.characterDialoguesBrokenUp.Count == 1
-                ? mod.GetDialogueQuestion(d, shown[prefix.Length..], box.responses) : null;
+                ? mod.GetDialogueQuestion(d, shown[prefix.Length..], box.responses) : mod.GetLocationQuestion(box, shown);
         if (question == null)
             return "question source does not match the live prompt and answers";
         var pairs = new[] { question.Prompt with { Primary = shown } }.Concat(question.Answers)
@@ -112,7 +114,7 @@ internal static class DialogueQuestionPatch
         int width = box.width - 16;
         bool above = preview ? sample!.Above : mod.Config.SecondaryFirst;
         // NPC boxes have bottom = viewport -64. Leave room above for the question icon and border.
-        var rows = DialogueQuestionLayout.FitRows(pairs, width, Game1.uiViewport.Height - 192, above,
+        var rows = DialogueQuestionLayout.FitRows(pairs, width, Game1.uiViewport.Height - (box.characterDialogue == null ? 144 : 192), above,
             text => SpriteText.getHeightOfString(text, width),
             text => font.Measure(text).X * DialoguePairLayout.SecondaryScale,
             text => font.Measure(text).Y * DialoguePairLayout.SecondaryScale, out string? failure);

@@ -2,7 +2,7 @@
 
 Kế hoạch làm việc và nghiệm thu: [Kế hoạch phát triển](DEVELOPMENT-PLAN.vi.md).
 
-Mốc: dialogue preview 26, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Mốc: dialogue preview 27, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
 
 **Quyết định hiện tại (preview 24):** hiển thị theo hai khối nguyên trang, bỏ xen từng hàng của preview 22/23. Toàn bộ bản phụ đợi chữ chính hiện xong; `SecondaryFirst` chỉ đổi vị trí trên/dưới của nguyên khối. Font native nhỏ 75% và các sửa `$e` vẫn giữ. Các mục preview 22/23 bên dưới là lịch sử, không mô tả bố cục đang dùng.
 
@@ -99,3 +99,11 @@ SecondarySourceDiagnostics hoãn warning nguồn custom trong giai đoạn khở
 Ảnh preview 25 xác nhận phản hồi Alex cả hai trang đã song ngữ. Hiển thị poster preview 26 và log khởi động mới chưa nghiệm thu trực tiếp trong game.
 
 Kiểm tra preview 26: build thành công, lượt cuối 1162/1162 đạt; có ca lấy dữ liệu phim thật và pack Việt hóa. Một lần harness có lỗi CLR/MonoMod khi cài Harmony; cùng DLL chạy lại bình thường đạt toàn bộ. Đây chưa phải bằng chứng renderer hoặc khởi động SMAPI trong game.
+
+## Preview 27: câu hỏi địa điểm có nguồn tĩnh
+
+LocationQuestionPatch bắt constructor string/Response[] trước khi vanilla thiết lập hình học; mỗi prompt/label giữ đường nguồn từ LoadedDialogueSource theo đúng instance. LocationQuestionTranslation đối chiếu một trang thuần trong dictionary primary/secondary, ghép theo key và thứ tự response hiện tại. Không dò từ chữ giống nhau hoặc đoán Yes/No chỉ từ response key. Source Lexicon được theo dõi để lấy bản dịch hai nhãn. Sau preprocessing của constructor, geometry được đo lại qua cùng DialogueQuestionPatch đang dùng cho NPC.
+
+Chỉ câu hỏi có nguồn hợp lệ cho tất cả thành phần mới song ngữ. Nguồn mất sau format/parseText/Replace, script event, câu hỏi nhiều trang hay cần thế tham số vẫn có thể fallback. Không thay response object, lastQuestionKey, hotkey, callback, vật phẩm hoặc tiến độ. Câu hỏi địa điểm dùng cùng height khi vẽ/hover/gamepad và giữ nguyên các guard DDFC/event/không vừa khung.
+
+Build và 1178/1178 kiểm tra đạt (có dữ liệu game/pack Việt hóa thật và Harmony constructor boundary); chưa nghiệm thu render/click trong game. Bản đồ độ phủ đầy đủ hơn tại [TEXT-SURFACE-CATALOG.vi.md](TEXT-SURFACE-CATALOG.vi.md); số candidate chỉ là chỉ mục nghiên cứu. Harness nay dùng TieredCompilation=false theo đúng runtimeconfig game/SMAPI đang cài, không sửa runtime của người chơi.

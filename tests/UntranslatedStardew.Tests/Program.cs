@@ -69,6 +69,7 @@ public static partial class Program
         TestStandardCustomLanguagePack();
         TestInstalledCustomLanguagePairs();
         TestDialoguePrototype();
+        TestLocationQuestions();
         TestProviderWarningLifecycle();
         TestStartupSourceDiagnostics();
 

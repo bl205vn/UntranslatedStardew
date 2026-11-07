@@ -233,6 +233,37 @@ public static partial class Program
         {
             using var primaryData = new RawContentProvider(() => services, content, primary, sourceRegistry: registry);
             using var secondaryData = new RawContentProvider(() => services, content, secondary, sourceRegistry: registry);
+            if (primary == "en" && secondary == "vi")
+            {
+                (string Primary, string Secondary)? LookupQuestion(string path)
+                {
+                    if (!DialogueTranslation.TryParseSourceKey(path, out string asset, out string key)
+                        || !primaryData.TryGetDialogueString(asset, key, out string? main)
+                        || !secondaryData.TryGetDialogueString(asset, key, out string? sub)
+                        || main == null || sub == null) return null;
+                    return (main, sub);
+                }
+                const string promptPath = "Strings/Locations:WitchHut_EvilShrineLeft";
+                const string yesPath = "Strings/Lexicon:QuestionDialogue_Yes", noPath = "Strings/Lexicon:QuestionDialogue_No";
+                var prompt = LookupQuestion(promptPath);
+                var yes = LookupQuestion(yesPath);
+                var no = LookupQuestion(noPath);
+                DialogueQuestionTranslation.Question? question = null;
+                if (prompt is { } p && yes is { } y && no is { } n)
+                {
+                    LoadedDialogueSource.Capture(p.Primary, promptPath);
+                    LoadedDialogueSource.Capture(y.Primary, yesPath);
+                    LoadedDialogueSource.Capture(n.Primary, noPath);
+                    var answers = new[] { ("Yes", y.Primary), ("No", n.Primary) };
+                    var captured = LocationQuestionTranslation.Capture(p.Primary, answers, LoadedDialogueSource.Get);
+                    if (captured != null) question = LocationQuestionTranslation.Match(captured, p.Primary.Trim(), answers,
+                        LookupQuestion, Gender.Female);
+                }
+                Assert(question != null && question.Prompt.Primary != question.Prompt.Secondary
+                    && question.Answers.All(answer => answer.Primary != answer.Secondary),
+                    "Installed Vietnamese pack pairs the real Dark Shrine question and both Lexicon answers");
+                LoadedDialogueSource.Invalidate();
+            }
             using var primaryNames = new ItemNameResolver(primaryData);
             using var secondaryNames = new ItemNameResolver(secondaryData);
             string? first = primaryNames.GetSecondaryNameById("(WP)0");

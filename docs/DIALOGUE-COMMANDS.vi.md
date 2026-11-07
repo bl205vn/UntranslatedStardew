@@ -1,4 +1,4 @@
-# Lệnh kiểm tra hội thoại — preview 26
+# Lệnh kiểm tra hội thoại — preview 27
 
 Preview 24 giữ lệnh cũ nhưng chuyển về bố cục nguyên khối: chữ chính hiện hết trang rồi bản phụ mới hiện. `SecondaryFirst` đặt nguyên khối phụ trên/dưới. Font native vẫn nhỏ 75%. Có thể dùng `untranslated_dialogue_test above wrap` hoặc `untranslated_dialogue_test below wrap` để mở mẫu dài nếu cần; không cần chạy lại từng nhóm PASS.
 
@@ -7,6 +7,8 @@ Preview 23 bổ sung ngắt thoại `$e`, lời dẫn/câu hỏi có `$e` và ca
 Preview 25 sửa chỉ số trang sau chọn đáp án (reaction một/nhiều trang) và cảnh báo custom source lặp khi registry refresh. Không thêm command; không cần chạy lại từng nhóm PASS. Nghiệm thu giao diện còn lại là một lượt chọn đáp án rồi đọc hết các trang NPC phản hồi như chơi bình thường.
 
 Preview 26 thêm poster phim đang chiếu/sắp chiếu. Không cần command mới: tương tác poster trong rạp như bình thường, đọc trang tên rồi trang mô tả, nhấn tiếp để đóng. Phim lấy đúng dữ liệu game đã chọn hôm đó. Lượt nghiệm thu gộp này không cần chạy lại các nhóm PASS cũ. Warning nguồn custom chỉ được kết luận sau bước quét nguồn khởi động.
+
+Preview 27 thêm câu hỏi địa điểm có nguồn prompt/label tĩnh (như các điện thờ). Không có command mới và không cần chạy lại từng nhóm PASS. Nếu nghiệm thu trong game, mở một câu hỏi Yes/No, quan sát hai bản và vùng chọn, rồi chọn No hoặc nhấn Escape để đóng; không cần thực hiện hành động có thay đổi save.
 
 Xem danh sách bất kỳ lúc nào: `untranslated_dialogue_help`.
 

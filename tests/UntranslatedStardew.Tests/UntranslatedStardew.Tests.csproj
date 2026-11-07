@@ -25,6 +25,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Match Stardew/SMAPI's runtime policy when exercising Harmony detours. -->
+    <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
     <ProjectReference Include="..\..\UntranslatedStardew.csproj" />
   </ItemGroup>
 

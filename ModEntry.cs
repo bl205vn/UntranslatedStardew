@@ -448,6 +448,23 @@ public sealed class ModEntry : Mod
     }
     #endregion
 
+    internal DialogueQuestionTranslation.Question? GetLocationQuestion(DialogueBox box, string shown)
+    {
+        (string Primary, string Secondary)? Lookup(string source)
+        {
+            if (_contentProvider == null || !DialogueTranslation.TryParseSourceKey(source, out string asset, out string key)
+                || !_contentProvider.TryGetDialogueString(asset, key, out string? sub) || sub == null) return null;
+            try
+            {
+                var main = Game1.content.Load<Dictionary<string, string>>(asset);
+                return main.TryGetValue(key, out string? text) && text != null ? (text, sub) : null;
+            }
+            catch (Microsoft.Xna.Framework.Content.ContentLoadException) { return null; }
+            catch (InvalidCastException) { return null; }
+        }
+        return Patches.LocationQuestionPatch.Resolve(box, shown, Lookup, Game1.player.Gender);
+    }
+
     internal DialogueQuestionTranslation.Question? GetDialogueQuestion(Dialogue dialogue, string visiblePrompt, Response[] responses)
         => TryGetDialogueSources(dialogue, out string primary, out string secondary)
             ? DialogueQuestionTranslation.Match(primary, secondary, visiblePrompt,
