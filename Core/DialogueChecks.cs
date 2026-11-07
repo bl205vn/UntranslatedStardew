@@ -18,8 +18,9 @@ internal static class DialogueChecks
             "layout" => CheckLayout(),
             "sources" => CheckSources(),
             "narration" => CheckNarration(),
+            "qfallback" => CheckQuestionFallback(),
             "coverage" => CheckSources().Concat(CheckNarration()).ToArray(),
-            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckResponses()).Concat(CheckQuestions()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).Concat(CheckSources()).Concat(CheckNarration()).ToArray(),
+            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckResponses()).Concat(CheckQuestions()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).Concat(CheckSources()).Concat(CheckNarration()).Concat(CheckQuestionFallback()).ToArray(),
             _ => null
         };
 
@@ -53,6 +54,33 @@ internal static class DialogueChecks
                 Resolve(main + "||" + main.Replace("One more thing.", "Next week."),
                     sub + "||" + sub.Replace("Còn một chuyện.", "Tuần sau."), "Next week.", 1, daysPlayed: 7) == "Tuần sau."
                 && Resolve(main + "||" + main, sub, "Hello Alex.") == null)
+        };
+    }
+
+    private static (string, bool)[] CheckQuestionFallback()
+    {
+        const string main = "Hello.#$q Yes old#Question?#$r Yes 0 accept#Yes please.";
+        const string sub = "Chào.#$q Yes old#Câu hỏi?#$r Yes 0 accept#Vâng ạ.";
+        (string, string)? value = ("One.#$b#Two.", "Một.#$b#Hai.");
+        string? ResolveFallback(string p, string s, int page, string visible, bool answered = true)
+            => DialogueQuestionTranslation.GetAnsweredFallbackLine(p, s, page, visible, "Alex", Gender.Male, 0,
+                id => answered && id == "Yes", key => key == "old" ? value : null);
+        bool pages = ResolveFallback(main, sub, 1, "One.") == "Một."
+            && ResolveFallback(main, sub, 2, "Two.") == "Hai.";
+        bool guards = ResolveFallback(main, sub, 1, "One.", false) == null
+            && ResolveFallback(main, sub.Replace("Yes old", "Yes other"), 1, "One.") == null
+            && ResolveFallback(main, sub, 0, "One.") == null;
+        value = ("$p Yes#Same.|Same.", "$p Yes#Đã chọn.|Chưa chọn.");
+        bool history = ResolveFallback(main, sub, 1, "Same.") == "Đã chọn.";
+        value = ("Hello.", "%item object 74 1 %%");
+        bool unsafeFallback = ResolveFallback(main, sub, 1, "Hello.") == null;
+        value = null;
+        return new[]
+        {
+            ("Answered question fallback keeps narration and page offsets", pages),
+            ("Question fallback requires primary history and matching source headers", guards),
+            ("Flat response prerequisites in fallback use primary answer history", history),
+            ("Unsafe or missing fallback translations keep vanilla text", unsafeFallback && ResolveFallback(main, sub, 1, "Hello.") == null)
         };
     }
 

@@ -13,6 +13,7 @@ public static partial class Program
     private static void TestDialoguePrototype()
     {
         TestDialogueNarration();
+        TestDialogueProgress();
         Assembly mod = typeof(RawContentProvider).Assembly;
         var previewBuilder = mod.GetType("UntranslatedStardew.Core.DialogueQuestionPreview", true)!
             .GetMethod("Create", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -202,7 +203,7 @@ public static partial class Program
             .GetMethod("Run", BindingFlags.Static | BindingFlags.NonPublic)!;
         (string Name, bool Passed)[]? Run(string group)
             => ((string, bool)[]?)runChecks.Invoke(null, new object[] { group });
-        var groups = new[] { "branch", "question", "pairs", "fallback", "layout", "sources", "narration" }.Select(group => Run(group)!).ToArray();
+        var groups = new[] { "branch", "question", "pairs", "fallback", "layout", "sources", "narration", "qfallback" }.Select(group => Run(group)!).ToArray();
         Assert(groups.All(group => group.Length > 0 && group.All(check => check.Passed))
             && Run("coverage") is { Length: 5 } coverageChecks && coverageChecks.All(check => check.Passed)
             && Run("question") is { Length: 8 } questionChecks && questionChecks.All(check => check.Passed)

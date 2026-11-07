@@ -50,6 +50,40 @@ internal static class DialogueQuestionTranslation
         return translated;
     }
 
+    /// <summary>Resolves an already-answered question's inlined, plain fallback without executing it.</summary>
+    internal static string? GetAnsweredFallbackLine(string primary, string secondary, int index, string visible,
+        string player, Gender gender, uint days, Func<string, bool> answered,
+        Func<string, (string Primary, string Secondary)?> lookup)
+    {
+        string[] mainWeeks = primary.Split("||");
+        string[] subWeeks = secondary.Split("||");
+        if (mainWeeks.Length != subWeeks.Length)
+            return null;
+        var main = Parse(primary, player, gender, days);
+        var sub = Parse(secondary, player, gender, days);
+        if (main == null || sub == null || main.Header != sub.Header || !main.Headers.SequenceEqual(sub.Headers))
+            return null;
+        string[] header = ArgUtility.SplitBySpace(main.Header.Split('#')[0]);
+        string[] ids = header[1].Split('/');
+        if (ids[0] == "-1" || header[2] == "null" || !ids.Any(answered))
+            return null;
+        int week = DialogueTranslation.GetWeeklyVariantIndex(days, mainWeeks.Length);
+        int narrationCount = mainWeeks[week].Split('#')
+            .TakeWhile(field => !field.StartsWith("$q ", StringComparison.Ordinal)).Count(field => field != "$b");
+        int fallbackIndex = index - narrationCount;
+        if (fallbackIndex < 0 || lookup(header[2]) is not { } fallback)
+            return null;
+        // Vanilla inlines this value after its original weekly/token processing. Do not process new branches here.
+        bool Plain(string text) => !text.Contains("||", StringComparison.Ordinal)
+            && (text.StartsWith("$p ", StringComparison.Ordinal)
+                ? DialogueTranslation.IsSafePreview(text)
+                : text.Split("#$b#").All(segment => DialogueTranslation.TryResolveSegment(segment, gender, out _)));
+        if (!Plain(fallback.Primary) || !Plain(fallback.Secondary))
+            return null;
+        return DialogueTranslation.GetSecondaryLine(fallback.Primary, fallback.Secondary, fallbackIndex,
+            visible, player, gender, days, answered);
+    }
+
     private static Question? Parse(string source, string player, Gender gender, uint days)
     {
         string[] weeks = source.Split("||");

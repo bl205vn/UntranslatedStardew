@@ -27,6 +27,7 @@ public sealed class ModEntry : Mod
 
     private (WeakReference<DialogueBox> Box, bool SecondaryFirst, DialogueTextPair[][]? Pages)? _dialoguePreview;
     private Harmony? _harmony;
+    private DialogueCheckMonitor? _dialogueCheckMonitor;
     private RawContentProvider? _contentProvider;
     private ItemNameResolver? _nameResolver;
     private BilingualFontManager? _fontManager;
@@ -112,7 +113,7 @@ public sealed class ModEntry : Mod
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_check",
-            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|state|query|response|question|sources|narration|coverage|copy|pairs|fallback|layout|all]",
+            "Runs dialogue rules without opening a menu. Usage: untranslated_dialogue_check [branch|state|query|response|question|sources|narration|qfallback|coverage|copy|pairs|fallback|layout|all]",
             OnDialogueCheckCommand
         );
 
@@ -123,24 +124,31 @@ public sealed class ModEntry : Mod
     private void OnDialogueCheckCommand(string command, string[] args)
     {
         string group = args.FirstOrDefault()?.ToLowerInvariant() ?? "all";
-        if (args.Length <= 1 && group is "coverage" or "copy" && !Context.IsWorldReady)
-        {
-            Monitor.Log("Load a save before checking the real Dialogue copy boundary. Use sources or narration without a save.", LogLevel.Info);
-            return;
-        }
         var checks = args.Length <= 1 ? group == "copy" ? Array.Empty<(string Name, bool Passed)>() : DialogueChecks.Run(group) : null;
-        if (checks != null && Context.IsWorldReady && group is "coverage" or "copy" or "all")
+        if (checks != null && (group is "coverage" or "copy" or "all"))
         {
-            try { checks = checks.Concat(DialogueRuntimeChecks.RunCopies()).ToArray(); }
-            catch (Exception ex)
+            string? unavailable = DialogueCheckMonitor.GetUnavailableReason();
+            if (unavailable != null)
             {
-                Monitor.Log($"Copy boundary check could not finish: {ex.GetType().Name}: {ex.Message}", LogLevel.Error);
-                checks = checks.Append(("Real Dialogue copy boundary completed without an exception", false)).ToArray();
+                Monitor.Log($"Runtime copy checks deferred: {unavailable}. No runtime test was run.", LogLevel.Info);
+                if (group == "copy") return;
+            }
+            else
+            {
+                _dialogueCheckMonitor ??= new DialogueCheckMonitor(Helper, Monitor);
+                _dialogueCheckMonitor.Begin();
+                try { checks = checks.Concat(DialogueRuntimeChecks.RunCopies()).ToArray(); }
+                catch (Exception ex)
+                {
+                    Monitor.Log($"Copy boundary check could not finish: {ex.GetType().Name}: {ex.Message}", LogLevel.Error);
+                    checks = checks.Append(("Real Dialogue copy boundary completed without an exception", false)).ToArray();
+                }
+                finally { _dialogueCheckMonitor.EndImmediate(); }
             }
         }
         if (checks == null)
         {
-            Monitor.Log("Usage: untranslated_dialogue_check [branch|state|query|response|question|sources|narration|coverage|copy|pairs|fallback|layout|all]", LogLevel.Info);
+            Monitor.Log("Usage: untranslated_dialogue_check [branch|state|query|response|question|sources|narration|qfallback|coverage|copy|pairs|fallback|layout|all]", LogLevel.Info);
             return;
         }
 
@@ -383,9 +391,25 @@ public sealed class ModEntry : Mod
     {
         if (dialogue == null || !TryGetDialogueSources(dialogue, out string primary, out string secondary))
             return null;
-        return DialogueTranslation.GetSecondaryLine(primary, secondary, dialogue.currentDialogueIndex,
-            visibleText, Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed,
+        string player = Utility.FilterUserName(Game1.player.Name);
+        string? translated = DialogueTranslation.GetSecondaryLine(primary, secondary, dialogue.currentDialogueIndex,
+            visibleText, player, Game1.player.Gender, Game1.stats.DaysPlayed,
             dialogue.farmer.DialogueQuestionsAnswered.Contains);
+        if (translated != null || (!primary.Contains("$q ", StringComparison.Ordinal) && !secondary.Contains("$q ", StringComparison.Ordinal)))
+            return translated;
+        (string Primary, string Secondary)? Lookup(string key)
+        {
+            // This is the same primary NPC dictionary vanilla used for $q's fallback key.
+            var lines = dialogue.speaker?.Dialogue;
+            if (lines == null || !lines.TryGetValue(key, out string? main) || main == null
+                || !DialogueTranslation.TryParseSourceKey($"{dialogue.speaker?.LoadedDialogueKey}:{key}", out string asset, out string field)
+                || _contentProvider?.TryGetDialogueString(asset, field, out string? sub) != true || sub == null)
+                return null;
+            return (main, sub);
+        }
+        return DialogueQuestionTranslation.GetAnsweredFallbackLine(primary, secondary, dialogue.currentDialogueIndex,
+            visibleText, player, Game1.player.Gender, Game1.stats.DaysPlayed,
+            dialogue.farmer.DialogueQuestionsAnswered.Contains, Lookup);
     }
 
     internal DialogueQuestionTranslation.Question? GetDialogueQuestion(Dialogue dialogue, string visiblePrompt, Response[] responses)
@@ -921,6 +945,8 @@ public sealed class ModEntry : Mod
     {
         if (disposing)
         {
+            _dialogueCheckMonitor?.Dispose();
+            _dialogueCheckMonitor = null;
             Helper.Events.GameLoop.GameLaunched -= OnGameLaunched;
             Helper.Events.Content.LocaleChanged -= OnLocaleChanged;
             Helper.Events.Content.AssetsInvalidated -= OnAssetsInvalidated;

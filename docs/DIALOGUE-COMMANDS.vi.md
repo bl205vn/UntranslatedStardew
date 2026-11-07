@@ -1,10 +1,10 @@
-# Lệnh kiểm tra hội thoại — preview 19
+# Lệnh kiểm tra hội thoại — preview 20
 
 Xem danh sách bất kỳ lúc nào: `untranslated_dialogue_help`.
 
 ## Kiểm tra thay đổi từ preview 18
 
-Nạp save, rồi chạy một lệnh:
+Nạp save và chờ nhân vật có thể di chuyển bình thường, đóng menu/sự kiện, rồi chạy một lệnh:
 
 ```text
 untranslated_dialogue_check coverage
@@ -12,7 +12,7 @@ untranslated_dialogue_check coverage
 
 Gồm 8 ca: 2 luật nguồn từ điển, 3 luật ghép lời dẫn và 3 ca dùng constructor/copy/reparse `Dialogue` thực với Harmony đang cài. Các đối tượng thử riêng không được đưa vào hội thoại NPC hoặc lưu vào save; lệnh không thay đáp án hay tình bạn. Lệnh này kiểm tra logic và điểm nối runtime, không chứng minh bố cục thị giác hay độ phủ mọi khóa dịch.
 
-Có thể chạy riêng `sources` (2 ca), `narration` (3 ca), `copy` (3 ca; cần save). `all` có 37 ca thuần và thêm 3 ca copy khi save đã nạp. Các nhóm cũ `branch`, `state`, `query`, `response`, `question`, `pairs`, `fallback`, `layout` vẫn giữ nguyên.
+Có thể chạy riêng `sources` (2 ca), `narration` (3 ca), `copy` (3 ca; cần save). `qfallback` có 4 ca thuần kiểm tra nhánh fallback câu hỏi. `all` có 41 ca thuần và thêm 3 ca copy khi runtime ổn định. Nếu game chưa ổn định, copy được báo hoãn; `coverage` vẫn in 5 ca thuần, không tính 3 ca chưa chạy là PASS. Trạng thái trước/sau copy và chuyển cảnh trong 5 giây được ghi vào SMAPI log, không thay save hoặc vị trí nhân vật. Các nhóm cũ `branch`, `state`, `query`, `response`, `question`, `pairs`, `fallback`, `layout` vẫn giữ nguyên.
 
 ## Mẫu hiển thị có sẵn
 

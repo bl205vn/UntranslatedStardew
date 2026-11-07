@@ -1,6 +1,8 @@
 # Trạng thái triển khai hội thoại song ngữ
 
-Mốc: dialogue preview 19, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Kế hoạch làm việc và nghiệm thu: [Kế hoạch phát triển](DEVELOPMENT-PLAN.vi.md).
+
+Mốc: dialogue preview 20, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
 
 ## Đã nối vào code
 
@@ -18,7 +20,7 @@ Bản phụ được đọc như dữ liệu. Mod không chạy parser hội tho
 - Chỉ thoại/câu hỏi NPC có khóa nguồn từ điển hợp lệ và khớp nguyên văn câu chính đang hiển thị (hoặc mẫu console) mới gắn bản phụ. Thoại đã qua tiền xử lý làm mất `TranslationKey` hoặc đã thay thế tham số `{0}`/`%endearment` trước khi tạo `Dialogue` giữ nguyên vanilla.
 - Dù `Strings/Events` nằm trong danh mục từ điển đọc được khi thoại thường dùng khóa này, renderer vẫn chặn cứng `!Game1.eventUp`; hội thoại trong event UI, câu hỏi địa điểm, shop và câu hỏi do mod tạo động vẫn chưa hỗ trợ.
 - Nhánh điều kiện bao quanh câu hỏi, câu hỏi lồng nhau, lệnh trong nhãn và cấu trúc không tương ứng giữ vanilla. Lời dẫn thuần trước `$q` đã được ghép theo chỉ số đoạn và cấu trúc câu hỏi/đáp án tương ứng; câu đang hiện vẫn phải khớp nguyên văn.
-- Đường `$q` đã trả lời và chèn nội dung từ khóa fallback ngay trong cùng lần parse chưa có ánh xạ riêng. Câu phản hồi được vanilla nạp qua lần parse mới thì theo dõi được khóa.
+- Đường `$q` đã trả lời có ánh xạ fallback theo lịch sử chính và đúng khóa NPC. Hỗ trợ câu thuần nhiều trang và `$p` phẳng, có tính offset lời dẫn. Fallback chứa query/weekly riêng, câu hỏi lồng hoặc lệnh chưa hỗ trợ vẫn dùng vanilla. Phần mới đã kiểm tra tự động, chưa nghiệm thu runtime.
 - Câu hỏi có nhãn chính giống nhau nhưng bản phụ khác nhau giữ vanilla, vì call site đo chiều cao chỉ mang chuỗi chữ.
 - DDFC chưa được hỗ trợ. Chưa mở rộng thư, bong bóng, bundle, xây dựng hoặc nhiệm vụ bằng bản thay đổi này.
 
