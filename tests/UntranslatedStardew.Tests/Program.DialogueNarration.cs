@@ -1,6 +1,8 @@
 using System.Reflection;
+using HarmonyLib;
 using StardewValley;
 using UntranslatedStardew.Core;
+using UntranslatedStardew.Patches;
 
 namespace UntranslatedStardew.Tests;
 
@@ -104,5 +106,121 @@ public static partial class Program
             && DialogueTranslation.GetSecondaryLine(gusPrimaryTemplate, gusSecondaryTemplate, 0,
                 "If you want Pam to like you, give her 'Beer'.%revealtaste:Pam:(O)346", "Farmer", Gender.Male, 0) == null,
             "Parameterized dialogue with substituted arguments safely falls back to primary-only without crashing or mispairing");
+
+        // 5. Alex Wed reactions after chooseResponse: multi-page and single-page
+        const string alexWed01Primary = "Really? I guess I underestimated you.#$b#My arm's a little sore, but maybe next time.";
+        const string alexWed01Secondary = "Thật vậy sao? Tôi đoán là tôi đã đánh giá thấp bạn rồi.#$b#Tay tôi hơi đau một chút, nhưng có lẽ lần sau.";
+        const string alexWed02Primary = "Yeah, some people just aren't made for sports.";
+        const string alexWed02Secondary = "Ừ, một số người sinh ra không dành cho thể thao mà.";
+
+        Assert(DialogueTranslation.GetSecondaryLine(alexWed01Primary, alexWed01Secondary, 0,
+                "Really? I guess I underestimated you.", "Farmer", Gender.Female, 0) == "Thật vậy sao? Tôi đoán là tôi đã đánh giá thấp bạn rồi."
+            && DialogueTranslation.GetSecondaryLine(alexWed01Primary, alexWed01Secondary, 1,
+                "My arm's a little sore, but maybe next time.", "Farmer", Gender.Female, 0) == "Tay tôi hơi đau một chút, nhưng có lẽ lần sau."
+            && DialogueTranslation.GetSecondaryLine(alexWed01Primary, alexWed01Secondary, 2,
+                "Really? I guess I underestimated you.", "Farmer", Gender.Female, 0) == null,
+            "Alex multi-page reaction resolves both pages at relative indices and rejects absolute dialogue index");
+
+        Assert(DialogueTranslation.GetSecondaryLine(alexWed02Primary, alexWed02Secondary, 0,
+                "Yeah, some people just aren't made for sports.", "Farmer", Gender.Female, 0) == "Ừ, một số người sinh ra không dành cho thể thao mà."
+            && DialogueTranslation.GetSecondaryLine(alexWed02Primary, alexWed02Secondary, 1,
+                "Yeah, some people just aren't made for sports.", "Farmer", Gender.Female, 0) == null,
+            "Alex single-page reaction resolves at relative index 0 and rejects shifted indices");
+
+        // Full constructor / reparse / chooseResponse reproduction
+        var namesTranslated = AccessTools.Field(typeof(Dialogue), "nameArraysTranslated");
+        bool originalNamesTranslated = (bool)namesTranslated.GetValue(null)!;
+        var originalGame = Game1.game1;
+        var harmony = new Harmony("UntranslatedStardew.Tests.DialogueReaction");
+        try
+        {
+            Game1.game1 ??= (Game1)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(Game1));
+            namesTranslated.SetValue(null, true); // no global ContentManager in this headless fixture
+            harmony.CreateClassProcessor(typeof(DialogueSourcePatch)).Patch();
+            // Exercise the real chooseResponse flow without invoking friendship
+            // achievements, content loading, or a real player's save state.
+            _reactionFriendshipCalls = 0;
+            harmony.Patch(AccessTools.Method(typeof(Farmer), nameof(Farmer.changeFriendship)),
+                prefix: new HarmonyMethod(typeof(Program), nameof(CaptureReactionFriendship)));
+
+            var alex = new NPC { Name = "Alex", displayName = "Alex" };
+            AccessTools.PropertySetter(typeof(NPC), nameof(NPC.LoadedDialogueKey))
+                ?.Invoke(alex, new object[] { @"Characters\Dialogue\Alex" });
+            var alexDialogueDict = new Dictionary<string, string>
+            {
+                ["Wed"] = alexPrimary,
+                ["Wed_01_01"] = alexWed01Primary,
+                ["Wed_01_02"] = alexWed02Primary
+            };
+            AccessTools.Field(typeof(NPC), "dialogue").SetValue(alex, alexDialogueDict);
+
+            var playerField = AccessTools.Field(typeof(Game1), "_player");
+            var prevPlayer = (Farmer?)playerField.GetValue(null);
+            try
+            {
+                var testFarmer = (Farmer)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(Farmer));
+                AccessTools.Field(typeof(Character), "name").SetValue(testFarmer, new Netcode.NetString("Farmer"));
+                AccessTools.Field(typeof(Farmer), "dialogueQuestionsAnswered").SetValue(testFarmer, new Netcode.NetStringHashSet());
+                AccessTools.Field(typeof(Farmer), "netGender").SetValue(testFarmer, new Netcode.NetEnum<Gender>(Gender.Female));
+                playerField.SetValue(null, testFarmer);
+                var alexDialogue = new Dialogue(alex, @"Characters\Dialogue\Alex:Wed", alexPrimary);
+                Assert(DialogueSourcePatch.GetKey(alexDialogue) == @"Characters\Dialogue\Alex:Wed"
+                    && DialogueSourcePatch.GetBaseIndex(alexDialogue) == 0,
+                    "Alex initial dialogue establishes question translation key and zero base index");
+
+                alexDialogue.exitCurrentDialogue();
+                Assert(alexDialogue.isCurrentDialogueAQuestion(),
+                    "Alex dialogue reaches question prompt");
+
+                bool handled = alexDialogue.chooseResponse(new Response("Wed_01_01", "I want to play catch with you!"));
+                Assert(!handled
+                    && DialogueSourcePatch.GetKey(alexDialogue) == @"Characters\Dialogue\Alex:Wed_01_01"
+                    && DialogueSourcePatch.GetBaseIndex(alexDialogue) == 2
+                    && _reactionFriendshipCalls == 1 && _reactionFriendshipAmount == 15,
+                    "Choosing Alex question response reparses reaction with updated source key and reaction base index");
+
+                alexDialogue.exitCurrentDialogue();
+                string page1Text = alexDialogue.getCurrentDialogue();
+                int relIndex1 = DialogueSourcePatch.GetRelativeIndex(alexDialogue);
+                Assert(page1Text == "Really? I guess I underestimated you."
+                    && relIndex1 == 0
+                    && DialogueTranslation.GetSecondaryLine(alexWed01Primary, alexWed01Secondary, relIndex1,
+                        page1Text, "Farmer", Gender.Female, 0) == "Thật vậy sao? Tôi đoán là tôi đã đánh giá thấp bạn rồi.",
+                    "First reaction page resolves at relative index 0 after chooseResponse");
+
+                alexDialogue.exitCurrentDialogue();
+                string page2Text = alexDialogue.getCurrentDialogue();
+                int relIndex2 = DialogueSourcePatch.GetRelativeIndex(alexDialogue);
+                Assert(page2Text == "My arm's a little sore, but maybe next time."
+                    && relIndex2 == 1
+                    && DialogueTranslation.GetSecondaryLine(alexWed01Primary, alexWed01Secondary, relIndex2,
+                        page2Text, "Farmer", Gender.Female, 0) == "Tay tôi hơi đau một chút, nhưng có lẽ lần sau.",
+                    "Second reaction page resolves at relative index 1 after chooseResponse");
+
+                var reactionCopy = new Dialogue(alexDialogue);
+                Assert(DialogueSourcePatch.GetKey(reactionCopy) == @"Characters\Dialogue\Alex:Wed_01_01"
+                    && DialogueSourcePatch.GetBaseIndex(reactionCopy) == 2
+                    && DialogueSourcePatch.GetRelativeIndex(reactionCopy) == 1,
+                    "Copying reparsed reaction dialogue preserves key, base index and relative index");
+            }
+            finally
+            {
+                playerField.SetValue(null, prevPlayer);
+            }
+        }
+        finally
+        {
+            harmony.UnpatchAll(harmony.Id);
+            namesTranslated.SetValue(null, originalNamesTranslated);
+            Game1.game1 = originalGame;
+        }
     }
+    private static int _reactionFriendshipCalls, _reactionFriendshipAmount;
+    private static bool CaptureReactionFriendship(int amount)
+    {
+        _reactionFriendshipCalls++;
+        _reactionFriendshipAmount = amount;
+        return false;
+    }
+
 }

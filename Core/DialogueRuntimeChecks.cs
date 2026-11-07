@@ -16,7 +16,9 @@ internal static class DialogueRuntimeChecks
         parse.Invoke(source, new object[] { "Reaction.", "Strings/Characters:PreviewReaction" });
         var copy = new Dialogue(source);
         bool reaction = copy.TranslationKey == "Strings/Characters:PreviewOriginal"
-            && DialogueSourcePatch.GetKey(copy) == "Strings/Characters:PreviewReaction";
+            && DialogueSourcePatch.GetKey(copy) == "Strings/Characters:PreviewReaction"
+            && DialogueSourcePatch.GetBaseIndex(source) == 1
+            && DialogueSourcePatch.GetBaseIndex(copy) == 1;
         parse.Invoke(source, new object?[] { "Unkeyed.", null });
         bool cleared = DialogueSourcePatch.GetKey(new Dialogue(source)) == null;
         return new[]

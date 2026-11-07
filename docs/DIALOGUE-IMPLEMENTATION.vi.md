@@ -2,7 +2,7 @@
 
 Kế hoạch làm việc và nghiệm thu: [Kế hoạch phát triển](DEVELOPMENT-PLAN.vi.md).
 
-Mốc: dialogue preview 24, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Mốc: dialogue preview 25, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
 
 **Quyết định hiện tại (preview 24):** hiển thị theo hai khối nguyên trang, bỏ xen từng hàng của preview 22/23. Toàn bộ bản phụ đợi chữ chính hiện xong; `SecondaryFirst` chỉ đổi vị trí trên/dưới của nguyên khối. Font native nhỏ 75% và các sửa `$e` vẫn giữ. Các mục preview 22/23 bên dưới là lịch sử, không mô tả bố cục đang dùng.
 
@@ -79,3 +79,11 @@ Cache NPC tránh wrap/đo lại mỗi frame nếu chỉ tăng số chữ hiện.
 Chiều cao gồm toàn bộ hai khối cùng khoảng cách cho ascender native; không có hàng trống giả để ép số dòng bằng nhau. Câu hỏi dùng cùng Page.Height cho vẽ/hover/gamepad, nhưng vẫn giữ prompt và từng đáp án riêng. Hộp thông tin tăng chiều cao trong ngân sách màn hình; NPC giữ fallback nếu khung không đủ. Không làm tăng độ phủ nguồn dịch chỉ bằng thay layout.
 
 Ảnh preview 23 đã xác nhận câu hỏi/lời dẫn Alex và trang Caroline có bản phụ. Phản ứng Alex sau đáp án và xác nhận rời rạp còn chưa có bản phụ trong ảnh; nguồn động Gus cũng chưa hỗ trợ. Đây là các việc còn lại, không bị che bằng ghép từ chữ nhìn thấy. Build/kiểm tra logic preview 24: 1099/1099; chưa nghiệm thu giao diện phiên bản mới trong game.
+
+## Preview 25: chỉ số tương đối của nguồn reaction
+
+`parseDialogueString` nối trang mới vào Dialogue hiện tại. Nguồn reaction được theo dõi bằng `(Key, BaseIndex)` tại lúc parse; dịch trang bằng `currentDialogueIndex - BaseIndex`. Dialogue mới có BaseIndex 0; copy mang theo mốc của nguồn đã reparse; explicit null source không được hồi sinh. Các câu cũ đang chờ chuyển sang reaction vẫn phải qua đối chiếu chữ chính chính xác, không được ghép từ nguồn mới nếu không khớp. Đây là sửa index/provenance, không reset hoặc đổi index vanilla.
+
+Đã kiểm tra constructor → câu hỏi → `chooseResponse` → hai trang phản hồi → copy trên đối tượng headless có Harmony thật; source/null copy cũng được giữ trong nhóm coverage hiện có. Fixture chặn friendship boundary và khôi phục trạng thái static, không thao tác save. Kiểm tra toàn bộ 1114/1114; chưa xác nhận render trong game của reaction mới.
+
+RawContentProvider chỉ phát lại cảnh báo cùng locale/lý do sau khi nguồn từng phục hồi rồi lại mất; registry refresh lặp không tạo lại cùng cảnh báo. Lỗi thiếu nguồn thật vẫn hiển thị và giữ primary-only. Cơ chế không sửa hay bỏ qua đăng ký nguồn.

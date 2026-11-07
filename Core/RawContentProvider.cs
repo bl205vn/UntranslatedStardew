@@ -32,7 +32,7 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
     private readonly ConcurrentDictionary<string, Dictionary<string, TrinketData>?> _trinketDataCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Dictionary<string, StardewValley.GameData.Powers.PowersData>?> _powersDataCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Dictionary<string, StardewValley.GameData.Objects.ObjectData>?> _objectDataCache = new(StringComparer.OrdinalIgnoreCase);
-    private bool _warned;
+    private (string Language, string Mode)? _lastFallbackWarning;
     private bool _disposed;
 
     public string RequestedLanguage { get; private set; }
@@ -87,7 +87,6 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
             }
 
             string canonical = LanguageHelper.CanonicalizeLanguageCode(RequestedLanguage);
-            _warned = false;
             _activeSource = _sourceRegistry != null && _sourceRegistry.TryGetSource(canonical, out var descriptor) ? descriptor : null;
 
             if (canonical == "default" || canonical == "en")
@@ -145,6 +144,11 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
                 TriggerWarningOnce(RequestedLanguage, "primary-only (unregistered source)");
             }
 
+            // Registry events can concern a different locale, or repeat while a
+            // custom pack is still loading. Report a persistent fallback once,
+            // but allow a fresh warning if an available source later disappears.
+            if (IsSecondaryAvailable)
+                _lastFallbackWarning = null;
             Invalidate();
         }
         finally
@@ -720,10 +724,13 @@ public sealed class RawContentProvider : ISecondaryContentProvider, ITrinketData
 
     private void TriggerWarningOnce(string requested, string fallback)
     {
-        if (_warned)
+        string canonical = LanguageHelper.CanonicalizeLanguageCode(requested);
+        if (_lastFallbackWarning is { } previous
+            && previous.Language.Equals(canonical, StringComparison.OrdinalIgnoreCase)
+            && previous.Mode == fallback)
             return;
 
-        _warned = true;
+        _lastFallbackWarning = (canonical, fallback);
         _onFallbackWarning?.Invoke(requested, fallback);
     }
 }

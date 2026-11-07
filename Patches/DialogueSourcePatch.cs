@@ -9,15 +9,18 @@ namespace UntranslatedStardew.Patches;
 [HarmonyPatch(typeof(Dialogue))]
 internal static class DialogueSourcePatch
 {
-    private sealed record Source(string? Key);
+    private sealed record Source(string? Key, int BaseIndex = 0);
     private static readonly ConditionalWeakTable<Dialogue, Source> Sources = new();
 
     [HarmonyPrefix]
     [HarmonyPatch("parseDialogueString", typeof(string), typeof(string))]
     private static void Prefix(Dialogue __instance, string translationKey)
     {
+        // chooseResponse appends the reaction to the existing dialogue list.
+        // Its source dictionary starts at page zero, not at the absolute list index.
+        int baseIndex = __instance.dialogues?.Count ?? 0;
         Sources.Remove(__instance);
-        Sources.Add(__instance, new(translationKey));
+        Sources.Add(__instance, new(translationKey, baseIndex));
     }
 
     [HarmonyPostfix]
@@ -26,7 +29,12 @@ internal static class DialogueSourcePatch
     {
         Sources.Remove(__instance);
         if (other != null)
-            Sources.Add(__instance, new(GetKey(other)));
+        {
+            if (Sources.TryGetValue(other, out var source))
+                Sources.Add(__instance, source);
+            else
+                Sources.Add(__instance, new(other.TranslationKey, 0));
+        }
     }
 
     [HarmonyPostfix]
@@ -36,10 +44,16 @@ internal static class DialogueSourcePatch
         if (translationKey == null && GetKey(__instance) == null && dialogueText != null && LoadedDialogueSource.Get(dialogueText) is { } source)
         {
             Sources.Remove(__instance);
-            Sources.Add(__instance, new(source));
+            Sources.Add(__instance, new(source, 0));
         }
     }
 
     internal static string? GetKey(Dialogue dialogue)
         => Sources.TryGetValue(dialogue, out var source) ? source.Key : dialogue.TranslationKey;
+
+    internal static int GetBaseIndex(Dialogue dialogue)
+        => Sources.TryGetValue(dialogue, out var source) ? source.BaseIndex : 0;
+
+    internal static int GetRelativeIndex(Dialogue dialogue)
+        => dialogue.currentDialogueIndex - GetBaseIndex(dialogue);
 }

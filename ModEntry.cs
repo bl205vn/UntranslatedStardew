@@ -397,7 +397,8 @@ public sealed class ModEntry : Mod
         if (dialogue == null || !TryGetDialogueSources(dialogue, out string primary, out string secondary))
             return null;
         string player = Utility.FilterUserName(Game1.player.Name);
-        string? translated = DialogueTranslation.GetSecondaryLine(primary, secondary, dialogue.currentDialogueIndex,
+        int index = Patches.DialogueSourcePatch.GetRelativeIndex(dialogue);
+        string? translated = DialogueTranslation.GetSecondaryLine(primary, secondary, index,
             visibleText, player, Game1.player.Gender, Game1.stats.DaysPlayed,
             dialogue.farmer.DialogueQuestionsAnswered.Contains);
         if (translated != null || (!primary.Contains("$q ", StringComparison.Ordinal) && !secondary.Contains("$q ", StringComparison.Ordinal)))
@@ -412,7 +413,7 @@ public sealed class ModEntry : Mod
                 return null;
             return (main, sub);
         }
-        return DialogueQuestionTranslation.GetAnsweredFallbackLine(primary, secondary, dialogue.currentDialogueIndex,
+        return DialogueQuestionTranslation.GetAnsweredFallbackLine(primary, secondary, index,
             visibleText, player, Game1.player.Gender, Game1.stats.DaysPlayed,
             dialogue.farmer.DialogueQuestionsAnswered.Contains, Lookup);
     }
