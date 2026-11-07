@@ -88,13 +88,13 @@ internal static class ObjectDialoguePatch
         }
         var pair = state.Pages[index];
         int width = box.width - 16;
-        int primaryHeight = SpriteText.getHeightOfString(pair.Primary, width);
+        int primaryHeight = PrimaryDialogueMetrics.Measure(pair.Primary, width);
         if (wasBilingual) SetHeight(box, primaryHeight + 4);
         if (!enabled || font == null || string.IsNullOrWhiteSpace(pair.Primary)
             || string.IsNullOrWhiteSpace(pair.Secondary) || pair.Primary == pair.Secondary
             || !font.Supports(pair.Secondary)) return;
         var layout = DialogueBlockLayout.Fit(new[] { pair }, width, Game1.uiViewport.Height - 144, above,
-            text => SpriteText.getHeightOfString(text, width),
+            text => PrimaryDialogueMetrics.Measure(text, width),
             text => font.Measure(text).X * DialoguePairLayout.SecondaryScale,
             text => font.Measure(text).Y * DialoguePairLayout.SecondaryScale);
         if (layout == null) return;

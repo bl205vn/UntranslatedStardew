@@ -1,3 +1,4 @@
+using StardewValley.BellsAndWhistles;
 using UntranslatedStardew.Core;
 
 namespace UntranslatedStardew.Tests;
@@ -6,6 +7,29 @@ public static partial class Program
 {
     private static void TestBlockDialogue()
     {
+        var oldLanguage = StardewValley.LocalizedContentManager.CurrentLanguageCode;
+        var zoomField = HarmonyLib.AccessTools.Field(typeof(SpriteText), "fontPixelZoom");
+        float oldZoom = (float)zoomField.GetValue(null)!;
+        bool oldForce = SpriteText.forceEnglishFont;
+        try
+        {
+            StardewValley.LocalizedContentManager.CurrentLanguageCode = StardewValley.LocalizedContentManager.LanguageCode.en;
+            zoomField.SetValue(null, 3f);
+            SpriteText.forceEnglishFont = false;
+            const string gunther = "The museum looks amazing! Thanks again for all your help.";
+            Assert(SpriteText.getHeightOfString(gunther, 712) == 156
+                && PrimaryDialogueMetrics.Measure(gunther, 716) == 102,
+                "Gunther boundary: a two-line native draw no longer reserves three lines at width 716");
+            Assert(PrimaryDialogueMetrics.Measure("First^Second", 1000) == 102
+                && PrimaryDialogueMetrics.Measure("", 1000) == 0,
+                "Primary measurement preserves explicit native line breaks and empty text");
+        }
+        finally
+        {
+            StardewValley.LocalizedContentManager.CurrentLanguageCode = oldLanguage;
+            zoomField.SetValue(null, oldZoom);
+            SpriteText.forceEnglishFont = oldForce;
+        }
         int MainHeight(string text) => Math.Max(1, (int)Math.Ceiling(text.Length / 10d)) * 20;
         int SubHeight(string text) => text.Split('\n').Length * 10;
         DialogueBlockLayout.Page? Fit(string main, string sub, bool above = false, int height = 400)

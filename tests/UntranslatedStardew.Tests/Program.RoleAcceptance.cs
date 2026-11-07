@@ -221,6 +221,22 @@ public static partial class Program
         using (var movieContent = new LocalizedContentManager(services, content))
         using (var movieSecondary = new RawContentProvider(() => services, content, "vi", sourceRegistry: registry))
         {
+            var museumObjects = movieContent.Load<Dictionary<string, StardewValley.GameData.Objects.ObjectData>>("Data/Objects");
+            foreach (string id in new[] { "96", "106" })
+            {
+                var item = museumObjects[id];
+                MoviePosterAdapter.TryParseLocalizedToken(item.DisplayName, out string nameAsset, out string nameKey);
+                MoviePosterAdapter.TryParseLocalizedToken(item.Description, out string descAsset, out string descKey);
+                string primaryName = movieContent.LoadString(nameAsset.Replace('/', '\\') + ":" + nameKey);
+                string primaryDesc = movieContent.LoadString(descAsset.Replace('/', '\\') + ":" + descKey);
+                movieSecondary.TryGetDialogueString(nameAsset, nameKey, out string? secondaryName);
+                movieSecondary.TryGetDialogueString(descAsset, descKey, out string? secondaryDesc);
+                string visible = " - " + primaryName + " - ^" + primaryDesc;
+                var exhibit = MuseumArtifactTranslation.Match(primaryName, primaryDesc, secondaryName, secondaryDesc, visible, text => text);
+                Assert(exhibit != null && exhibit.Value.Primary != exhibit.Value.Secondary
+                    && exhibit.Value.Secondary.Contains(secondaryName!) && exhibit.Value.Secondary.Contains(secondaryDesc!),
+                    "Installed Vietnamese pack pairs real museum item " + id + " name and description without English fallback");
+            }
             var movies = movieContent.Load<List<StardewValley.GameData.Movies.MovieData>>("Data/Movies");
             var movie = movies.Single(item => item.Id == "spring_movie_0");
             var poster = MoviePosterAdapter.GetMoviePosterPages(movie, false, movieSecondary, movieContent);

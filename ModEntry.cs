@@ -446,6 +446,23 @@ public sealed class ModEntry : Mod
             return false;
         return Patches.ObjectDialoguePatch.Attach(box, pages);
     }
+
+    internal bool TryAttachMuseumArtifact(DialogueBox box, string itemId)
+    {
+        if (!Config.ShowSecondaryInDialogue || Game1.eventUp
+            || Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
+            || _contentProvider?.IsSecondaryAvailable != true || box.dialogues.Count != 1)
+            return false;
+        var data = ItemRegistry.GetDataOrErrorItem("(O)" + itemId);
+        if (data.IsErrorItem || data.RawData is not StardewValley.GameData.Objects.ObjectData raw)
+            return false;
+        string? Lookup(string field)
+            => MoviePosterAdapter.TryParseLocalizedToken(field, out string asset, out string key)
+                && _contentProvider.TryGetDialogueString(asset, key, out string? text) ? text : null;
+        var pair = MuseumArtifactTranslation.Match(data.DisplayName, data.Description,
+            Lookup(raw.DisplayName), Lookup(raw.Description), box.getCurrentString(), Game1.parseText);
+        return pair.HasValue && Patches.ObjectDialoguePatch.Attach(box, new[] { pair.Value });
+    }
     #endregion
 
     internal DialogueQuestionTranslation.Question? GetLocationQuestion(DialogueBox box, string shown)

@@ -70,6 +70,7 @@ public static partial class Program
         TestInstalledCustomLanguagePairs();
         TestDialoguePrototype();
         TestLocationQuestions();
+        TestMuseumArtifacts();
         TestProviderWarningLifecycle();
         TestStartupSourceDiagnostics();
 

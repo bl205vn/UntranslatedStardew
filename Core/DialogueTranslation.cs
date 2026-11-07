@@ -20,7 +20,8 @@ internal static class DialogueTranslation
         "Strings/animationDescriptions",
         "Strings/SpeechBubbles",
         "Strings/Movies",
-        "Strings/Lexicon"
+        "Strings/Lexicon",
+        "Strings/Objects"
     };
 
     private static readonly string[] SupportedDialoguePrefixes =

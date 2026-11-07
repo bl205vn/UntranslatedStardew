@@ -115,7 +115,7 @@ internal static class DialogueQuestionPatch
         bool above = preview ? sample!.Above : mod.Config.SecondaryFirst;
         // NPC boxes have bottom = viewport -64. Leave room above for the question icon and border.
         var rows = DialogueQuestionLayout.FitRows(pairs, width, Game1.uiViewport.Height - (box.characterDialogue == null ? 144 : 192), above,
-            text => SpriteText.getHeightOfString(text, width),
+            text => PrimaryDialogueMetrics.Measure(text, width),
             text => font.Measure(text).X * DialoguePairLayout.SecondaryScale,
             text => font.Measure(text).Y * DialoguePairLayout.SecondaryScale, out string? failure);
         if (rows != null)

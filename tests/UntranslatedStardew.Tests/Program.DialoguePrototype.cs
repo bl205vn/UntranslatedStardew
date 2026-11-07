@@ -280,7 +280,8 @@ public static partial class Program
                 && ParseSource(@"Strings\SimpleNonVillagerDialogues:Derp") == ("Strings/SimpleNonVillagerDialogues", "Derp")
                 && ParseSource(@"Strings\animationDescriptions:abigail_videogames") == ("Strings/animationDescriptions", "abigail_videogames")
                 && ParseSource(@"Strings\SpeechBubbles:Abigail_Greeting") == ("Strings/SpeechBubbles", "Abigail_Greeting")
-                && ParseSource(@"Strings\Movies:BraveLittleSapling_Title") == ("Strings/Movies", "BraveLittleSapling_Title"),
+                && ParseSource(@"Strings\Movies:BraveLittleSapling_Title") == ("Strings/Movies", "BraveLittleSapling_Title")
+                && ParseSource(@"Strings\Objects:Parsnip_Name") == ("Strings/Objects", "Parsnip_Name"),
                 "Dialogue source parser accepts and normalizes supported vanilla dictionary dialogue assets");
             foreach (string rejected in new[]
             {
@@ -291,7 +292,6 @@ public static partial class Program
                 "Data/Festivals/spring13:Abigail",
                 "Data/mail:wizard",
                 "Strings/UI:Confirm",
-                "Strings/Objects:Parsnip_Name",
                 "Characters/Dialogue/../Abigail:Mon",
                 "Characters/Dialogue/sub/Abigail:Mon",
                 "Strings/schedules/../Abigail:key",

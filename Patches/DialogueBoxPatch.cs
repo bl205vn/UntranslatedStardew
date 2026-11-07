@@ -70,7 +70,7 @@ internal static class DialogueBoxPatch
                 // Cache both successful layouts and overflow fallback. Revealing more
                 // characters does not require measuring and wrapping the whole page again.
                 var page = DialogueBlockLayout.Fit(pairs, key.Width, key.Height, key.Above,
-                    primary => SpriteText.getHeightOfString(primary, bodyWidth - 4),
+                    primary => PrimaryDialogueMetrics.Measure(primary, bodyWidth),
                     line => font.Measure(line).X * DialoguePairLayout.SecondaryScale,
                     line => font.Measure(line).Y * DialoguePairLayout.SecondaryScale);
                 cached = new(key, pairs, page);
