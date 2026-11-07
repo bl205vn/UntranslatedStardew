@@ -155,41 +155,6 @@ public sealed class ModEntry : Mod
             return;
         }
 
-        if (sample == "question")
-        {
-            string main = "$q -1 null#Which answer would you choose? " +
-                "This preview keeps both languages in the same selectable row.#$r PreviewA 0 accept#" +
-                "A longer answer that should wrap when the available width becomes narrow.#$r PreviewB 0 refuse#A short answer.";
-            string sub = "$q -1 null#Bạn sẽ chọn câu trả lời nào? " +
-                "Bản thử đặt hai ngôn ngữ trong cùng một vùng lựa chọn.#$r PreviewA 0 accept#" +
-                "Một câu trả lời dài hơn để kiểm tra xuống dòng khi chiều rộng khung bị thu hẹp.#$r PreviewB 0 refuse#Một câu ngắn.";
-            var actor = new NPC { Name = "UntranslatedPreview", displayName = "Preview", EventActor = true };
-            var dialogue = new Dialogue(actor, null, main);
-            dialogue.answerQuestionBehavior = _ => true;
-            var questionBox = new DialogueBox(dialogue);
-            var question = DialogueQuestionTranslation.Match(main, sub,
-                questionBox.getCurrentString()[GetDialogueSpeakerPrefix(dialogue).Length..],
-                questionBox.responses.Select(r => (r.responseKey, r.responseText)).ToArray(),
-                Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed);
-            if (question == null)
-            {
-                Monitor.Log("Question preview could not match the vanilla prompt and answers.", LogLevel.Warn);
-                return;
-            }
-            if (!Patches.DialogueQuestionPatch.RegisterPreview(questionBox, question,
-                offset == 0 ? Config.SecondaryFirst : args[0] == "above"))
-            {
-                Monitor.Log("Question preview needs a compatible secondary font and enough vertical screen space.", LogLevel.Warn);
-                return;
-            }
-            Game1.activeClickableMenu = questionBox;
-            Game1.dialogueUp = true;
-            Game1.player.Halt();
-            Game1.player.CanMove = false;
-            Monitor.Log("Question preview: choose either answer to close; no friendship or answer history is changed.", LogLevel.Info);
-            return;
-        }
-
         string npcName = fromKey ? args[offset + 1] : "Evelyn";
         string key = fromKey ? args[offset + 2] : "Mon";
         NPC? npc = Game1.getCharacterFromName(npcName);
@@ -234,6 +199,45 @@ public sealed class ModEntry : Mod
         if (secondary == null || font == null || !secondary.All(font.Characters.Contains))
         {
             Monitor.Log("No usable secondary line for this sample. Set a different secondary language with a dialogue translation and font.", LogLevel.Warn);
+            return;
+        }
+
+        if (sample == "question")
+        {
+            string? failure = null;
+            for (int repeats = 3; repeats >= 1; repeats--)
+            {
+                var scripts = DialogueQuestionPreview.Create(visibleText, secondary, repeats);
+                if (scripts == null)
+                {
+                    Monitor.Log("Question preview needs plain resolved text in both configured languages.", LogLevel.Warn);
+                    return;
+                }
+                var actor = new NPC { Name = "UntranslatedPreview", displayName = "Preview", EventActor = true };
+                var dialogue = new Dialogue(actor, null, scripts.Value.Primary);
+                dialogue.answerQuestionBehavior = _ => true;
+                var questionBox = new DialogueBox(dialogue);
+                var question = DialogueQuestionTranslation.Match(scripts.Value.Primary, scripts.Value.Secondary,
+                    questionBox.getCurrentString()[GetDialogueSpeakerPrefix(dialogue).Length..],
+                    questionBox.responses.Select(r => (r.responseKey, r.responseText)).ToArray(),
+                    Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed);
+                if (question == null)
+                {
+                    Monitor.Log("Question preview could not match the vanilla prompt and answers.", LogLevel.Warn);
+                    return;
+                }
+                if (!Patches.DialogueQuestionPatch.RegisterPreview(questionBox, question,
+                    offset == 0 ? Config.SecondaryFirst : args[0] == "above", out failure))
+                    continue;
+                Game1.activeClickableMenu = questionBox;
+                Game1.dialogueUp = true;
+                Game1.player.Halt();
+                Game1.player.CanMove = false;
+                Monitor.Log($"Question preview: secondary={Config.SecondaryLanguage}, long answer repeats={repeats}. " +
+                    "Choose either answer to close; no friendship or answer history is changed.", LogLevel.Info);
+                return;
+            }
+            Monitor.Log($"Question preview unavailable: {failure}", LogLevel.Warn);
             return;
         }
 

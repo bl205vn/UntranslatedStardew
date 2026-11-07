@@ -13,6 +13,26 @@ public static partial class Program
     private static void TestDialoguePrototype()
     {
         Assembly mod = typeof(RawContentProvider).Assembly;
+        var previewBuilder = mod.GetType("UntranslatedStardew.Core.DialogueQuestionPreview", true)!
+            .GetMethod("Create", BindingFlags.Static | BindingFlags.NonPublic)!;
+        (string Primary, string Secondary)? Preview(string main, string sub, int repeats = 3)
+            => ((string, string)?)previewBuilder.Invoke(null, new object[] { main, sub, repeats });
+        var viEn = Preview("Ôi chao! Một ngày đẹp trời.", "Oh my! What a lovely day.");
+        var enVi = Preview("Oh my! What a lovely day.", "Ôi chao! Một ngày đẹp trời.");
+        Assert(viEn != null && enVi != null && viEn.Value.Primary == enVi.Value.Secondary
+            && viEn.Value.Secondary == enVi.Value.Primary,
+            "Question sample follows both configured language directions without hardcoded secondary text");
+        Assert(Preview("Hello.#$action AddMoney 1", "Chào.") == null
+            && Preview("Hello.", "Chào.", 0) == null,
+            "Question preview builder rejects injected commands and invalid repetition counts");
+        string game = LocateGamePath()!;
+        var englishFont = XnbFontMetadataParser.ParseFile(Path.Combine(game, "Content", "Fonts", "SpriteFont1.xnb"))
+            .CreateHeadlessSpriteFont();
+        var displayLabels = viEn!.Value.Secondary.Split('#').Where((_, i) => i % 2 == 1).ToArray();
+        Assert(displayLabels.SelectMany(label => label).All(englishFont.Characters.Contains),
+            "Configured English question labels fit the installed unsuffixed secondary font glyph set");
+        Assert(!"Bạn sẽ chọn câu trả lời nào?".All(englishFont.Characters.Contains),
+            "Installed English font reproduces the old hardcoded Vietnamese sample rejection");
         MethodInfo pair = mod.GetType("UntranslatedStardew.Core.DialogueTranslation", true)!
             .GetMethod("GetSecondaryLine", BindingFlags.Static | BindingFlags.NonPublic)!;
 

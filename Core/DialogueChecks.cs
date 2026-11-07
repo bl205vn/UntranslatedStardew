@@ -155,7 +155,11 @@ internal static class DialogueChecks
                     new DialogueTextPair("Other", "Other") }, 200, 100, true, _ => 20, text => text.Length * 5, _ => 12)
                     is { } single && single["Same"].Height == 20 && single["Same"].Pair.Secondary == ""),
             ("Oversized questions and conflicting identical labels fall back as a whole",
-                Fit(100) == null && DialogueQuestionLayout.Fit(new[] {
+                Fit(100) == null
+                && DialogueQuestionLayout.Fit(pairs, 80, 100, true, _ => 20, text => text.Length * 5,
+                    text => (1 + text.Count(c => c == '\n')) * 12, out string? failure) == null
+                && failure?.Contains("exceeds budget", StringComparison.Ordinal) == true
+                && DialogueQuestionLayout.Fit(new[] {
                     new DialogueTextPair("Same", "First"), new DialogueTextPair("Same", "Other") },
                     200, 200, true, _ => 20, text => text.Length * 5, _ => 12) == null)
         };

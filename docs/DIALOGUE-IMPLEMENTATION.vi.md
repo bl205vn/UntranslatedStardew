@@ -1,6 +1,6 @@
 # Trạng thái triển khai hội thoại song ngữ
 
-Mốc: dialogue preview 16, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
+Mốc: dialogue preview 17, Stardew Valley 1.6.15. Đây là trạng thái code; chưa thay thế nghiệm thu trong game.
 
 ## Đã nối vào code
 
@@ -31,7 +31,7 @@ untranslated_dialogue_test above question
 untranslated_dialogue_test below question
 ```
 
-Mẫu có câu hỏi và hai đáp án dài/ngắn; chọn đáp án để đóng. Cần xác nhận trong game: chữ/hộp highlight/vùng bấm cùng hàng, chọn bằng gamepad, chữ xuống dòng và cả hai vị trí trên/dưới. Build, kiểm tra logic và kiểm tra Harmony call site không chứng minh được chất lượng hình ảnh.
+Mẫu lấy cặp câu Evelyn Monday đã giải theo đúng ngôn ngữ chính/phụ đang cấu hình, dùng một câu ngắn cho prompt và một đáp án lặp dài hơn. Nếu không vừa, giảm số lần lặp từ 3 xuống 1; không giảm cỡ font. Mẫu không cố định tiếng Việt ở vai trò phụ. Chọn đáp án để đóng. Lỗi thiếu glyph nêu ngôn ngữ và mã Unicode; lỗi overflow nêu chiều cao cần và ngân sách khung. Cần xác nhận trong game: chữ/hộp highlight/vùng bấm cùng hàng, chọn bằng gamepad, chữ xuống dòng và cả hai vị trí trên/dưới. Build, kiểm tra logic và kiểm tra Harmony call site không chứng minh được chất lượng hình ảnh.
 
 ## Căn cứ sử dụng lại
 
