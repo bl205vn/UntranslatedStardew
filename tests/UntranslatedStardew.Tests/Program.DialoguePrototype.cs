@@ -69,6 +69,17 @@ public static partial class Program
             && Pair("$d kent#Hello.|Hello.", "$d kent#${^}$|Xin chào.", 0, "Hello.") == null,
             "World-state ambiguity includes blank translations and permits only identical results");
 
+        Assert(Pair("$query YEAR 2#Home.#$b#Welcome.|Away.", "$query YEAR 2#Ở nhà.#$b#Chào mừng.|Đi vắng.", 1,
+                "Welcome.") == "Chào mừng."
+            && Pair("First.||$query TRUE#Home.|Away.", "Đầu.||$query TRUE#Ở nhà.|Đi vắng.", 0,
+                "Home.", daysPlayed: 7) == "Ở nhà."
+            && Pair("$query TRUE#Hello.", "$query TRUE#Chào.|Chào.", 0, "Hello.") == "Chào.",
+            "Queries combine with authored pages, weekly variants and implicit false branches");
+        Assert(Pair("$query TRUE#Hello.|Hello.", "$query TRUE#${^}$|Chào.", 0, "Hello.") == null
+            && Pair("$query TRUE#Hello.|Goodbye.", "$query TRUE#Chào.|$action AddMoney 1", 0, "Hello.") == null
+            && Pair("$d kent#Hello.|Goodbye.", "$query TRUE#Chào.|Tạm biệt.", 0, "Hello.") == null,
+            "Query ambiguity, unsafe inactive branches and different condition types fall back");
+
         MethodInfo match = pair.DeclaringType!.GetMethod("MatchBlocks", BindingFlags.Static | BindingFlags.NonPublic)!;
         string[][] variants = { new[] { "Oh my!", "What a lovely day." }, new[] { "Ôi chao!", "Một ngày đẹp trời." } };
         Array? Match(string primary, string secondary, string[][] data)

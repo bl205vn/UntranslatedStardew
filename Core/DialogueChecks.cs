@@ -8,12 +8,13 @@ internal static class DialogueChecks
     internal static (string Name, bool Passed)[]? Run(string group)
         => group switch
         {
-            "branch" => CheckBranches().Concat(CheckWorldState()).ToArray(),
+            "branch" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).ToArray(),
             "state" => CheckWorldState(),
+            "query" => CheckQueries(),
             "pairs" => CheckPairs(),
             "fallback" => CheckFallback(),
             "layout" => CheckLayout(),
-            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).ToArray(),
+            "all" => CheckBranches().Concat(CheckWorldState()).Concat(CheckQueries()).Concat(CheckPairs()).Concat(CheckFallback()).Concat(CheckLayout()).ToArray(),
             _ => null
         };
 
@@ -57,6 +58,27 @@ internal static class DialogueChecks
             ("Unsafe inactive branches are rejected before a console preview",
                 !DialogueTranslation.IsSafePreview("$d kent#Hello.|$action AddMoney 1")
                 && Resolve(primary, "$d kent#Kent đã về.|Here is [74].", "Kent is home.") == null)
+        };
+    }
+
+    private static (string, bool)[] CheckQueries()
+    {
+        const string primary = "$query YEAR 2#Second year.|First year.";
+        const string secondary = "$query YEAR 2#Năm hai.|Năm đầu.";
+        return new[]
+        {
+            ("Query branches follow the visible text without evaluating the secondary condition",
+                Resolve(primary, secondary, "Second year.") == "Năm hai."
+                && Resolve(primary, secondary, "First year.") == "Năm đầu."),
+            ("Query headers must match, including quoted argument casing",
+                Resolve(primary, secondary.Replace("YEAR 2", "YEAR 3"), "Second year.") == null
+                && Resolve("$query CUSTOM \"Abigail\"#Yes.|No.", "$query CUSTOM \"abigail\"#Có.|Không.", "Yes.") == null),
+            ("Single-branch queries use the same text for either outcome",
+                Resolve("$query FALSE#Hello.", "$query FALSE#Xin chào.", "Hello.") == "Xin chào."),
+            ("Uncertain query branches and unsafe preview queries fall back",
+                Resolve("$query TRUE#Hello.|Hello.", "$query TRUE#Chào.|Xin chào.", "Hello.") == null
+                && !DialogueTranslation.IsSafePreview("$query CUSTOM#Hello.|Goodbye.")
+                && DialogueTranslation.IsSafePreview(primary))
         };
     }
 

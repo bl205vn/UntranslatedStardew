@@ -19,10 +19,10 @@ internal static class DialogueTranslation
         string sub = secondaryWeeks[week];
         string[] primaryBranches = { main };
         string[] secondaryBranches = { sub };
-        if (main.StartsWith("$d", StringComparison.Ordinal) || sub.StartsWith("$d", StringComparison.Ordinal))
+        if (IsConditional(main) || IsConditional(sub))
         {
-            if (!TryGetWorldBranches(main, out string mainCondition, out primaryBranches)
-                || !TryGetWorldBranches(sub, out string subCondition, out secondaryBranches)
+            if (!TryGetConditionalBranches(main, out string mainCondition, out primaryBranches)
+                || !TryGetConditionalBranches(sub, out string subCondition, out secondaryBranches)
                 || mainCondition != subCondition)
                 return null;
         }
@@ -66,7 +66,10 @@ internal static class DialogueTranslation
                 : null;
     }
 
-    private static bool TryGetWorldBranches(string text, out string condition, out string[] branches)
+    private static bool IsConditional(string text)
+        => text.StartsWith("$d", StringComparison.Ordinal) || text.StartsWith("$query", StringComparison.Ordinal);
+
+    private static bool TryGetConditionalBranches(string text, out string condition, out string[] branches)
     {
         condition = "";
         branches = Array.Empty<string>();
@@ -74,17 +77,33 @@ internal static class DialogueTranslation
         if (delimiter < 0)
             return false;
 
-        string[] header = text[..delimiter].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (header.Length != 2 || header[0] != "$d")
-            return false;
+        string headerText = text[..delimiter];
+        bool query = headerText.StartsWith("$query ", StringComparison.Ordinal);
+        if (query)
+        {
+            string expression = headerText[7..].Trim();
+            if (expression.Length == 0 || expression.Any(char.IsControl) || expression.Contains('|'))
+                return false;
+            // Preserve quoted values and argument casing. The secondary query is never evaluated.
+            condition = "$query:" + expression;
+        }
+        else
+        {
+            string[] header = headerText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (header.Length != 2 || header[0] != "$d")
+                return false;
 
-        condition = header[1].ToLowerInvariant();
-        if (condition == "communitycenter")
-            condition = "cc";
-        if (condition is not ("joja" or "cc" or "bus" or "kent"))
-            return false;
+            string state = header[1].ToLowerInvariant();
+            if (state == "communitycenter")
+                state = "cc";
+            if (state is not ("joja" or "cc" or "bus" or "kent"))
+                return false;
+            condition = "$d:" + state;
+        }
 
         branches = text[(delimiter + 1)..].Split('|');
+        if (query && branches.Length == 1)
+            branches = new[] { branches[0], branches[0] };
         return branches.Length == 2
             && branches.All(branch => branch.Split("#$b#").All(IsSafeSegment));
     }
@@ -151,9 +170,17 @@ internal static class DialogueTranslation
         => (int)(daysPlayed / 7 % (uint)variantCount);
 
     internal static bool IsSafePreview(string text)
-        => text.Split("||").All(variant => variant.StartsWith("$d", StringComparison.Ordinal)
-            ? TryGetWorldBranches(variant, out _, out _)
-            : variant.Split("#$b#").All(IsSafeSegment));
+        => text.Split("||").All(variant =>
+        {
+            if (!IsConditional(variant))
+                return variant.Split("#$b#").All(IsSafeSegment);
+            if (!TryGetConditionalBranches(variant, out string condition, out _))
+                return false;
+
+            return !condition.StartsWith("$query:", StringComparison.Ordinal)
+                || condition is "$query:TRUE" or "$query:FALSE"
+                || Regex.IsMatch(condition, @"^\$query:YEAR [0-9]+(?: [0-9]+)?$");
+        });
 
     internal static bool TryResolveSegment(string segment, Gender gender, out string text)
     {
