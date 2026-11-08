@@ -5,6 +5,10 @@ namespace UntranslatedStardew.Core;
 /// <summary>Pairs plain object-message pages, using object dialogue syntax rather than NPC command syntax.</summary>
 internal static class ObjectDialogueTranslation
 {
+    // DialogueBox.getCurrentString removes platform newlines after trimming.
+    // Keep authored '^' intact: it remains a SpriteText display break.
+    internal static string VisibleText(string text) => text.Trim().Replace(Environment.NewLine, "");
+
     internal static DialogueTextPair[]? Match(string primary, string secondary, string displayed, Gender gender)
     {
         // This mirrors LocalizedContentManager.PreprocessString; ^ here remains a display newline.
@@ -26,7 +30,7 @@ internal static class ObjectDialogueTranslation
         int index = pages.Count - remaining.Count;
         if (index < 0 || remaining.Count == 0) return -1;
         for (int i = 0; i < remaining.Count; i++)
-            if (remaining[i].Trim() != pages[index + i].Primary) return -1;
+            if (VisibleText(remaining[i]) != pages[index + i].Primary) return -1;
         return index;
     }
 }

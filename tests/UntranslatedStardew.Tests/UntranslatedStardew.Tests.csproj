@@ -21,6 +21,7 @@
     <Reference Include="StardewModdingAPI" HintPath="$(GamePath)\StardewModdingAPI.dll" />
     <Reference Include="MonoGame.Framework" HintPath="$(GamePath)\MonoGame.Framework.dll" />
     <Reference Include="StardewValley.GameData" HintPath="$(GamePath)\StardewValley.GameData.dll" />
+    <Reference Include="BmFont" HintPath="$(GamePath)\BmFont.dll" />
     <Reference Include="0Harmony" HintPath="$(GamePath)\smapi-internal\0Harmony.dll" />
   </ItemGroup>
 

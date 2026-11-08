@@ -436,6 +436,25 @@ public sealed class ModEntry : Mod
         catch (InvalidCastException) { return null; }
     }
 
+    internal EventDialogueTranslation.Text? GetEventDialogueText(Event owner, string[] args)
+    {
+        if (!Config.ShowSecondaryInDialogue || _contentProvider?.IsSecondaryAvailable != true
+            || Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
+            || !EventDialogueTranslation.TryNormalizeAsset(owner.fromAssetName, out string asset)) return null;
+        try
+        {
+            var primary = Game1.content.Load<Dictionary<string, string>>(asset);
+            Gender gender = owner.farmer.Gender;
+            string? key = EventDialogueTranslation.FindKey(primary, owner.id, owner.eventCommands, gender);
+            if (key == null || !_contentProvider.TryGetDialogueString(asset, key, out string? secondary)
+                || secondary == null) return null;
+            return EventDialogueTranslation.Match(primary[key], secondary, owner.eventCommands,
+                owner.CurrentCommand, args, gender);
+        }
+        catch (Microsoft.Xna.Framework.Content.ContentLoadException) { return null; }
+        catch (InvalidCastException) { return null; }
+    }
+
     #region Movie Poster Dialogue
     internal bool TryAttachMoviePoster(StardewValley.Menus.DialogueBox box, StardewValley.GameData.Movies.MovieData movie, bool isUpcoming)
     {

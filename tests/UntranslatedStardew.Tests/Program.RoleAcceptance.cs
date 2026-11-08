@@ -221,8 +221,52 @@ public static partial class Program
         using (var movieContent = new LocalizedContentManager(services, content))
         using (var movieSecondary = new RawContentProvider(() => services, content, "vi", sourceRegistry: registry))
         {
+            var farmEvents = movieContent.Load<Dictionary<string, string>>("Data/Events/Farm");
+            string? sewingKey = farmEvents.Keys.SingleOrDefault(key => key.StartsWith("992559/", StringComparison.Ordinal) && key.Contains("/o Emily/", StringComparison.Ordinal));
+            bool hasSewing = sewingKey != null && movieSecondary.TryGetDialogueString("Data/Events/Farm", sewingKey, out _);
+            Assert(hasSewing, "Installed Vietnamese pack provides the exact farm sewing-event source key");
+            if (hasSewing)
+            {
+                movieSecondary.TryGetDialogueString("Data/Events/Farm", sewingKey!, out string? sewingSecondary);
+                var commands = ArgUtility.SplitQuoteAware(Dialogue.applyGenderSwitchBlocks(Gender.Female, farmEvents[sewingKey!]), '/',
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, keepQuotesAndEscapes: true);
+                Assert(EventDialogueTranslation.FindKey(farmEvents, "992559", commands, Gender.Female) == sewingKey,
+                    "Live script disambiguates the real unmarried and married sewing-event precondition variants");
+                int speaks = 0, messages = 0;
+                for (int i = 0; i < commands.Length; i++)
+                {
+                    string[] args = ArgUtility.SplitBySpaceQuoteAware(commands[i]);
+                    if (args.Length == 0 || (args[0] != "speak" && args[0] != "message")) continue;
+                    var paired = EventDialogueTranslation.Match(farmEvents[sewingKey!], sewingSecondary!, commands, i, args, Gender.Female);
+                    Assert(paired == null,
+                        "Outdated installed sewing-event script safely falls back at command " + i + " (" + args[0] + ")");
+                    if (args[0] == "speak") speaks++; else messages++;
+                }
+                Assert(speaks > 0 && messages > 0, "Real sewing-event audit includes both portrait speech and unlock message");
+            }
+            int compatibleEventLines = 0;
+            var compatibleEventIds = new HashSet<string>();
+            foreach (var entry in farmEvents)
+            {
+                if (!movieSecondary.TryGetDialogueString("Data/Events/Farm", entry.Key, out string? translatedScript) || translatedScript == null) continue;
+                var commands = ArgUtility.SplitQuoteAware(Dialogue.applyGenderSwitchBlocks(Gender.Female, entry.Value), '/',
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, keepQuotesAndEscapes: true);
+                string eventId = Event.SplitPreconditions(entry.Key)[0];
+                if (EventDialogueTranslation.FindKey(farmEvents, eventId, commands, Gender.Female) != entry.Key) continue;
+                for (int i = 0; i < commands.Length; i++)
+                {
+                    var args = ArgUtility.SplitBySpaceQuoteAware(commands[i]);
+                    var paired = EventDialogueTranslation.Match(entry.Value, translatedScript, commands, i, args, Gender.Female);
+                    if (paired == null || paired.Primary == paired.Secondary) continue;
+                    compatibleEventLines++;
+                    compatibleEventIds.Add(eventId);
+                }
+            }
+            Assert(compatibleEventLines > 0, "Installed Vietnamese farm scripts provide compatible real event speak/message pairs");
+            Console.WriteLine("Event source audit: " + compatibleEventLines + " compatible text commands in "
+                + compatibleEventIds.Count + " farm events; not an in-game coverage percentage.");
             var museumObjects = movieContent.Load<Dictionary<string, StardewValley.GameData.Objects.ObjectData>>("Data/Objects");
-            foreach (string id in new[] { "96", "106" })
+            foreach (string id in new[] { "96", "106", "114" })
             {
                 var item = museumObjects[id];
                 MoviePosterAdapter.TryParseLocalizedToken(item.DisplayName, out string nameAsset, out string nameKey);

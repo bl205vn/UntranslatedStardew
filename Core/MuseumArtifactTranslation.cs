@@ -12,7 +12,8 @@ internal static class MuseumArtifactTranslation
         if (!Safe(primaryName) || !Safe(primaryDescription)
             || !Safe(secondaryName) || !Safe(secondaryDescription)) return null;
         string Compose(string name, string description) => " - " + name + " - ^" + description;
-        if (parsePrimary(Compose(primaryName, primaryDescription)).Trim() != visible.Trim()) return null;
-        return new(visible.Trim(), Compose(secondaryName!, secondaryDescription!).Trim());
+        string primary = ObjectDialogueTranslation.VisibleText(parsePrimary(Compose(primaryName, primaryDescription)));
+        if (primary != ObjectDialogueTranslation.VisibleText(visible)) return null;
+        return new(primary, Compose(secondaryName!, secondaryDescription!).Trim());
     }
 }

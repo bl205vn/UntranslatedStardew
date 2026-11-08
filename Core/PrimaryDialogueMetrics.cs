@@ -50,7 +50,7 @@ internal static class PrimaryDialogueMetrics
             float tempzoom = zoom;
             if (DialogueNativeFont.IsIconCharacter(s[i]) || SpriteText.forceEnglishFont)
             {
-                zoom = 3f;
+                zoom = 3f + (SpriteText.FontPixelZoom - SpriteText.fontPixelZoom);
             }
 
             if (s[i] == '^')
@@ -63,7 +63,7 @@ internal static class PrimaryDialogueMetrics
             }
 
             accumulated = 0;
-            if (SpriteText.positionOfNextSpace(s, i, (int)x, accumulated) >= width)
+            if (PositionOfNextSpace(s, i, (int)x, zoom) >= width)
             {
                 y += 18f * zoom;
                 accumulated = 0;
@@ -91,4 +91,30 @@ internal static class PrimaryDialogueMetrics
         return (int)(y + 16f * zoom);
     }
 
+    // Vanilla temporarily changes fontPixelZoom before its lookahead. Pass that
+    // effective zoom explicitly so measurement never changes the shared font.
+    private static int PositionOfNextSpace(string text, int index, int x, float zoom)
+    {
+        var language = LocalizedContentManager.CurrentLanguageCode;
+        if (language is LocalizedContentManager.LanguageCode.ja or LocalizedContentManager.LanguageCode.zh
+            or LocalizedContentManager.LanguageCode.th)
+        {
+            float result = x;
+            foreach (char c in Game1.asianSpacingRegex.Match(text, index).Value)
+                if (SpriteText.characterMap.TryGetValue(c, out var glyph)) result += glyph.XAdvance * zoom;
+            return (int)result;
+        }
+        bool bitmap = IsUsingNonSpriteSheetFont();
+        for (int i = index; i < text.Length; i++)
+        {
+            if (text[i] is ' ' or '^') return x;
+            if (bitmap)
+                x += (int)((SpriteText.characterMap.TryGetValue(text[i], out var glyph)
+                    ? glyph.XAdvance : SpriteText.FontFile.Common.LineHeight) * zoom);
+            else
+                x += (int)((8 + SpriteText.getWidthOffsetForChar(text[i])
+                    + SpriteText.getWidthOffsetForChar(text[Math.Max(0, i - 1)])) * zoom);
+        }
+        return x;
+    }
 }

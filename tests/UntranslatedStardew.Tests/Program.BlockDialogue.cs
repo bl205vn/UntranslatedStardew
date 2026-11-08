@@ -23,6 +23,29 @@ public static partial class Program
             Assert(PrimaryDialogueMetrics.Measure("First^Second", 1000) == 102
                 && PrimaryDialogueMetrics.Measure("", 1000) == 0,
                 "Primary measurement preserves explicit native line breaks and empty text");
+            zoomField.SetValue(null, 2f);
+            Assert(PrimaryDialogueMetrics.Measure("$AAA", 75) == 122 && SpriteText.fontPixelZoom == 2f,
+                "A native icon uses zoom 3 for lookahead at custom Latin zoom without mutating shared zoom");
+            var languageField = HarmonyLib.AccessTools.Field(typeof(StardewValley.LocalizedContentManager), "_currentLangCode");
+            var oldMap = SpriteText.characterMap;
+            var oldFile = SpriteText.FontFile;
+            try
+            {
+                languageField.SetValue(null, StardewValley.LocalizedContentManager.LanguageCode.ko);
+                zoomField.SetValue(null, 1.5f);
+                SpriteText.FontFile = BmFont.FontLoader.Parse(@"<font><info face=""Fixture"" size=""12""/><common lineHeight=""12"" base=""10"" scaleW=""64"" scaleH=""64"" pages=""1""/><pages><page id=""0"" file=""fixture.png""/></pages><chars count=""3""><char id=""65"" x=""0"" y=""0"" width=""8"" height=""12"" xoffset=""0"" yoffset=""0"" xadvance=""10"" page=""0"" chnl=""15""/><char id=""66"" x=""8"" y=""0"" width=""8"" height=""12"" xoffset=""0"" yoffset=""0"" xadvance=""10"" page=""0"" chnl=""15""/><char id=""32"" x=""0"" y=""0"" width=""0"" height=""0"" xoffset=""0"" yoffset=""0"" xadvance=""2"" page=""0"" chnl=""15""/></chars></font>");
+                SpriteText.characterMap = SpriteText.FontFile.Chars.ToDictionary(c => (char)c.ID);
+                Assert(PrimaryDialogueMetrics.Measure("A B", 36) == 42 && SpriteText.getHeightOfString("A B", 36) == 21,
+                    "Primary BMFont measurement keeps vanilla draw's width-minus-four wrap boundary");
+                Assert(PrimaryDialogueMetrics.Measure("A^B", 100) == 42,
+                    "Primary BMFont measurement respects line height and explicit display breaks");
+            }
+            finally
+            {
+                languageField.SetValue(null, StardewValley.LocalizedContentManager.LanguageCode.en);
+                SpriteText.characterMap = oldMap;
+                SpriteText.FontFile = oldFile;
+            }
         }
         finally
         {

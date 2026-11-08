@@ -320,3 +320,10 @@ Nhiều dự án mod dịch thuật sơ khai thường cố gắng hook thẳng 
 | **Nhà Gấu Mèo** | Gấu mèo tại Cindersap Forest | Mở menu yêu cầu giao nộp thức ăn, hover vào nấm tím | Bảng yêu cầu hiện tên "Dried Purple Mushrooms / Nấm tím khô" đầy đủ trong tooltip hover. |
 | **Bảng tin & Lịch** | Bảng tin trước cửa hàng Pierre | Mở xem lịch sinh nhật, sau đó mở poster Help Wanted | Sinh nhật NPC hiện tên NPC + ngày sinh song ngữ. Poster giao hàng hiện mô tả và phần thưởng song ngữ. |
 | **Rạp chiếu phim** | Bảng áp phích rạp phim Pelican | Bấm kiểm tra áp phích phim đang chiếu | 2 trang hiển thị: Tên phim song ngữ (trang 1) và nội dung tóm tắt song ngữ (trang 2). |
+
+
+### Cập nhật preview 29
+
+- Hiện vật bảo tàng: đã sửa chuẩn hóa xuống dòng; item96/106/114 kiểm tra XNB+VI thật, chờ UI.
+- Event `speak`/`message`: đã có adapter source/index và kiểm tra tự động; chỉ cho script tương ứng, không bao gồm event question/fork/festivals. Event Emily may đồ trong pack VI cài đặt vẫn lệch cấu trúc 26/19 lệnh và fallback.
+- Bảng trạng thái theo thư mục hiện tại: [CONTENT-COVERAGE.vi.md](CONTENT-COVERAGE.vi.md). Các mục cũ nói event bị chặn mô tả baseline preview28; preview29 chỉ mở guard cho hộp được adapter xác minh.

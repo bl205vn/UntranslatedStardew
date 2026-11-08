@@ -71,6 +71,7 @@ public static partial class Program
         TestDialoguePrototype();
         TestLocationQuestions();
         TestMuseumArtifacts();
+        TestEventDialogue();
         TestProviderWarningLifecycle();
         TestStartupSourceDiagnostics();
 

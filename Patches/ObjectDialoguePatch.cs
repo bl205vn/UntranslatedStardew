@@ -69,7 +69,7 @@ internal static class ObjectDialoguePatch
         if (!States.TryGetValue(box, out var state) || box.characterDialogue != null || box.isQuestion) return;
         var mod = ModEntry.Instance;
         int index = ObjectDialogueTranslation.CurrentPage(state.Pages, box.dialogues);
-        bool enabled = mod?.Config.ShowSecondaryInDialogue == true && !Game1.eventUp
+        bool enabled = mod?.Config.ShowSecondaryInDialogue == true && (!Game1.eventUp || EventDialoguePatch.IsEligible(box))
             && !mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
             && state.Generation == LoadedDialogueSource.Generation;
         var font = enabled ? mod?.GetSecondaryDialogueFont() : null;

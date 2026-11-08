@@ -52,11 +52,12 @@ internal static class DialogueBoxPatch
         ModEntry? mod = ModEntry.Instance;
         var preview = mod?.GetDialoguePreview(box);
         if (mod != null && (preview.HasValue || mod.Config.ShowSecondaryInDialogue)
-            && !Game1.eventUp && !box.isQuestion
+            && (!Game1.eventUp || EventDialoguePatch.IsEligible(box)) && !box.isQuestion
             && !mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
             && box.characterDialoguesBrokenUp.Count == 1
             && box.characterDialogue is { } dialogue
-            && ResolvePairs(mod, dialogue, text, preview?.Pages) is { } pairs
+            && (Game1.eventUp ? EventDialoguePatch.GetNpcPairs(box, text)
+                : ResolvePairs(mod, dialogue, text, preview?.Pages)) is { } pairs
             && mod.GetSecondaryDialogueFont() is { } font
             && pairs.All(pair => font.Supports(pair.Secondary)))
         {
