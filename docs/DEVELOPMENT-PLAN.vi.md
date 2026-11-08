@@ -43,8 +43,8 @@ Trạng thái dùng: **Chưa làm → Đang làm → Đã code → Đã kiểm t
 | Mốc | Phạm vi và đầu ra | Điều kiện hoàn tất | Trạng thái |
 |---|---|---|---|
 | M0 | Xác minh cutscene/dịch chuyển sau `coverage`; bảo đảm lệnh thử không thay trạng thái chơi | Có nguyên nhân hoặc phép tái hiện đủ phân biệt quan hệ nhân quả; nếu sửa, có hồi quy phù hợp và xác nhận hành vi | Đã đóng: người dùng xác nhận Return Scepter; trạng thái tức thời không đổi |
-| M1 | Chốt hội thoại NPC: lời dẫn, phản hồi, `$q` đã trả lời/fallback, nguồn và phân trang còn thiếu | Ghép đúng khóa/chỉ số đoạn; không chạy lại tác dụng phụ; trường hợp chưa hỗ trợ được ghi và fallback rõ | Nguồn/nhánh có kiểm tra tự động; ảnh preview 25/26 xác nhận câu hỏi và hai trang reaction Alex; format động như Gus còn thiếu |
-| M2 | Hộp thông tin không chân dung và thoại event/lễ hội: `speak`, `message`, câu hỏi | Adapter giữ asset/event/command và ngữ cảnh; câu hỏi dùng đúng ID; event tiếp tục và kết thúc đúng | Hộp thông tin/poster/câu hỏi địa điểm có ảnh; preview 29 thêm event speak/message có nguồn script tương ứng, đã kiểm tra tự động, chờ UI; event question/fork còn thiếu |
+| M1 | Chốt hội thoại NPC: lời dẫn, phản hồi, `$q` đã trả lời/fallback, nguồn và phân trang còn thiếu | Ghép đúng khóa/chỉ số đoạn; không chạy lại tác dụng phụ; trường hợp chưa hỗ trợ được ghi và fallback rõ | Preview 30 thêm khung thoại dài và nguồn gợi ý quà. Chờ nghiệm thu trong game |
+| M2 | Hộp thông tin không chân dung và thoại event/lễ hội: `speak`, `message`, câu hỏi | Adapter giữ asset/event/command và ngữ cảnh; câu hỏi dùng đúng ID; event tiếp tục và kết thúc đúng | Preview 30 thêm câu hỏi event, nhánh script có nguồn, thoại lễ hội và câu hỏi Wizard Shrine. Chờ nghiệm thu trong game |
 | M3 | Tên NPC trong biển tên, danh sách xã hội và hồ sơ; bong bóng trên đầu NPC | Không lộ tên `???`; không trùng tên; bong bóng dùng chung timer/fade và nằm trong màn hình | Chưa làm |
 | M4 | Thư, ghi chú và các trang đọc | Đọc được hai ngôn ngữ; phân trang/điều hướng đúng; nhận quà và nút nhận việc chỉ thực hiện một lần | Chưa làm |
 | M5 | QuestLog, bảng giao việc thường và Special Orders/Qi | Tiêu đề/mô tả/mục tiêu/phần thưởng đúng nguồn; vùng cuộn, nút nhận/hủy và trạng thái tiến độ đúng | Chưa làm |
@@ -216,3 +216,11 @@ Mỗi lần hoàn thành mốc, cập nhật bảng tiến độ, bằng chứng
 - Gemini Flash3.8High được gọi ở worktree riêng nhưng worker lỗi khởi động socket Windows (`listen tcp 127.0.0.1:0 ... forbidden`), không thay file. Codex tiếp quản, triển khai và xác minh; không ghi công CLI cho code chưa chạy.
 - Build thành công, **1218/1218 đạt**; có source/corpus thật, fixture bất tương ứng, Harmony hai command và vòng đời capture. Chưa chạy event/UI thật, không đổi save, không deploy/commit/release.
 - Bản ZIP: `bin/UntranslatedStardew-1.3.2-dialogue-preview29.zip`. Phiếu thử gộp: xem Ancient Seed/Ornamental Fan đã hiến tặng rồi đóng; đảo SecondaryFirst ở một hiện vật; khi tự gặp event có script tương ứng thì đọc/tiếp/đóng như bình thường. Không reset cờ/sửa save để xem lại Emily; bản hiện tại của pack đó chưa tương ứng nên không yêu cầu thử lại event này.
+
+
+## Preview 30 — nghiệm thu gộp M1–M2
+
+- Khung NPC có thể cao thêm khi vừa màn hình, giữ kích thước chân dung và chừa chỗ cho biểu tượng chuyển trang. Hai ngôn ngữ vẫn tách thành hai khối. Trang quá dài so với màn hình dùng cách phân trang của game.
+- Gợi ý quà ghép từ mẫu câu, NPC và vật phẩm vanilla thực sự đã chọn. Câu hỏi event giữ thứ tự và ID đáp án gốc. Nhánh fork/switch chỉ dịch khi truy được script vừa nạp và đối chiếu được danh sách lệnh đang chạy.
+- Lễ hội dùng đúng khóa biến thể năm. Wizard Shrine xử lý riêng biến đổi xuống dòng của prompt. Event may đồ Emily 992559 vẫn chỉ hiện bản chính vì script Việt đang cài có nội dung khác bản EN.
+- Phiếu thử gộp nằm trong DIALOGUE-COMMANDS.vi.md. Các đường dẫn mới cần nghiệm thu hiển thị và chuyển tiếp trong game.

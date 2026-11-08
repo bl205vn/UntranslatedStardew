@@ -35,6 +35,40 @@ public static partial class Program
             && !EventDialogueTranslation.TryNormalizeAsset("Data/Events/../Farm", out _)
             && !EventDialogueTranslation.TryNormalizeAsset("Data/Festivals/spring13", out _),
             "Event source paths are separate from dialogue, reject traversal and do not imply festival support");
+        Assert(EventDialogueTranslation.TryNormalizeAsset("Data/Festivals/spring13", out var festAsset, allowFestivals: true)
+            && festAsset == "Data/Festivals/spring13"
+            && !EventDialogueTranslation.TryNormalizeAsset("Data/Festivals/../spring13", out _, allowFestivals: true),
+            "Festival source paths validate properly when festival support is scoped and enabled");
+        Assert(EventDialogueTranslation.FindKey(new Dictionary<string, string> { ["set-up"] = main }, "festival_fall16", live, Gender.Female, isFestival: true) == "set-up",
+            "Festival key selection matches unique live commands under festival context");
+
+        // Event and Festival question / quickQuestion command adapters
+        const string qMain = "pause 100/question fork \"Go left or right?#Left#Right\"/end";
+        const string qSub = "pause 100/question fork \"Đi trái hay phải?#Trái#Phải\"/end";
+        var qLive = Commands(qMain);
+        var qMatch = EventDialogueTranslation.MatchQuestion(qMain, qSub, qLive, 1, ArgUtility.SplitBySpaceQuoteAware(qLive[1]), Gender.Female);
+        Assert(qMatch != null && qMatch.Prompt.Primary == "Go left or right?" && qMatch.Prompt.Secondary == "Đi trái hay phải?"
+            && qMatch.Answers.Length == 2 && qMatch.Answers[0].Secondary == "Trái" && qMatch.Answers[1].Secondary == "Phải",
+            "Event question pairs prompt and answer labels with matching command provenance");
+        Assert(EventDialogueTranslation.MatchQuestion(qMain, qSub.Replace("Trái#Phải", "Trái"), qLive, 1, ArgUtility.SplitBySpaceQuoteAware(qLive[1]), Gender.Female) == null,
+            "Event question rejects mismatched answer count");
+        Assert(EventDialogueTranslation.MatchQuestion(qMain, qSub.Replace("fork", "spoon"), qLive, 1, ArgUtility.SplitBySpaceQuoteAware(qLive[1]), Gender.Female) == null,
+            "Event question rejects changed dialogue key");
+
+        const string qqMain = "quickQuestion Which?#A#B(break)end(break)end";
+        const string qqSub = "quickQuestion Chọn?#A-vi#B-vi(break)end(break)end";
+        var qqLive = new[] { qqMain };
+        var qqMatch = EventDialogueTranslation.MatchQuestion(qqMain, qqSub, qqLive, 0, ArgUtility.SplitBySpaceQuoteAware(qqMain), Gender.Female);
+        Assert(qqMatch != null && qqMatch.Prompt.Secondary == "Chọn?" && qqMatch.Answers[0].Secondary == "A-vi",
+            "Event quickQuestion pairs prompt and answers while verifying break logic");
+        Assert(EventDialogueTranslation.MatchQuestion(qqMain, qqSub.Replace("end(break)end", "end(break)pause 100"), qqLive, 0, ArgUtility.SplitBySpaceQuoteAware(qqMain), Gender.Female) == null,
+            "Event quickQuestion rejects changed branch logic");
+
+        // Farm sewing event 992559 divergent story (26 commands vs 19 commands) intentionally remains fallback
+        var en26 = string.Join("/", Enumerable.Range(0, 26).Select(i => $"command{i}"));
+        var vi19 = string.Join("/", Enumerable.Range(0, 19).Select(i => $"command{i}"));
+        Assert(EventDialogueTranslation.Match(en26, vi19, Commands(en26), 0, new[] { "command0" }, Gender.Female) == null,
+            "Divergent story scripts with differing command lengths strictly fall back without fake pairing");
         Assert(!EventDialoguePatch.IsEligible((StardewValley.Menus.DialogueBox)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(StardewValley.Menus.DialogueBox))),
             "An uncaptured event box stays vanilla");
         var oldGame = Game1.game1;
@@ -73,7 +107,14 @@ public static partial class Program
         try
         {
             harmony.CreateClassProcessor(typeof(EventDialoguePatch)).Patch();
-            foreach (string name in new[] { nameof(Event.DefaultCommands.Speak), nameof(Event.DefaultCommands.Message) })
+            foreach (var adapter in new[] { typeof(EventScriptSourcePatch), typeof(FestivalDialogueSourcePatch),
+                typeof(EventDialoguePatch.FestivalNpcDialoguePatch), typeof(GiftAdviceCapturePatch),
+                typeof(GiftAdviceFormattedStringPatch), typeof(GiftAdviceGenderStringPatch) })
+            {
+                var patched = harmony.CreateClassProcessor(adapter).Patch();
+                Assert(patched is { Count: > 0 }, $"{adapter.Name} installs on the real game assembly");
+            }
+            foreach (string name in new[] { nameof(Event.DefaultCommands.Speak), nameof(Event.DefaultCommands.Message), nameof(Event.DefaultCommands.Question), nameof(Event.DefaultCommands.QuickQuestion) })
             {
                 var info = Harmony.GetPatchInfo(AccessTools.Method(typeof(Event.DefaultCommands), name));
                 Assert(info?.Prefixes.Any(p => p.owner == harmony.Id) == true && info.Postfixes.Any(p => p.owner == harmony.Id),

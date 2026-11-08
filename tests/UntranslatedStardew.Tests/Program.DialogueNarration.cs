@@ -107,6 +107,21 @@ public static partial class Program
                 "If you want Pam to like you, give her 'Beer'.%revealtaste:Pam:(O)346", "Farmer", Gender.Male, 0) == null,
             "Parameterized dialogue with substituted arguments safely falls back to primary-only without crashing or mispairing");
 
+        // Exact selected templates: no dictionary scan or guessed default template.
+        var selected = new[] { new GiftAdviceTranslation.Piece("Strings/StringsFromCSFiles:NPC.cs.4097",
+            "If you want Pam to like you, give her 'Beer'.", new object[] { "Pam", "Beer" }) };
+        var advice = GiftAdviceTranslation.Match(selected[0].Text + "%revealtaste:Pam:(O)346", selected, "Pam", "Beer");
+        Assert(advice != null && advice.Npc == "Pam" && advice.Item == "(O)346",
+            "Gift advice records chosen template and exact selected NPC/item without reroll");
+        Assert(GiftAdviceTranslation.Match("Changed text%revealtaste:Pam:(O)346", selected, "Pam", "Beer") == null
+            && GiftAdviceTranslation.Match(selected[0].Text + "%revealtaste:Pam:(O)346", Array.Empty<GiftAdviceTranslation.Piece>(), "Pam", "Beer") == null,
+            "Gift advice rejects stale text and absent captured source instead of guessing a default");
+        Assert(advice != null && GiftAdviceTranslation.Translate(advice,
+            p => p.EndsWith("4097") ? "Muốn {0} thích bạn, hãy tặng '{1}'." : null, "Pam", "Bia") == "Muốn Pam thích bạn, hãy tặng 'Bia'.",
+            "Gift advice translates the actual selected template with original IDs and localized item name");
+        Assert(advice != null && GiftAdviceTranslation.Translate(advice, _ => null, "Pam", "Bia") == null,
+            "Gift advice falls back when selected template translation is missing");
+
         // 5. Alex Wed reactions after chooseResponse: multi-page and single-page
         const string alexWed01Primary = "Really? I guess I underestimated you.#$b#My arm's a little sore, but maybe next time.";
         const string alexWed01Secondary = "Thật vậy sao? Tôi đoán là tôi đã đánh giá thấp bạn rồi.#$b#Tay tôi hơi đau một chút, nhưng có lẽ lần sau.";

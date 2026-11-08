@@ -46,9 +46,14 @@ internal static class ObjectDialoguePatch
     private static void Postfix(DialogueBox __instance, MethodBase __originalMethod, object[] __args)
     {
         if (__originalMethod.IsConstructor && __args[0] is string text
-            && LoadedDialogueSource.Get(text) is { } source
+            && (LoadedDialogueSource.Get(text) ?? FestivalDialogueSource.Get(text, Game1.CurrentEvent)) is { } source
             && ModEntry.Instance?.GetObjectDialoguePages(source, text) is { } pages)
+        {
+            if (EventDialogueTranslation.TryParseFestivalKey(source, out _, out _)
+                && Game1.CurrentEvent is { isFestival: true } owner)
+                EventDialoguePatch.AttachFestivalMessage(__instance, owner);
             States.Add(__instance, new(pages));
+        }
         // Input handlers finish changing the page and vanilla geometry before our refresh.
         Refresh(__instance);
     }

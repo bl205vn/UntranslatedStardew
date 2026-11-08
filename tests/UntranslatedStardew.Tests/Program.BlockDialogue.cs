@@ -7,6 +7,7 @@ public static partial class Program
 {
     private static void TestBlockDialogue()
     {
+        TestNpcDialogueGeometry();
         var oldLanguage = StardewValley.LocalizedContentManager.CurrentLanguageCode;
         var zoomField = HarmonyLib.AccessTools.Field(typeof(SpriteText), "fontPixelZoom");
         float oldZoom = (float)zoomField.GetValue(null)!;

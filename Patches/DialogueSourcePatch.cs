@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using HarmonyLib;
 using StardewValley;
+using StardewValley.ItemTypeDefinitions;
 using UntranslatedStardew.Core;
 
 namespace UntranslatedStardew.Patches;
@@ -9,7 +10,7 @@ namespace UntranslatedStardew.Patches;
 [HarmonyPatch(typeof(Dialogue))]
 internal static class DialogueSourcePatch
 {
-    private sealed record Source(string? Key, int BaseIndex = 0);
+    private sealed record Source(string? Key, int BaseIndex = 0, GiftAdviceTranslation.Advice? Advice = null);
     private static readonly ConditionalWeakTable<Dialogue, Source> Sources = new();
 
     [HarmonyPrefix]
@@ -41,15 +42,26 @@ internal static class DialogueSourcePatch
     [HarmonyPatch(MethodType.Constructor, typeof(NPC), typeof(string), typeof(string))]
     private static void CaptureLoaded(Dialogue __instance, string translationKey, string dialogueText)
     {
-        if (translationKey == null && GetKey(__instance) == null && dialogueText != null && LoadedDialogueSource.Get(dialogueText) is { } source)
+        if (translationKey == null && GetKey(__instance) == null && dialogueText != null)
         {
-            Sources.Remove(__instance);
-            Sources.Add(__instance, new(source, 0));
+            if (LoadedDialogueSource.Get(dialogueText) is { } source)
+            {
+                Sources.Remove(__instance);
+                Sources.Add(__instance, new(source, 0));
+            }
+            else if (GiftAdviceCapturePatch.Resolve(__instance.speaker, dialogueText) is { } advice)
+            {
+                Sources.Remove(__instance);
+                Sources.Add(__instance, new(null, 0, advice));
+            }
         }
     }
 
     internal static string? GetKey(Dialogue dialogue)
         => Sources.TryGetValue(dialogue, out var source) ? source.Key : dialogue.TranslationKey;
+
+    internal static GiftAdviceTranslation.Advice? GetGiftAdvice(Dialogue dialogue)
+        => Sources.TryGetValue(dialogue, out var source) ? source.Advice : null;
 
     internal static int GetBaseIndex(Dialogue dialogue)
         => Sources.TryGetValue(dialogue, out var source) ? source.BaseIndex : 0;

@@ -12,7 +12,8 @@ internal static class LocationQuestionTranslation
         Func<string, string?> sourceFor)
     {
         string? Source(string text) => sourceFor(text) is { } path
-            && DialogueTranslation.TryParseSourceKey(path, out string asset, out string key) ? asset + ":" + key : null;
+            && (DialogueTranslation.TryParseSourceKey(path, out string asset, out string key)
+                || EventDialogueTranslation.TryParseFestivalKey(path, out asset, out key)) ? asset + ":" + key : null;
         string? promptSource = Source(prompt);
         if (promptSource == null || answers.Count == 0) return null;
         var labels = new List<Label>();

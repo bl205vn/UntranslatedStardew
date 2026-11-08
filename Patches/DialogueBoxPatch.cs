@@ -49,36 +49,11 @@ internal static class DialogueBoxPatch
         if (DialogueQuestionPatch.TryDraw(batch, text, x, y, position, alpha, depth, box))
             return;
 
-        ModEntry? mod = ModEntry.Instance;
-        var preview = mod?.GetDialoguePreview(box);
-        if (mod != null && (preview.HasValue || mod.Config.ShowSecondaryInDialogue)
-            && (!Game1.eventUp || EventDialoguePatch.IsEligible(box)) && !box.isQuestion
-            && !mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
-            && box.characterDialoguesBrokenUp.Count == 1
-            && box.characterDialogue is { } dialogue
-            && (Game1.eventUp ? EventDialoguePatch.GetNpcPairs(box, text)
-                : ResolvePairs(mod, dialogue, text, preview?.Pages)) is { } pairs
-            && mod.GetSecondaryDialogueFont() is { } font
-            && pairs.All(pair => font.Supports(pair.Secondary)))
+        int bodyWidth = box.isPortraitBox() ? width : width - 16;
+        if (GetLayout(box, text, bodyWidth) is { } resolved)
         {
-            int bodyWidth = box.isPortraitBox() ? width : width - 16;
-            var key = new LayoutKey(bodyWidth, box.height - 16,
-                preview?.SecondaryFirst ?? mod.Config.SecondaryFirst, font,
-                LocalizedContentManager.CurrentLanguageCode, SpriteText.FontPixelZoom,
-                Game1.options.useAlternateFont, Game1.options.useChineseSmoothFont, Game1.options.dialogueFontScale);
-            if (!Layouts.TryGetValue(box, out var cached) || cached.Key != key || !cached.Pairs.SequenceEqual(pairs))
-            {
-                // Cache both successful layouts and overflow fallback. Revealing more
-                // characters does not require measuring and wrapping the whole page again.
-                var page = DialogueBlockLayout.Fit(pairs, key.Width, key.Height, key.Above,
-                    primary => PrimaryDialogueMetrics.Measure(primary, bodyWidth),
-                    line => font.Measure(line).X * DialoguePairLayout.SecondaryScale,
-                    line => font.Measure(line).Y * DialoguePairLayout.SecondaryScale);
-                cached = new(key, pairs, page);
-                Layouts.Remove(box);
-                Layouts.Add(box, cached);
-            }
-            var layout = cached.Page;
+            var font = resolved.Font;
+            var layout = resolved.Page;
             if (layout != null)
             {
                 int visiblePosition = DialoguePairLayout.GetVisiblePosition(position, text.Length);
@@ -100,7 +75,44 @@ internal static class DialogueBoxPatch
             alpha, depth, junimo, background, placeholder, color, alignment);
     }
 
-    private static DialogueTextPair[]? ResolvePairs(
+    internal sealed record ResolvedLayout(DialogueNativeFont Font, DialogueBlockLayout.Page Page);
+
+    internal static ResolvedLayout? GetLayout(DialogueBox box, string text, int bodyWidth, bool wholePreviewPage = false)
+    {
+        ModEntry? mod = ModEntry.Instance;
+        var preview = mod?.GetDialoguePreview(box);
+        if (mod != null && (preview.HasValue || mod.Config.ShowSecondaryInDialogue)
+            && (!Game1.eventUp || EventDialoguePatch.IsEligible(box)) && !box.isQuestion
+            && !mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
+            && (box.characterDialoguesBrokenUp.Count == 1 || wholePreviewPage)
+            && box.characterDialogue is { } dialogue
+            && (Game1.eventUp ? EventDialoguePatch.GetNpcPairs(box, text)
+                : ResolvePairs(mod, dialogue, text, preview?.Pages)) is { } pairs
+            && mod.GetSecondaryDialogueFont() is { } font
+            && pairs.All(pair => font.Supports(pair.Secondary)))
+        {
+            var key = new LayoutKey(bodyWidth, NpcDialogueGeometry.AvailableBody(Game1.uiViewport.Height),
+                preview?.SecondaryFirst ?? mod.Config.SecondaryFirst, font,
+                LocalizedContentManager.CurrentLanguageCode, SpriteText.FontPixelZoom,
+                Game1.options.useAlternateFont, Game1.options.useChineseSmoothFont, Game1.options.dialogueFontScale);
+            if (!Layouts.TryGetValue(box, out var cached) || cached.Key != key || !cached.Pairs.SequenceEqual(pairs))
+            {
+                // Cache both successful layouts and overflow fallback. Revealing more
+                // characters does not require measuring and wrapping the whole page again.
+                var page = DialogueBlockLayout.Fit(pairs, key.Width, key.Height, key.Above,
+                    primary => PrimaryDialogueMetrics.Measure(primary, bodyWidth),
+                    line => font.Measure(line).X * DialoguePairLayout.SecondaryScale,
+                    line => font.Measure(line).Y * DialoguePairLayout.SecondaryScale);
+                cached = new(key, pairs, page);
+                Layouts.Remove(box);
+                Layouts.Add(box, cached);
+            }
+            return cached.Page is { } fitted ? new(font, fitted) : null;
+        }
+        return null;
+    }
+
+    internal static DialogueTextPair[]? ResolvePairs(
         ModEntry mod, Dialogue dialogue, string text, DialogueTextPair[][]? previewPages)
     {
         string prefix = ModEntry.GetDialogueSpeakerPrefix(dialogue);

@@ -15,7 +15,8 @@ namespace UntranslatedStardew.Patches;
 internal static class DialogueQuestionPatch
 {
     private sealed record Snapshot(DialogueNativeFont Font, int Width, int ViewportHeight, bool Above,
-        string Prompt, (string Key, string Text)[] Answers, Dictionary<string, DialogueBlockLayout.Page> Rows);
+        string Prompt, (string Key, string Text)[] Answers, Dictionary<string, DialogueBlockLayout.Page> Rows,
+        int Generation, Event? EventOwner);
     private sealed record Preview(DialogueQuestionTranslation.Question Question, bool Above);
     private static readonly ConditionalWeakTable<DialogueBox, Snapshot> Layouts = new();
     private static readonly ConditionalWeakTable<DialogueBox, Preview> Previews = new();
@@ -63,7 +64,10 @@ internal static class DialogueQuestionPatch
             return;
         }
         if (__instance.isQuestion && Layouts.TryGetValue(__instance, out var old)
-            && (old.Width != __instance.width - 16 || old.ViewportHeight != Game1.uiViewport.Height
+            && (old.Generation != LoadedDialogueSource.Generation || !ReferenceEquals(old.EventOwner, Game1.CurrentEvent)
+                || (Game1.eventUp && !EventDialoguePatch.IsEligible(__instance) && !EventDialoguePatch.IsQuestionEligible(__instance)
+                    && !LocationQuestionPatch.IsFestivalEligible(__instance))
+                || old.Width != __instance.width - 16 || old.ViewportHeight != Game1.uiViewport.Height
                 || !ReferenceEquals(old.Font, ModEntry.Instance?.GetSecondaryDialogueFont())
                 || old.Above != (Previews.TryGetValue(__instance, out var sample)
                     ? sample.Above : ModEntry.Instance?.Config.SecondaryFirst ?? false)
@@ -90,7 +94,8 @@ internal static class DialogueQuestionPatch
             return "bilingual dialogue is disabled";
         if (!box.isQuestion)
             return "vanilla did not identify the sample as a question";
-        if (Game1.eventUp)
+        if (Game1.eventUp && !EventDialoguePatch.IsQuestionEligible(box) && !EventDialoguePatch.IsEligible(box)
+            && !LocationQuestionPatch.IsFestivalEligible(box))
             return "an event is active";
         if (mod.Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued"))
             return "DDFC uses a different dialogue renderer";
@@ -102,7 +107,8 @@ internal static class DialogueQuestionPatch
             return "speaker prefix does not match the live prompt";
         var question = preview ? sample!.Question
             : box.characterDialogue is { } d && box.characterDialoguesBrokenUp.Count == 1
-                ? mod.GetDialogueQuestion(d, shown[prefix.Length..], box.responses) : mod.GetLocationQuestion(box, shown);
+                ? mod.GetDialogueQuestion(d, shown[prefix.Length..], box.responses)
+                : mod.GetLocationQuestion(box, shown) ?? mod.GetEventQuestion(box, shown);
         if (question == null)
             return "question source does not match the live prompt and answers";
         var pairs = new[] { question.Prompt with { Primary = shown } }.Concat(question.Answers)
@@ -120,7 +126,7 @@ internal static class DialogueQuestionPatch
             text => font.Measure(text).Y * DialoguePairLayout.SecondaryScale, out string? failure);
         if (rows != null)
             Layouts.Add(box, new(font, width, Game1.uiViewport.Height, above, shown,
-                box.responses.Select(r => (r.responseKey, r.responseText)).ToArray(), rows));
+                box.responses.Select(r => (r.responseKey, r.responseText)).ToArray(), rows, LoadedDialogueSource.Generation, Game1.CurrentEvent));
         return failure;
     }
 

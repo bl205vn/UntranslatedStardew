@@ -28,6 +28,7 @@ public sealed class ModEntry : Mod
     private (WeakReference<DialogueBox> Box, bool SecondaryFirst, DialogueTextPair[][]? Pages)? _dialoguePreview;
     private Harmony? _harmony;
     private DialogueCheckMonitor? _dialogueCheckMonitor;
+    private DialogueAcceptanceSuite? _dialogueAcceptanceSuite;
     private DialogueNativeFontProvider? _nativeDialogueFonts;
 
     internal DialogueNativeFont? GetSecondaryDialogueFont()
@@ -115,9 +116,13 @@ public sealed class ModEntry : Mod
             (_, _) =>
             {
                 Monitor.Log("untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|state|query|question|key <NPC> <key>]", LogLevel.Info);
+                Monitor.Log("untranslated_dialogue_suite [stop]  - one visual sequence: long pages and questions, above/below", LogLevel.Info);
                 Monitor.Log("untranslated_dialogue_check coverage  - source, narration and real copy checks (load a save first)", LogLevel.Info);
                 Monitor.Log("untranslated_dialogue_check [all|sources|narration|copy|branch|state|query|response|question|pairs|fallback|layout]", LogLevel.Info);
             });
+
+        _dialogueAcceptanceSuite = new(helper, Monitor, args => OnDialoguePreviewCommand("untranslated_dialogue_test", args));
+        helper.ConsoleCommands.Add("untranslated_dialogue_suite", "Opens a sequence of isolated long dialogue and question previews. Usage: untranslated_dialogue_suite [stop]", _dialogueAcceptanceSuite.Command);
 
         helper.ConsoleCommands.Add(
             "untranslated_dialogue_check",
@@ -357,6 +362,7 @@ public sealed class ModEntry : Mod
 
         bool secondaryFirst = offset == 0 ? Config.SecondaryFirst : args[0] == "above";
         _dialoguePreview = (new WeakReference<DialogueBox>(box), secondaryFirst, pages);
+        Patches.NpcDialogueGeometryPatch.ReflowPreview(box);
         Game1.activeClickableMenu = box;
         Game1.dialogueUp = true;
         Game1.player.Halt();
@@ -397,6 +403,9 @@ public sealed class ModEntry : Mod
 
     internal string? GetSecondaryDialogueText(Dialogue? dialogue, string visibleText)
     {
+        if (dialogue != null && Patches.DialogueSourcePatch.GetGiftAdvice(dialogue) is { } advice)
+            return ResolveGiftAdvice(advice, visibleText);
+
         if (dialogue == null || !TryGetDialogueSources(dialogue, out string primary, out string secondary))
             return null;
         string player = Utility.FilterUserName(Game1.player.Name);
@@ -421,9 +430,25 @@ public sealed class ModEntry : Mod
             dialogue.farmer.DialogueQuestionsAnswered.Contains, Lookup);
     }
 
+    private string? ResolveGiftAdvice(GiftAdviceTranslation.Advice advice, string visibleText)
+    {
+        if (_contentProvider?.IsSecondaryAvailable != true || advice.Generation != LoadedDialogueSource.Generation) return null;
+        string? Lookup(string path)
+        {
+            int separator = path.IndexOf(':');
+            return separator > 0 && _contentProvider.TryGetDialogueString(path[..separator], path[(separator + 1)..], out string? text) ? text : null;
+        }
+        string? npcName = Lookup("Strings/NPCNames:" + advice.Npc);
+        string? itemName = _nameResolver?.GetSecondaryNameById(advice.Item);
+        var secondary = GiftAdviceTranslation.Translate(advice, Lookup, npcName, itemName);
+        return secondary == null ? null : DialogueTranslation.GetSecondaryLine(advice.Primary, secondary, 0,
+            visibleText, Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed);
+    }
+
     internal DialogueTextPair[]? GetObjectDialoguePages(string source, string displayed)
     {
-        if (_contentProvider == null || !DialogueTranslation.TryParseSourceKey(source, out string asset, out string key)
+        if (_contentProvider == null || !(DialogueTranslation.TryParseSourceKey(source, out string asset, out string key)
+            || (Game1.CurrentEvent?.isFestival == true && EventDialogueTranslation.TryParseFestivalKey(source, out asset, out key)))
             || !_contentProvider.TryGetDialogueString(asset, key, out string? secondary) || secondary == null)
             return null;
         try
@@ -436,24 +461,38 @@ public sealed class ModEntry : Mod
         catch (InvalidCastException) { return null; }
     }
 
-    internal EventDialogueTranslation.Text? GetEventDialogueText(Event owner, string[] args)
+    private (string Primary, string Secondary)? GetEventScripts(Event owner)
     {
         if (!Config.ShowSecondaryInDialogue || _contentProvider?.IsSecondaryAvailable != true
-            || Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")
-            || !EventDialogueTranslation.TryNormalizeAsset(owner.fromAssetName, out string asset)) return null;
+            || Helper.ModRegistry.IsLoaded("Mangupix.DialogueDisplayFrameworkContinued")) return null;
+        var branch = Patches.EventScriptSourcePatch.Get(owner);
+        string? rawAsset = branch?.Asset ?? owner.fromAssetName
+            ?? (owner.isFestival && owner.id.StartsWith("festival_") ? "Data/Festivals/" + owner.id["festival_".Length..] : null);
+        string asset;
+        if (!EventDialogueTranslation.TryNormalizeAsset(rawAsset, out asset, allowFestivals: owner.isFestival)
+            && !(branch != null && DialogueTranslation.TryParseSourceKey(rawAsset + ":" + branch.Value.Key, out asset, out _))) return null;
         try
         {
             var primary = Game1.content.Load<Dictionary<string, string>>(asset);
-            Gender gender = owner.farmer.Gender;
-            string? key = EventDialogueTranslation.FindKey(primary, owner.id, owner.eventCommands, gender);
-            if (key == null || !_contentProvider.TryGetDialogueString(asset, key, out string? secondary)
-                || secondary == null) return null;
-            return EventDialogueTranslation.Match(primary[key], secondary, owner.eventCommands,
-                owner.CurrentCommand, args, gender);
+            string? key = branch?.Key ?? EventDialogueTranslation.FindKey(primary, owner.id, owner.eventCommands, owner.farmer.Gender, owner.isFestival);
+            if (key == null || !primary.TryGetValue(key, out string? main)
+                || !_contentProvider.TryGetDialogueString(asset, key, out string? secondary) || secondary == null) return null;
+            return (main, secondary);
         }
         catch (Microsoft.Xna.Framework.Content.ContentLoadException) { return null; }
         catch (InvalidCastException) { return null; }
     }
+
+    internal EventDialogueTranslation.Text? GetEventDialogueText(Event owner, string[] args)
+        => GetEventScripts(owner) is { } script ? EventDialogueTranslation.Match(script.Primary, script.Secondary,
+            owner.eventCommands, owner.CurrentCommand, args, owner.farmer.Gender) : null;
+
+    internal EventDialogueTranslation.QuestionText? GetEventQuestionText(Event owner, string[] args)
+        => GetEventScripts(owner) is { } script ? EventDialogueTranslation.MatchQuestion(script.Primary, script.Secondary,
+            owner.eventCommands, owner.CurrentCommand, args, owner.farmer.Gender) : null;
+
+    internal DialogueQuestionTranslation.Question? GetEventQuestion(DialogueBox box, string shown)
+        => Patches.EventDialoguePatch.ResolveQuestion(box, shown);
 
     #region Movie Poster Dialogue
     internal bool TryAttachMoviePoster(StardewValley.Menus.DialogueBox box, StardewValley.GameData.Movies.MovieData movie, bool isUpcoming)
@@ -488,7 +527,8 @@ public sealed class ModEntry : Mod
     {
         (string Primary, string Secondary)? Lookup(string source)
         {
-            if (_contentProvider == null || !DialogueTranslation.TryParseSourceKey(source, out string asset, out string key)
+            if (_contentProvider == null || !(DialogueTranslation.TryParseSourceKey(source, out string asset, out string key)
+                || (Game1.CurrentEvent?.isFestival == true && EventDialogueTranslation.TryParseFestivalKey(source, out asset, out key)))
                 || !_contentProvider.TryGetDialogueString(asset, key, out string? sub) || sub == null) return null;
             try
             {
@@ -508,8 +548,29 @@ public sealed class ModEntry : Mod
                 Utility.FilterUserName(Game1.player.Name), Game1.player.Gender, Game1.stats.DaysPlayed)
             : null;
 
-    private bool TryGetDialogueSources(Dialogue dialogue, out string primary, out string secondary)
+    internal bool TryGetFestivalDialogueSources(Dialogue dialogue, out string primary, out string secondary)
     {
+        primary = secondary = "";
+        if (Patches.DialogueSourcePatch.GetKey(dialogue) is not { } translationKey || _contentProvider == null)
+            return false;
+        if (!EventDialogueTranslation.TryParseFestivalKey(translationKey, out string asset, out string key)
+            || !_contentProvider.TryGetDialogueString(asset, key, out string? sub) || sub == null)
+            return false;
+        try
+        {
+            var values = Game1.content.Load<Dictionary<string, string>>(asset);
+            if (!values.TryGetValue(key, out string? main) || main == null)
+                return false;
+            primary = main;
+            secondary = sub;
+            return true;
+        }
+        catch { return false; }
+    }
+
+    internal bool TryGetDialogueSources(Dialogue dialogue, out string primary, out string secondary)
+    {
+        if (Game1.CurrentEvent?.isFestival == true && TryGetFestivalDialogueSources(dialogue, out primary, out secondary)) return true;
         primary = secondary = "";
         if (Patches.DialogueSourcePatch.GetKey(dialogue) is not { } translationKey || _contentProvider == null)
             return false;

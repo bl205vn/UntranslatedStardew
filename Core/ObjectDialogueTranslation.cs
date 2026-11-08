@@ -15,6 +15,11 @@ internal static class ObjectDialogueTranslation
         string Main(string text) => Dialogue.applyGenderSwitch(gender, text, altTokenOnly: true);
         primary = Main(primary);
         secondary = Main(secondary);
+        if (primary != displayed && primary.Replace('\n', '^') == displayed)
+        {
+            primary = displayed;
+            secondary = secondary.Replace('\n', '^');
+        }
         if (primary != displayed) return null;
         string[] main = primary.Split('#');
         string[] sub = secondary.Split('#');

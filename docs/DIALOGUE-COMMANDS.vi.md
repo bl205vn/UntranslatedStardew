@@ -44,3 +44,17 @@ Các lệnh của mod được đăng ký lại mỗi lần khởi động SMAPI
 ## Bản 21 và các hộp thông tin thực tế
 
 Không thêm lệnh mẫu nhỏ. Adapter tự áp dụng cho hộp thông tin có nguồn xác định trong lúc chơi. `coverage` là kiểm tra logic/runtime, không mở hộp thoại mẫu và không xác nhận tất cả GUI đã có bản phụ. Đợt nghiệm thu M2 được gom trong kế hoạch phát triển; các mẫu câu hỏi cũ không cần chạy lại.
+
+
+## Nghiệm thu gộp preview 30
+
+Vào save, đóng menu và gõ `untranslated_dialogue_suite` một lần trong console SMAPI. Bộ mẫu tự mở lần lượt thoại dài và câu hỏi với bản phụ ở trên rồi ở dưới. Đọc hết các trang và chọn đáp án để chuyển ca. Dùng `untranslated_dialogue_suite stop` để dừng chuỗi, sau đó đóng mẫu hiện tại như bình thường.
+
+Trong cùng lượt chơi, nếu gặp các ca sau thì kiểm tra thêm:
+
+- Thoại dài Shane Wed8. Đọc qua hai trang và kiểm tra bản phụ, chân dung, biểu tượng chuyển trang.
+- Gợi ý quà của Gus. Kiểm tra hai bản nhắc cùng NPC và vật phẩm.
+- Wizard Shrine. Kiểm tra prompt nhiều dòng và chọn No.
+- Một event hoặc lễ hội có bản dịch tương ứng. Đọc hoặc chọn đáp án rồi kiểm tra game tiếp tục đúng. Event may đồ Emily 992559 trong pack Việt hiện tại được giữ bản chính do khác script.
+
+Chỉ cần báo ca bị lỗi và ảnh hoặc log kèm theo. Các mẫu console kiểm tra bố cục và thao tác. Các ca gặp tự nhiên kiểm tra đường nguồn thật.

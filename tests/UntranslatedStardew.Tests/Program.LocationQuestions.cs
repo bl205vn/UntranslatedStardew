@@ -89,5 +89,30 @@ public static partial class Program
                 "Location question constructor capture and geometry refresh install at the real Harmony boundary");
         }
         finally { harmony.UnpatchAll(harmony.Id); LoadedDialogueSource.Invalidate(); }
+
+        // Wizard Shrine of Illusions scoped source after newline->caret transform
+        string wizardPromptRaw = "The Shrine Of Illusions\nMake an offering of 500g to change your appearance?";
+        string wizardPromptTransformed = wizardPromptRaw.Replace('\n', '^');
+        const string wizardKey = "Strings/Locations:WizardTower_WizardShrine";
+        sources[wizardKey] = (wizardPromptRaw, "Điện Thờ Ảo Ảnh\nDâng 500g để đổi diện mạo?");
+        LoadedDialogueSource.Capture(wizardPromptTransformed, wizardKey);
+        LoadedDialogueSource.Capture(yes, yesKey);
+        LoadedDialogueSource.Capture(no, noKey);
+        var wizardCaptured = LocationQuestionTranslation.Capture(wizardPromptTransformed, answers, LoadedDialogueSource.Get);
+        Assert(wizardCaptured != null, "Wizard Shrine captures transformed caret prompt with scoped source");
+        var wizardMatched = LocationQuestionTranslation.Match(wizardCaptured!, wizardPromptTransformed, answers, Lookup, Gender.Female);
+        Assert(wizardMatched != null && wizardMatched.Prompt.Secondary == "Điện Thờ Ảo Ảnh\nDâng 500g để đổi diện mạo?",
+            "Wizard Shrine pairs newline primary source to caret prompt and converts secondary breaks");
+        var wizardHarmony = new Harmony("UntranslatedStardew.Tests.WizardShrineQuestion");
+        try
+        {
+            wizardHarmony.CreateClassProcessor(typeof(WizardShrineQuestionPatch)).Patch();
+            var target = AccessTools.Method(typeof(GameLocation), nameof(GameLocation.createQuestionDialogue),
+                new[] { typeof(string), typeof(Response[]), typeof(string) });
+            var info = Harmony.GetPatchInfo(target);
+            Assert(info?.Prefixes.Any(patch => patch.owner == wizardHarmony.Id) == true,
+                "Wizard Shrine question prefix installs at GameLocation.createQuestionDialogue boundary");
+        }
+        finally { wizardHarmony.UnpatchAll(wizardHarmony.Id); LoadedDialogueSource.Invalidate(); }
     }
 }
