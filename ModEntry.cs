@@ -117,9 +117,13 @@ public sealed class ModEntry : Mod
             {
                 Monitor.Log("untranslated_dialogue_test [above|below] [wrap|pairs|authored|gender|weekly|state|query|question|key <NPC> <key>]", LogLevel.Info);
                 Monitor.Log("untranslated_dialogue_suite [stop]  - one visual sequence: long pages and questions, above/below", LogLevel.Info);
+                Monitor.Log("untranslated_dialogue_status  - reports the current dialogue source and layout", LogLevel.Info);
                 Monitor.Log("untranslated_dialogue_check coverage  - source, narration and real copy checks (load a save first)", LogLevel.Info);
                 Monitor.Log("untranslated_dialogue_check [all|sources|narration|copy|branch|state|query|response|question|pairs|fallback|layout]", LogLevel.Info);
             });
+
+        helper.ConsoleCommands.Add("untranslated_dialogue_status", "Reports the current dialogue source and bilingual layout.",
+            (_, _) => LogCurrentDialogueStatus());
 
         _dialogueAcceptanceSuite = new(helper, Monitor, args => OnDialoguePreviewCommand("untranslated_dialogue_test", args));
         helper.ConsoleCommands.Add("untranslated_dialogue_suite", "Opens a sequence of isolated long dialogue and question previews. Usage: untranslated_dialogue_suite [stop]", _dialogueAcceptanceSuite.Command);
@@ -132,6 +136,27 @@ public sealed class ModEntry : Mod
 
         string effectiveLang = _contentProvider?.EffectiveLanguage ?? Config.SecondaryLanguage;
         Monitor.Log(I18n.Log_ModLoaded(effectiveLang), LogLevel.Info);
+    }
+
+    private void LogCurrentDialogueStatus()
+    {
+        if (!Context.IsWorldReady || Game1.activeClickableMenu is not DialogueBox box)
+        {
+            Monitor.Log("Open the affected dialogue first, then run untranslated_dialogue_status.", LogLevel.Info);
+            return;
+        }
+        var dialogue = box.characterDialogue;
+        string source = dialogue == null ? "object/question adapter"
+            : Patches.DialogueSourcePatch.GetKey(dialogue) ?? "unkeyed/dynamic adapter";
+        Monitor.Log($"Dialogue status: primary={LocalizedContentManager.CurrentLanguageCode}, secondary={Config.SecondaryLanguage}, "
+            + $"enabled={Config.ShowSecondaryInDialogue}, event={Game1.eventUp}, question={box.isQuestion}, "
+            + $"source={source}, logicalPage={(dialogue == null ? -1 : Patches.DialogueSourcePatch.GetRelativeIndex(dialogue))}, "
+            + $"physicalPages={box.characterDialoguesBrokenUp.Count}, frame={box.width}x{box.height}, viewport={Game1.uiViewport.Height}", LogLevel.Info);
+        if (dialogue == null || box.isQuestion) return;
+        string shown = box.getCurrentString();
+        var layout = Patches.DialogueBoxPatch.GetLayout(box, shown, box.isPortraitBox() ? box.width - 484 : box.width - 16);
+        Monitor.Log(layout != null ? $"NPC bilingual layout resolved; contentHeight={layout.Page.Height}."
+            : "NPC bilingual layout unavailable. Preserve this source/page log with the screenshot to identify the fallback.", LogLevel.Info);
     }
 
     private void OnDialogueCheckCommand(string command, string[] args)

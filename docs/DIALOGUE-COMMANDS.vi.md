@@ -58,3 +58,8 @@ Trong cùng lượt chơi, nếu gặp các ca sau thì kiểm tra thêm:
 - Một event hoặc lễ hội có bản dịch tương ứng. Đọc hoặc chọn đáp án rồi kiểm tra game tiếp tục đúng. Event may đồ Emily 992559 trong pack Việt hiện tại được giữ bản chính do khác script.
 
 Chỉ cần báo ca bị lỗi và ảnh hoặc log kèm theo. Các mẫu console kiểm tra bố cục và thao tác. Các ca gặp tự nhiên kiểm tra đường nguồn thật.
+
+
+## Chẩn đoán câu thiếu bản phụ
+
+Giữ hộp thoại bị lỗi đang mở, chuyển tới console SMAPI rồi chạy `untranslated_dialogue_status`. Gửi đoạn log nguồn/trang cùng ảnh của câu đó. Lệnh in chẩn đoán, không mở mẫu thử.
